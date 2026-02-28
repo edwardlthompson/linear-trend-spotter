@@ -1,5 +1,7 @@
 # Secrets and configuration
 config.json
+config.json.backup
+config.json.fixed
 .env
 *.log
 
@@ -12,7 +14,8 @@ __pycache__/
 *.db-*
 
 # Local development files
-.vscode/
+## Allow vscode
+#.vscode/
 .idea/
 *.swp
 *.swo
