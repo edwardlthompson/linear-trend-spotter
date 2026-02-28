@@ -1,0 +1,1679 @@
+[
+  {
+    "duration": 452.3166434764862,
+    "counts": {
+      "coins_retrieved": 1000,
+      "gain_filter_passed": 16,
+      "cache_hits_total": 28,
+      "cache_misses_total": 19,
+      "notifications_sent": 4
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 15,
+      "volume": 13
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2,
+      "price": 15
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.03255915641784668,
+      "cmc_fetch": 0.11677718162536621,
+      "gain_filter": 0.0006554126739501953,
+      "id_resolution": 0.4984564781188965,
+      "volume_fetch": 10.711487770080566,
+      "trend_calculation": 437.9074342250824,
+      "notifications": 2.0277421474456787
+    },
+    "coins_processed": 15,
+    "timestamp": "2026-02-26T15:31:50.294347"
+  },
+  {
+    "duration": 137.70079970359802,
+    "counts": {
+      "coins_retrieved": 1000,
+      "gain_filter_passed": 16,
+      "cache_hits_total": 42,
+      "cache_misses_total": 6,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 15,
+      "volume": 13,
+      "price": 14
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.1022481918334961,
+      "cmc_fetch": 0.22129130363464355,
+      "gain_filter": 0.0009250640869140625,
+      "id_resolution": 115.3678286075592,
+      "volume_fetch": 2.4293606281280518,
+      "trend_calculation": 14.819559812545776,
+      "notifications": 1.1282377243041992
+    },
+    "coins_processed": 15,
+    "timestamp": "2026-02-26T15:52:11.690236"
+  },
+  {
+    "duration": 75.03335380554199,
+    "counts": {
+      "coins_retrieved": 1000,
+      "gain_filter_passed": 16,
+      "cache_hits_total": 42,
+      "cache_misses_total": 7,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 15,
+      "volume": 13,
+      "price": 14
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 2,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.08289957046508789,
+      "cmc_fetch": 0.3978426456451416,
+      "gain_filter": 0.0013866424560546875,
+      "id_resolution": 0.28284287452697754,
+      "volume_fetch": 2.298253297805786,
+      "trend_calculation": 70.33432745933533,
+      "notifications": 1.025639295578003
+    },
+    "coins_processed": 15,
+    "timestamp": "2026-02-26T16:41:16.053702"
+  },
+  {
+    "duration": 6.8316075801849365,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 730,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 14,
+      "cache_misses_total": 2,
+      "notifications_sent": 10
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 4,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.0952291488647461,
+      "cmc_fetch": 0.32418370246887207,
+      "volume_filter": 0.0005795955657958984,
+      "gain_filter": 0.0008385181427001953,
+      "exchange_check": 0.47478199005126953,
+      "id_resolution": 0.08341860771179199,
+      "volume_fetch": 0.3172636032104492,
+      "trend_calculation": 0.07873821258544922,
+      "notifications": 5.060241937637329
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-26T18:31:51.162837"
+  },
+  {
+    "duration": 100.03587603569031,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 730,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 16,
+      "cache_misses_total": 4,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 4,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.08421683311462402,
+      "cmc_fetch": 0.12475228309631348,
+      "volume_filter": 0.0006093978881835938,
+      "gain_filter": 0.0005745887756347656,
+      "exchange_check": 0.10965824127197266,
+      "id_resolution": 2.4091224670410156,
+      "volume_fetch": 37.99264430999756,
+      "trend_calculation": 0.09048271179199219,
+      "notifications": 0.5905060768127441
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T18:58:15.282688"
+  },
+  {
+    "duration": 9.373538494110107,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 730,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 17,
+      "cache_misses_total": 7,
+      "notifications_sent": 7
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 4,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.03616905212402344,
+      "cmc_fetch": 0.11460638046264648,
+      "volume_filter": 0.00041365623474121094,
+      "gain_filter": 0.0005404949188232422,
+      "exchange_check": 0.11732101440429688,
+      "id_resolution": 0.12342715263366699,
+      "volume_fetch": 4.192527532577515,
+      "trend_calculation": 2.2859396934509277,
+      "notifications": 2.2354869842529297
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-26T20:36:14.838812"
+  },
+  {
+    "duration": 6.927850723266602,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 729,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.16365599632263184,
+      "cmc_fetch": 0.12814021110534668,
+      "volume_filter": 0.0005521774291992188,
+      "gain_filter": 0.0008308887481689453,
+      "exchange_check": 0.0313715934753418,
+      "id_resolution": 0.11021041870117188,
+      "volume_fetch": 4.155913352966309,
+      "trend_calculation": 0.08296489715576172,
+      "notifications": 2.0037131309509277
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T20:53:20.714435"
+  },
+  {
+    "duration": 30.401305675506592,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 729,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.03953671455383301,
+      "cmc_fetch": 0.12628436088562012,
+      "volume_filter": 0.0005586147308349609,
+      "gain_filter": 0.0007343292236328125,
+      "exchange_check": 0.02772665023803711,
+      "id_resolution": 0.10864949226379395,
+      "volume_fetch": 4.167521953582764,
+      "trend_calculation": 0.0754082202911377,
+      "notifications": 2.384185791015625e-06
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T21:00:38.004577"
+  },
+  {
+    "duration": 33.52879881858826,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 729,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.033769845962524414,
+      "cmc_fetch": 0.12736296653747559,
+      "volume_filter": 0.0004367828369140625,
+      "gain_filter": 0.0005402565002441406,
+      "exchange_check": 0.029155492782592773,
+      "id_resolution": 0.11601448059082031,
+      "volume_fetch": 4.392507553100586,
+      "trend_calculation": 0.06947493553161621,
+      "notifications": 2.3845231533050537
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T21:06:19.340989"
+  },
+  {
+    "duration": 144.10852646827698,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 727,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 9,
+      "cache_misses_total": 8,
+      "notifications_sent": 5
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3,
+      "price": 1
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2,
+      "price": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.03697657585144043,
+      "cmc_fetch": 0.244581937789917,
+      "volume_filter": 0.00041985511779785156,
+      "gain_filter": 0.000789642333984375,
+      "exchange_check": 0.035974740982055664,
+      "id_resolution": 0.09101271629333496,
+      "volume_fetch": 2.229428291320801,
+      "trend_calculation": 135.43357920646667,
+      "notifications": 5.830819368362427
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-26T21:40:02.166920"
+  },
+  {
+    "duration": 46.52722430229187,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 723,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 14,
+      "cache_misses_total": 7,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.0361943244934082,
+      "cmc_fetch": 0.12441658973693848,
+      "volume_filter": 0.0005369186401367188,
+      "gain_filter": 0.0007040500640869141,
+      "exchange_check": 0.031786203384399414,
+      "id_resolution": 0.11071038246154785,
+      "volume_fetch": 4.173821926116943,
+      "trend_calculation": 38.11837959289551,
+      "notifications": 3.693754196166992
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T22:45:16.042350"
+  },
+  {
+    "duration": 54.66328811645508,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 721,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.03398633003234863,
+      "cmc_fetch": 0.14890027046203613,
+      "volume_filter": 0.0006055831909179688,
+      "gain_filter": 0.0009222030639648438,
+      "exchange_check": 0.028491735458374023,
+      "id_resolution": 0.09853363037109375,
+      "volume_fetch": 12.15619421005249,
+      "trend_calculation": 0.0745079517364502,
+      "notifications": 1.5656328201293945
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T22:55:20.355617"
+  },
+  {
+    "duration": 41.24466013908386,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 719,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.04914045333862305,
+      "cmc_fetch": 0.14151310920715332,
+      "volume_filter": 0.0006146430969238281,
+      "gain_filter": 0.0008070468902587891,
+      "exchange_check": 0.03705573081970215,
+      "id_resolution": 2.2201597690582275,
+      "volume_fetch": 15.303129196166992,
+      "trend_calculation": 5.156748056411743,
+      "notifications": 13.023735284805298
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-26T23:42:51.959895"
+  },
+  {
+    "duration": 31.524303913116455,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 717,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 13,
+      "cache_misses_total": 4,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.08356523513793945,
+      "cmc_fetch": 0.1287388801574707,
+      "volume_filter": 0.0003674030303955078,
+      "gain_filter": 0.0007929801940917969,
+      "exchange_check": 0.023947954177856445,
+      "id_resolution": 0.0752413272857666,
+      "volume_fetch": 30.544945001602173,
+      "trend_calculation": 0.07327485084533691,
+      "notifications": 0.39261436462402344
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-26T23:56:44.904010"
+  },
+  {
+    "duration": 26.35762357711792,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 718,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 13,
+      "cache_misses_total": 4,
+      "notifications_sent": 5
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.06789374351501465,
+      "cmc_fetch": 0.12401175498962402,
+      "volume_filter": 0.00041937828063964844,
+      "gain_filter": 0.0004980564117431641,
+      "exchange_check": 0.026181459426879883,
+      "id_resolution": 5.558473110198975,
+      "volume_fetch": 6.135702848434448,
+      "trend_calculation": 4.148292779922485,
+      "notifications": 5.070950746536255
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-26T23:58:44.432798"
+  },
+  {
+    "duration": 12.523155689239502,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 719,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 13,
+      "cache_misses_total": 4,
+      "notifications_sent": 5
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.11239027976989746,
+      "cmc_fetch": 0.11952733993530273,
+      "volume_filter": 0.0004248619079589844,
+      "gain_filter": 0.0005145072937011719,
+      "exchange_check": 0.027350664138793945,
+      "id_resolution": 0.0829765796661377,
+      "volume_fetch": 6.197240591049194,
+      "trend_calculation": 0.06665325164794922,
+      "notifications": 1.2925622463226318
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T00:14:24.381815"
+  },
+  {
+    "duration": 15.749104499816895,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 719,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 13,
+      "cache_misses_total": 4
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.09790587425231934,
+      "cmc_fetch": 0.13686203956604004,
+      "volume_filter": 0.0005576610565185547,
+      "gain_filter": 0.0005137920379638672,
+      "exchange_check": 0.02740192413330078,
+      "id_resolution": 0.07343125343322754,
+      "volume_fetch": 15.145387887954712,
+      "trend_calculation": 0.06573629379272461,
+      "notifications": 2.6226043701171875e-06
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T00:16:39.816284"
+  },
+  {
+    "duration": 14.564599990844727,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 719,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13169169425964355,
+      "cmc_fetch": 0.13190722465515137,
+      "volume_filter": 0.0006275177001953125,
+      "gain_filter": 0.0006515979766845703,
+      "exchange_check": 0.04894733428955078,
+      "id_resolution": 0.12309527397155762,
+      "volume_fetch": 12.168949604034424,
+      "trend_calculation": 0.07025671005249023,
+      "notifications": 1.6452898979187012
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-27T00:18:08.022188"
+  },
+  {
+    "duration": 124.66815972328186,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 719,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 16,
+      "cache_misses_total": 9,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.14681649208068848,
+      "cmc_fetch": 0.1553812026977539,
+      "volume_filter": 0.0005414485931396484,
+      "gain_filter": 0.0006639957427978516,
+      "exchange_check": 0.11495685577392578,
+      "id_resolution": 16.454686880111694,
+      "volume_fetch": 98.04069471359253,
+      "trend_calculation": 8.057923316955566,
+      "notifications": 0.4009368419647217
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T00:22:39.994355"
+  },
+  {
+    "duration": 30.64507746696472,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 721,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 17,
+      "cache_misses_total": 8
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3,
+      "price": 7
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.1080479621887207,
+      "cmc_fetch": 0.12639141082763672,
+      "volume_filter": 0.0004451274871826172,
+      "gain_filter": 0.0007212162017822266,
+      "exchange_check": 0.05038285255432129,
+      "id_resolution": 0.15516352653503418,
+      "volume_fetch": 18.150957584381104,
+      "trend_calculation": 0.08306121826171875,
+      "notifications": 3.0994415283203125e-06
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T00:26:58.555170"
+  },
+  {
+    "duration": 56.46780467033386,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 721,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 17,
+      "cache_misses_total": 8
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3,
+      "price": 7
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13345932960510254,
+      "cmc_fetch": 0.14105510711669922,
+      "volume_filter": 0.0006787776947021484,
+      "gain_filter": 0.0009775161743164062,
+      "exchange_check": 0.04514646530151367,
+      "id_resolution": 0.17810368537902832,
+      "volume_fetch": 18.155404090881348,
+      "trend_calculation": 0.10478854179382324,
+      "notifications": 2.86102294921875e-06
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T00:34:07.201214"
+  },
+  {
+    "duration": 42.075435638427734,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 720,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 17,
+      "cache_misses_total": 8,
+      "notifications_sent": 7
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3,
+      "price": 7
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.09010553359985352,
+      "cmc_fetch": 0.13698363304138184,
+      "volume_filter": 0.00041413307189941406,
+      "gain_filter": 0.0005171298980712891,
+      "exchange_check": 0.04464387893676758,
+      "id_resolution": 0.1835801601409912,
+      "volume_fetch": 18.14675760269165,
+      "trend_calculation": 0.08938980102539062,
+      "notifications": 6.220760107040405
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T00:37:51.787486"
+  },
+  {
+    "duration": 86.33980202674866,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 718,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 15,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3,
+      "price": 6
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.16144251823425293,
+      "cmc_fetch": 0.14898180961608887,
+      "volume_filter": 0.0005972385406494141,
+      "gain_filter": 0.0007536411285400391,
+      "exchange_check": 0.03765225410461426,
+      "id_resolution": 0.13618087768554688,
+      "volume_fetch": 12.152827262878418,
+      "trend_calculation": 0.09624910354614258,
+      "notifications": 18.075906991958618
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-27T00:46:41.356972"
+  },
+  {
+    "duration": 17.377438068389893,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 718,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 13,
+      "cache_misses_total": 4,
+      "notifications_sent": 5
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3,
+      "price": 5
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13669395446777344,
+      "cmc_fetch": 0.30208539962768555,
+      "volume_filter": 0.0007953643798828125,
+      "gain_filter": 0.0010352134704589844,
+      "exchange_check": 0.05932903289794922,
+      "id_resolution": 0.09630990028381348,
+      "volume_fetch": 6.16659688949585,
+      "trend_calculation": 0.5049664974212646,
+      "notifications": 9.882677555084229
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T02:03:31.715702"
+  },
+  {
+    "duration": 25.765357494354248,
+    "counts": {
+      "coins_retrieved": 1000,
+      "volume_filter_passed": 714,
+      "gain_filter_passed": 7,
+      "cache_hits_total": 9,
+      "cache_misses_total": 6,
+      "notifications_sent": 6
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.08702540397644043,
+      "cmc_fetch": 0.3177194595336914,
+      "volume_filter": 0.00039839744567871094,
+      "gain_filter": 0.0006914138793945312,
+      "exchange_check": 0.02875351905822754,
+      "id_resolution": 0.09979629516601562,
+      "volume_fetch": 13.890179634094238,
+      "notifications": 11.105295181274414
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-27T02:28:05.083590"
+  },
+  {
+    "duration": 70.03272271156311,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 902,
+      "gain_filter_passed": 10,
+      "cache_hits_total": 10,
+      "cache_misses_total": 8,
+      "notifications_sent": 7
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.10849475860595703,
+      "cmc_fetch": 0.7359135150909424,
+      "volume_filter": 0.0010623931884765625,
+      "gain_filter": 0.0009071826934814453,
+      "exchange_check": 0.2796201705932617,
+      "id_resolution": 31.309074878692627,
+      "volume_fetch": 18.13859272003174,
+      "notifications": 19.20277166366577
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T02:46:10.211671"
+  },
+  {
+    "duration": 23.684179067611694,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 903,
+      "gain_filter_passed": 10,
+      "cache_hits_total": 10,
+      "cache_misses_total": 8
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13869094848632812,
+      "cmc_fetch": 0.6356868743896484,
+      "volume_filter": 0.0011365413665771484,
+      "gain_filter": 0.0012156963348388672,
+      "exchange_check": 0.08132576942443848,
+      "id_resolution": 0.1690981388092041,
+      "volume_fetch": 18.155595779418945,
+      "notifications": 2.1457672119140625e-06
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T02:55:35.237492"
+  },
+  {
+    "duration": 26.757718563079834,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 900,
+      "gain_filter_passed": 10,
+      "cache_hits_total": 10,
+      "cache_misses_total": 8
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 7,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 4,
+      "volume": 4
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.1346909999847412,
+      "cmc_fetch": 0.4009673595428467,
+      "volume_filter": 0.0010530948638916016,
+      "gain_filter": 0.0009915828704833984,
+      "exchange_check": 0.08162426948547363,
+      "id_resolution": 0.1605207920074463,
+      "volume_fetch": 25.70768642425537,
+      "notifications": 2.1457672119140625e-06
+    },
+    "coins_processed": 7,
+    "timestamp": "2026-02-27T03:55:37.985184"
+  },
+  {
+    "duration": 15.469813585281372,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 905,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 8,
+      "cache_misses_total": 4,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13855624198913574,
+      "cmc_fetch": 4.464767932891846,
+      "volume_filter": 0.0006201267242431641,
+      "gain_filter": 0.0005645751953125,
+      "exchange_check": 0.036531925201416016,
+      "id_resolution": 3.7237637042999268,
+      "volume_fetch": 6.139956712722778,
+      "notifications": 0.7348644733428955
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T04:55:25.617307"
+  },
+  {
+    "duration": 23.938621997833252,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 907,
+      "gain_filter_passed": 9,
+      "cache_hits_total": 9,
+      "cache_misses_total": 6,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 6,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 3,
+      "volume": 3
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.14601731300354004,
+      "cmc_fetch": 0.5012776851654053,
+      "volume_filter": 0.0013699531555175781,
+      "gain_filter": 0.0019750595092773438,
+      "exchange_check": 0.16742563247680664,
+      "id_resolution": 0.14583587646484375,
+      "volume_fetch": 12.160457372665405,
+      "notifications": 3.8191959857940674
+    },
+    "coins_processed": 6,
+    "timestamp": "2026-02-27T05:55:35.751628"
+  },
+  {
+    "duration": 7.745415925979614,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 904,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 8,
+      "cache_misses_total": 4,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.10152935981750488,
+      "cmc_fetch": 0.7324864864349365,
+      "volume_filter": 0.0007102489471435547,
+      "gain_filter": 0.0006239414215087891,
+      "exchange_check": 0.0427858829498291,
+      "id_resolution": 0.10666561126708984,
+      "volume_fetch": 6.150986671447754,
+      "notifications": 0.39546823501586914
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T06:55:20.969276"
+  },
+  {
+    "duration": 7.006767272949219,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 909,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 8,
+      "cache_misses_total": 4
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.10238385200500488,
+      "cmc_fetch": 0.44051313400268555,
+      "volume_filter": 0.0007495880126953125,
+      "gain_filter": 0.0006308555603027344,
+      "exchange_check": 0.0428617000579834,
+      "id_resolution": 0.08869099617004395,
+      "volume_fetch": 6.152719736099243,
+      "notifications": 1.430511474609375e-06
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T07:55:17.660935"
+  },
+  {
+    "duration": 11.320570230484009,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 914,
+      "gain_filter_passed": 8,
+      "cache_hits_total": 8,
+      "cache_misses_total": 4,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 5,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13080549240112305,
+      "cmc_fetch": 0.5758256912231445,
+      "volume_filter": 0.0010976791381835938,
+      "gain_filter": 0.0010540485382080078,
+      "exchange_check": 0.04848456382751465,
+      "id_resolution": 0.11913871765136719,
+      "volume_fetch": 6.224401235580444,
+      "notifications": 4.004931688308716
+    },
+    "coins_processed": 5,
+    "timestamp": "2026-02-27T08:55:23.350478"
+  },
+  {
+    "duration": 1.4289631843566895,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 918,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 7,
+      "cache_misses_total": 2,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 4,
+      "volume": 3
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.11573505401611328,
+      "cmc_fetch": 0.5156619548797607,
+      "volume_filter": 0.0010917186737060547,
+      "gain_filter": 0.0010442733764648438,
+      "exchange_check": 0.03368496894836426,
+      "id_resolution": 0.06539297103881836,
+      "volume_fetch": 0.12038803100585938,
+      "notifications": 0.4004483222961426
+    },
+    "coins_processed": 4,
+    "timestamp": "2026-02-27T09:55:11.846588"
+  },
+  {
+    "duration": 96.18385910987854,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 921,
+      "gain_filter_passed": 6,
+      "cache_hits_total": 5,
+      "cache_misses_total": 2,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.10934972763061523,
+      "cmc_fetch": 0.5262181758880615,
+      "volume_filter": 0.0011162757873535156,
+      "gain_filter": 0.0009865760803222656,
+      "exchange_check": 0.037746429443359375,
+      "id_resolution": 0.0679328441619873,
+      "volume_fetch": 33.48591184616089,
+      "notifications": 0.3982999324798584
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T10:56:47.827784"
+  },
+  {
+    "duration": 2.5197606086730957,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 920,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 4,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.11751317977905273,
+      "cmc_fetch": 1.7833104133605957,
+      "volume_filter": 0.0009620189666748047,
+      "gain_filter": 0.0006580352783203125,
+      "exchange_check": 0.025966882705688477,
+      "id_resolution": 0.0321507453918457,
+      "volume_fetch": 0.024328947067260742,
+      "notifications": 0.418198823928833
+    },
+    "coins_processed": 2,
+    "timestamp": "2026-02-27T11:55:13.344445"
+  },
+  {
+    "duration": 0.8896653652191162,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 920,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 4
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 2,
+      "volume": 2
+    },
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.16276812553405762,
+      "cmc_fetch": 0.5248713493347168,
+      "volume_filter": 0.0012693405151367188,
+      "gain_filter": 0.0012631416320800781,
+      "exchange_check": 0.035256385803222656,
+      "id_resolution": 0.03606152534484863,
+      "volume_fetch": 0.02389979362487793,
+      "notifications": 2.6226043701171875e-06
+    },
+    "coins_processed": 2,
+    "timestamp": "2026-02-27T12:55:20.737222"
+  },
+  {
+    "duration": 1.6061124801635742,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 919,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 8,
+      "cache_misses_total": 2,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 3
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.09467339515686035,
+      "cmc_fetch": 0.48636531829833984,
+      "volume_filter": 0.0012416839599609375,
+      "gain_filter": 0.0015187263488769531,
+      "exchange_check": 0.034081459045410156,
+      "id_resolution": 0.0650014877319336,
+      "volume_fetch": 0.17095017433166504,
+      "uniformity_calculation": 0.044306278228759766,
+      "notifications": 0.629986047744751
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T13:33:16.763646"
+  },
+  {
+    "duration": 7.985135316848755,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 919,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 8,
+      "cache_misses_total": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 3
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.09726858139038086,
+      "cmc_fetch": 0.51827073097229,
+      "volume_filter": 0.0011565685272216797,
+      "gain_filter": 0.0009613037109375,
+      "exchange_check": 0.02762579917907715,
+      "id_resolution": 0.056810855865478516,
+      "volume_fetch": 0.1528792381286621,
+      "uniformity_calculation": 7.104377746582031,
+      "notifications": 2.1457672119140625e-06
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T13:45:13.814705"
+  },
+  {
+    "duration": 1.0500457286834717,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 922,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 8,
+      "cache_misses_total": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 3
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13254690170288086,
+      "cmc_fetch": 0.47458434104919434,
+      "volume_filter": 0.001294851303100586,
+      "gain_filter": 0.0010983943939208984,
+      "exchange_check": 0.056502342224121094,
+      "id_resolution": 0.069976806640625,
+      "volume_fetch": 0.22078680992126465,
+      "uniformity_calculation": 0.05464315414428711,
+      "notifications": 3.5762786865234375e-06
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T13:55:12.679604"
+  },
+  {
+    "duration": 13.423746109008789,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 923,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 7,
+      "cache_misses_total": 3
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 2
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.09052729606628418,
+      "cmc_fetch": 0.3584439754486084,
+      "volume_filter": 0.0008401870727539062,
+      "gain_filter": 0.0010821819305419922,
+      "exchange_check": 0.02136826515197754,
+      "id_resolution": 4.750078201293945,
+      "volume_fetch": 0.18213725090026855,
+      "uniformity_calculation": 7.992746353149414,
+      "notifications": 1.6689300537109375e-06
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T13:57:18.263455"
+  },
+  {
+    "duration": 17.77354860305786,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 922,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 7,
+      "cache_misses_total": 3
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 2
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1,
+      "price": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.08872509002685547,
+      "cmc_fetch": 0.2503633499145508,
+      "volume_filter": 0.0007851123809814453,
+      "gain_filter": 0.0007159709930419922,
+      "exchange_check": 0.01975417137145996,
+      "id_resolution": 0.05808305740356445,
+      "volume_fetch": 10.182523727416992,
+      "uniformity_calculation": 7.138336181640625,
+      "notifications": 1.9073486328125e-06
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T14:02:14.201074"
+  },
+  {
+    "duration": 0.6532962322235107,
+    "counts": {
+      "coins_retrieved": 2000,
+      "volume_filter_passed": 922,
+      "gain_filter_passed": 5,
+      "cache_hits_total": 8,
+      "cache_misses_total": 2
+    },
+    "api_calls": {},
+    "cache_hits": {
+      "gecko_id": 3,
+      "volume": 2,
+      "price": 3
+    },
+    "cache_misses": {
+      "gecko_id": 1,
+      "volume": 1
+    },
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.08679819107055664,
+      "cmc_fetch": 0.2634415626525879,
+      "volume_filter": 0.0007750988006591797,
+      "gain_filter": 0.0007076263427734375,
+      "exchange_check": 0.019590139389038086,
+      "id_resolution": 0.04795122146606445,
+      "volume_fetch": 0.16845059394836426,
+      "uniformity_calculation": 0.03791213035583496,
+      "notifications": 1.9073486328125e-06
+    },
+    "coins_processed": 3,
+    "timestamp": "2026-02-27T14:04:46.452276"
+  },
+  {
+    "duration": 507.69373869895935,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.12999749183654785
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T06:13:41.617180"
+  },
+  {
+    "duration": 477.3486316204071,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.24312615394592285
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T07:03:08.868944"
+  },
+  {
+    "duration": 445.98490262031555,
+    "counts": {
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.18408751487731934
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T08:02:37.912323"
+  },
+  {
+    "duration": 447.4584641456604,
+    "counts": {
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.15338897705078125,
+      "notifications": 7.621771335601807
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T09:02:37.961278"
+  },
+  {
+    "duration": 456.14159989356995,
+    "counts": {
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.15524959564208984
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T10:02:46.882550"
+  },
+  {
+    "duration": 355.6845808029175,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.1947493553161621
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T11:01:07.421119"
+  },
+  {
+    "duration": 348.11995935440063,
+    "counts": {
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.26585888862609863,
+      "notifications": 4.240613222122192
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T12:00:59.209761"
+  },
+  {
+    "duration": 368.7694478034973,
+    "counts": {
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.19942522048950195
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T13:01:23.625000"
+  },
+  {
+    "duration": 404.6433160305023,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.2208857536315918
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T14:01:55.733917"
+  },
+  {
+    "duration": 397.792494058609,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.19478368759155273
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T15:01:54.047988"
+  },
+  {
+    "duration": 428.4073815345764,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.18459415435791016
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T16:02:19.342295"
+  },
+  {
+    "duration": 415.3555290699005,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.17030882835388184
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T16:34:57.962847"
+  },
+  {
+    "duration": 429.993501663208,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.1796431541442871
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T17:02:21.163004"
+  },
+  {
+    "duration": 430.15107798576355,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13515400886535645
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T19:09:22.201900"
+  },
+  {
+    "duration": 451.21161246299744,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.13240766525268555
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T19:33:17.010106"
+  },
+  {
+    "duration": 421.4573984146118,
+    "counts": {},
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.20856523513793945
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-02-28T20:02:12.001347"
+  }
+]
