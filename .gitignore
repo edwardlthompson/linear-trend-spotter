@@ -1,7 +1,7 @@
 # Secrets and configuration
 config.json
-config.json.backup
-config.json.fixed
+*.json.backup
+*.json.fixed
 .env
 *.log
 
