@@ -154,7 +154,7 @@ This specification uses [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) keywo
 | **Qualified coin** | A coin that has passed all filtering stages and is eligible for entry notification. |
 | **Entry** | A coin appearing in the qualified set for the first time (or re-entering after an exit). |
 | **Exit** | A coin that was previously qualified but no longer passes all filters. |
-| **Uniformity Score** | A value in [0, 100] measuring how evenly a coin's gains are distributed across the analysis window. See [§6](#6-core-algorithm--uniformity-score). |
+| **Uniformity Score** | A value in `[0, 100]` measuring how evenly a coin's gains are distributed across the analysis window. See [§6](#6-core-algorithm--uniformity-score). |
 | **Active coin** | A coin currently in the qualified set, tracked in the `active_coins` table. |
 
 ### 1.5. Reference Documents
