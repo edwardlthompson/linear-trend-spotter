@@ -1,0 +1,12 @@
+Begin by reviewing the technical specification: `#file:linear-trend-spotter-spec.md` and the overall plan of action: `#file:linear-trend-spotter-plan.md`. Then perform the tasks required in the following targeted sprint for this coding session:
+
+---
+  [PASTE SPRINT INSTRUCTIONS HERE]
+---
+
+Before writing any code, audit the current state of every file listed in the sprint's Deliverables table. Read each file in full and compare it against the spec sections cited in the sprint's Spec References table. Document what you find — do not guess.
+
+Upon completion:
+1. Verify every item in the sprint's Exit Criteria checklist.
+2. Write a professional commit message describing the changes (use conventional commit style, e.g., `refactor: normalize CoinGecko client naming per spec §3.2`).
+3. Commit the changes.
