@@ -1,5 +1,5 @@
 """
-Cache management for CoinLore data
+Price cache management for coin price data
 """
 
 import sqlite3
@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import threading
 
-class CoinLoreCache:
+class PriceCache:
     """
-    Cache for CoinLore API data
+    Price cache for coin data
     """
 
     COIN_LIST_CACHE_DURATION = 24 * 60 * 60  # 24 hours

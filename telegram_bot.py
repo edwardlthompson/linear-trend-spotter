@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
 from database.models import ActiveCoinsDatabase
-from database.cache import GeckoCache
+from database.cache import PriceCache
 from notifications.telegram import TelegramClient
 from utils.logger import setup_logger
 
@@ -29,8 +29,8 @@ class TelegramBotHandler:
         self.logger = setup_logger('telegram_bot')
         
         # Initialize database connections
-        self.active_db = ActiveCoinsDatabase(settings.db_paths['history'])
-        self.cache = GeckoCache(settings.db_paths['history'])
+        self.active_db = ActiveCoinsDatabase(settings.db_paths['scanner'])
+        self.cache = PriceCache(settings.db_paths['scanner'])
         
         # Initialize Telegram client
         if settings.telegram:

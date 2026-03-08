@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
 from database.models import HistoryDatabase, ActiveCoinsDatabase
-from database.cache import CoinLoreCache
+from database.cache import PriceCache
 from api.coinmarketcap import CoinMarketCapClient
-from api.coingecko_optimized import CoinGeckoOptimizedClient
+from api.coingecko import CoinGeckoClient
 from api.coingecko_mapper import CoinGeckoMapper
 from api.chart_img import ChartIMGClient
 from api.tradingview_mapper import TradingViewMapper
@@ -96,14 +96,14 @@ def run_scanner():
     try:
         # Initialize components
         with timed_block('initialization'):
-            history_db = HistoryDatabase(settings.db_paths['history'])
-            active_db = ActiveCoinsDatabase(settings.db_paths['history'])
-            cache = CoinLoreCache(settings.db_paths['history'])
+            history_db = HistoryDatabase(settings.db_paths['scanner'])
+            active_db = ActiveCoinsDatabase(settings.db_paths['scanner'])
+            cache = PriceCache(settings.db_paths['scanner'])
             
-            exchange_db_path = settings.db_paths['history'].parent / 'exchange_listings.db'
+            exchange_db_path = settings.db_paths['scanner'].parent / 'exchange_listings.db'
             exchange_db = ExchangeDatabase(exchange_db_path)
             
-            tv_mapper_db_path = settings.db_paths['history'].parent / 'tv_mappings.db'
+            tv_mapper_db_path = settings.db_paths['scanner'].parent / 'tv_mappings.db'
             tv_mapper = TradingViewMapper(tv_mapper_db_path)
             
             # Initialize CoinMarketCap client (for gains)
@@ -111,11 +111,11 @@ def run_scanner():
             app_logger.info("✅ CoinMarketCap client initialized")
             
             # Initialize CoinGecko client (for exchange volumes only)
-            gecko = CoinGeckoOptimizedClient()
+            gecko = CoinGeckoClient()
             app_logger.info("✅ CoinGecko client initialized")
             
             # Initialize CoinGecko Mapper
-            cg_mapper_db_path = settings.db_paths['history'].parent / 'coingecko_mappings.db'
+            cg_mapper_db_path = settings.db_paths['scanner'].parent / 'coingecko_mappings.db'
             cg_mapper = CoinGeckoMapper(cg_mapper_db_path)
             
             stats = cg_mapper.get_stats()

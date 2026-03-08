@@ -3,10 +3,10 @@ Database package
 """
 
 from .models import HistoryDatabase, ActiveCoinsDatabase
-from .cache import CoinLoreCache
+from .cache import PriceCache
 
 __all__ = [
     'HistoryDatabase',
     'ActiveCoinsDatabase',
-    'CoinLoreCache'
+    'PriceCache'
 ]

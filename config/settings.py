@@ -27,17 +27,26 @@ class Settings:
             print(f"⚠️ Warning: Could not load config file: {e}")
     
     def _get_default_config(self) -> Dict[str, Any]:
-        """Get default configuration values"""
+        """Get default configuration values per spec §9.3"""
         return {
             'MIN_VOLUME_M': 1000000,
-            'SENSITIVITY': 0.75,
             'TARGET_EXCHANGES': ['coinbase', 'kraken', 'mexc'],
             'UNIFORMITY_MIN_SCORE': 45,
             'UNIFORMITY_PERIOD': 30,
-            'USE_14D_FILTER': False,
+            'TOP_COINS_LIMIT': 2500,
+            'ENTRY_NOTIFICATIONS': True,
+            'EXIT_NOTIFICATIONS': True,
             'RETRY_MAX_ATTEMPTS': 3,
             'RETRY_DELAY': 2,
-            'RETRY_BACKOFF': 2
+            'RETRY_BACKOFF': 2,
+            'COINGECKO_CALLS_PER_MINUTE': 30,
+            'CMC_CALLS_PER_MINUTE': 333,
+            'CACHE_GECKO_ID_DAYS': 30,
+            'CACHE_EXCHANGE_HOURS': 24,
+            'CACHE_PRICE_HOURS': 6,
+            'CIRCUIT_FAILURE_THRESHOLD': 5,
+            'CIRCUIT_RECOVERY_TIMEOUT': 60,
+            'USE_14D_FILTER': False
         }
     
     def _load_config(self) -> Dict[str, Any]:
@@ -93,11 +102,52 @@ class Settings:
         return self._config.get('UNIFORMITY_PERIOD', 30)
     
     @property
+    def top_coins_limit(self) -> int:
+        return self._config.get('TOP_COINS_LIMIT', 2500)
+    
+    @property
+    def entry_notifications(self) -> bool:
+        return self._config.get('ENTRY_NOTIFICATIONS', True)
+    
+    @property
+    def exit_notifications(self) -> bool:
+        return self._config.get('EXIT_NOTIFICATIONS', True)
+    
+    @property
+    def coingecko_calls_per_minute(self) -> int:
+        return self._config.get('COINGECKO_CALLS_PER_MINUTE', 30)
+    
+    @property
+    def cmc_calls_per_minute(self) -> int:
+        return self._config.get('CMC_CALLS_PER_MINUTE', 333)
+    
+    @property
+    def cache_gecko_id_days(self) -> int:
+        return self._config.get('CACHE_GECKO_ID_DAYS', 30)
+    
+    @property
+    def cache_exchange_hours(self) -> int:
+        return self._config.get('CACHE_EXCHANGE_HOURS', 24)
+    
+    @property
+    def cache_price_hours(self) -> int:
+        return self._config.get('CACHE_PRICE_HOURS', 6)
+    
+    @property
+    def circuit_failure_threshold(self) -> int:
+        return self._config.get('CIRCUIT_FAILURE_THRESHOLD', 5)
+    
+    @property
+    def circuit_recovery_timeout(self) -> int:
+        return self._config.get('CIRCUIT_RECOVERY_TIMEOUT', 60)
+    
+    @property
     def db_paths(self) -> Dict[str, Path]:
         return {
-            'history': self.BASE_DIR / 'history.db',
-            'mapping': self.BASE_DIR / 'mapping.db',
-            'log': self.BASE_DIR / 'scan_log.txt'
+            'scanner': self.BASE_DIR / 'scanner.db',
+            'exchanges': self.BASE_DIR / 'exchanges.db',
+            'mappings': self.BASE_DIR / 'mappings.db',
+            'tv_mappings': self.BASE_DIR / 'tv_mappings.db'
         }
     
     @property
