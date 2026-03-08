@@ -16,7 +16,7 @@ def main():
     print("🔄 UPDATE TRADINGVIEW MAPPINGS")
     print("=" * 50)
     
-    db_path = settings.db_paths['history'].parent / 'tv_mappings.db'
+    db_path = settings.db_paths['tv_mappings']
     
     # Remove old database
     if db_path.exists():

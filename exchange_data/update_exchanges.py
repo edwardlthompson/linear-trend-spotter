@@ -21,8 +21,8 @@ def main():
     print("🔄 EXCHANGE LISTINGS UPDATER")
     print("=" * 50)
     
-    # Use history.db for exchange data (or create separate file)
-    db_path = settings.db_paths['history'].parent / 'exchange_listings.db'
+    # Use exchanges.db per settings.db_paths
+    db_path = settings.db_paths['exchanges']
     print(f"📁 Database: {db_path}")
     
     # Initialize database

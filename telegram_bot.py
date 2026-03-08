@@ -97,13 +97,39 @@ class TelegramBotHandler:
                             active = self.active_db.get_active()
                             active_list = list(active.values())
                             
-                            self.logger.info(f"Status command: found {len(active_list)} active coins")
-                            self.telegram.send_status_update(active_list)
+                            # Read last scan metrics per spec §10.3
+                            scan_time = "Unknown"
+                            scan_duration = "Unknown"
+                            try:
+                                scan_stats_path = Path('scan_stats.json')
+                                if scan_stats_path.exists():
+                                    with open(scan_stats_path, 'r') as f:
+                                        stats = json.load(f)
+                                        if stats:
+                                            last_scan = stats[-1]  # Most recent
+                                            scan_time = last_scan.get('last_run', 'Unknown')
+                                            scan_duration = f"{last_scan.get('duration', 0):.1f}s"
+                            except Exception as e:
+                                self.logger.error(f"Error reading scan stats: {e}")
+                            
+                            status_msg = (
+                                f"📊 <b>Status Report</b>\n\n"
+                                f"Active coins: {len(active_list)}\n"
+                                f"Last scan: {scan_time}\n"
+                                f"Duration: {scan_duration}"
+                            )
+                            
+                            self.logger.info(f"Status command: {len(active_list)} active coins")
+                            self.telegram.send_message(status_msg)
                         
                         elif text == '/list':
                             active = self.active_db.get_active()
                             if active:
-                                coins = "\n".join([f"• {c['symbol']} - {c['name']}" for c in active.values()])
+                                # Include uniformity scores per spec §10.3
+                                coins = "\n".join([
+                                    f"• {c['symbol']} - {c['name']} (Score: {c.get('uniformity_score', 0):.0f})"
+                                    for c in active.values()
+                                ])
                                 self.telegram.send_message(f"📋 Tracked coins:\n{coins}")
                             else:
                                 self.telegram.send_message("📋 No coins currently tracked")

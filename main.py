@@ -159,6 +159,7 @@ def run_scanner():
             return
         
         app_logger.info(f"✅ Got {len(all_cmc_coins)} coins with gain data")
+        metrics.increment('coins_retrieved', len(all_cmc_coins))
         
         # Build lookup dict for quick access
         cmc_by_symbol = {}
@@ -240,6 +241,7 @@ def run_scanner():
                 app_logger.info(f"   ❌ {symbol}: Not found in CMC data")
         
         app_logger.info(f"\n   ✅ PASSED gain filter: {len(gain_qualified)} coins")
+        metrics.increment('gain_filter_passed', len(gain_qualified))
         
         if not gain_qualified:
             app_logger.warning("No coins passed gain filter")
@@ -409,41 +411,8 @@ def run_scanner():
                         except Exception as e:
                             app_logger.error(f"      ❌ Chart error: {e}")
                     
-                    # Format message with gains
-                    cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
-                    uni_score = coin.get('uniformity_score', 0)
-                    
-                    # Get gain values
-                    gain_7d = coin['gains'].get('7d', 0)
-                    gain_30d = coin['gains'].get('30d', 0)
-                    
-                    caption = (
-                        f"🟢 <a href='{cmc_url}'>{coin['symbol']} ({coin['name']})</a>\n\n"
-                        f"📊 Gains:\n"
-                        f"   7d: +{gain_7d:.1f}%\n"
-                        f"   30d: +{gain_30d:.1f}%\n\n"
-                        f"📈 Uniformity Score: {uni_score}/100\n\n"
-                        f"💰 Exchange Volumes:\n"
-                    )
-                    
-                    # Add exchange volumes
-                    volumes = coin.get('exchange_volumes', {})
-                    for exchange in coin.get('listed_on', []):
-                        volume = volumes.get(exchange, "N/A")
-                        if exchange == 'coinbase':
-                            emoji = "🟦"
-                        elif exchange == 'kraken':
-                            emoji = "🐙"
-                        else:
-                            emoji = "🟪"
-                        
-                        if volume != "N/A" and volume != 0:
-                            if isinstance(volume, (int, float)):
-                                caption += f"{emoji} {exchange.title()}: ${volume:,.0f}\n"
-                            else:
-                                caption += f"{emoji} {exchange.title()}: {volume}\n"
-                        else:
-                            caption += f"{emoji} {exchange.title()}: No volume\n"
+                    # Use MessageFormatter per spec §10.1
+                    caption = MessageFormatter.format_entry(coin)
                     
                     # Send with chart image
                     if chart_bytes:
@@ -460,8 +429,8 @@ def run_scanner():
             app_logger.info(f"\n📱 Sending exit notifications for {len(exited)} coins...")
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
-                cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
-                message = f"🔴 <a href='{cmc_url}'>{coin['symbol']} ({coin['name']})</a> has left the qualified list"
+                # Use MessageFormatter per spec §10.2
+                message = MessageFormatter.format_exit(coin)
                 telegram.send_message(message)
                 metrics.increment('notifications_sent')
         

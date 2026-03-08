@@ -54,6 +54,54 @@ No repeated alerts, no spam.
 | **Exchanges**   | Coinbase, Kraken, MEXC (full listing coverage) |
 | **Delivery**    | Telegram Bot API |
 
+## Setup Instructions
+
+### Prerequisites
+
+- Python 3.10+
+- PythonAnywhere account (or any Linux server with cron)
+
+### Configuration
+
+1. **Environment Variables** — Copy `.env.example` to `.env` and configure:
+   ```
+   TELEGRAM_BOT_TOKEN=your_bot_token_here
+   TELEGRAM_CHAT_ID=your_chat_id_here
+   ```
+
+2. **Application Config** — Copy `config_json.example` to `config.json` and adjust settings as needed:
+   - Minimum volume threshold
+   - Gain filter percentages
+   - Target exchanges
+   - Rate limits
+
+3. **Install Dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Initialize Databases**:
+   ```bash
+   python update_mappings.py
+   python update_exchanges.py
+   ```
+
+5. **Schedule Tasks** — Configure cron jobs (PythonAnywhere or standard cron):
+   - `55 * * * *` — `scheduler.py` (hourly scan)
+   - `0 0 * * 0` — `update_exchanges.py` (weekly)
+   - `0 0 1 * *` — `update_mappings.py` (monthly)
+   - `*/5 * * * *` — `bot_watchdog.py` (bot health check)
+
+6. **Start Bot**:
+   ```bash
+   python manage_bot.py start
+   ```
+
+### Logs
+
+- `trend_scanner.log` — Scanner pipeline output
+- `bot_output.log` — Telegram bot activity
+
 ## Acknowledgments
 
 This project was built with assistance from the [DeepSeek](https://www.deepseek.com/) coding agent.

@@ -7,63 +7,67 @@ from typing import Dict, List
 from config.constants import EXCHANGE_EMOJIS
 
 class MessageFormatter:
-    """Format notification messages"""
+    """Format notification messages per spec §10.1-10.2"""
     
     @staticmethod
-    def get_timestamp() -> str:
-        """Get formatted timestamp"""
-        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    @staticmethod
-    def format_entry(coin: Dict, config: Dict) -> str:
-        """Format entry notification - volumes only"""
-        lines = []
-        
-        # Timestamp
-        lines.append(f"📅 {MessageFormatter.get_timestamp()}")
-        lines.append("")
-        
-        # Header
-        lines.append(f"🟢 {coin['symbol']} ({coin['name']})")
-        
-        # CMC link
+    def format_entry(coin: Dict) -> str:
+        """
+        Format entry notification per spec §10.1
+        Returns HTML-formatted caption for Telegram photo
+        """
+        # Build CMC URL
         cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
-        lines.append(f"🔗 {cmc_url}")
         
-        # Exchange volumes only - no gains or trends
-        lines.append(f"💰 Exchange Volumes:")
+        # Get data
+        symbol = coin['symbol']
+        name = coin['name']
+        gain_7d = coin['gains'].get('7d', 0)
+        gain_30d = coin['gains'].get('30d', 0)
+        score = coin.get('uniformity_score', 0)
         
-        for exchange in config['TARGET_EXCHANGES']:
-            volume = coin.get('exchange_volumes', {}).get(exchange, "N/A")
+        # Header with HTML link
+        caption = f"🟢 <a href='{cmc_url}'>{symbol} ({name})</a>\n\n"
+        
+        # Gains section
+        caption += f"📊 Gains:\n"
+        caption += f"   7d: +{gain_7d:.1f}%\n"
+        caption += f"   30d: +{gain_30d:.1f}%\n\n"
+        
+        # Uniformity score
+        caption += f"📈 Uniformity Score: {score:.0f}/100\n\n"
+        
+        # Exchange volumes
+        caption += f"💰 Exchange Volumes:\n"
+        
+        volumes = coin.get('exchange_volumes', {})
+        listed_on = coin.get('listed_on', ['coinbase', 'kraken', 'mexc'])
+        
+        for exchange in listed_on:
+            volume = volumes.get(exchange, "N/A")
             exchange_emoji = EXCHANGE_EMOJIS.get(exchange, "💱")
             
-            if volume != "N/A" and volume != 0:
-                if isinstance(volume, (int, float)):
-                    lines.append(f"{exchange_emoji} {exchange.title()}: ${volume:,.0f}")
-                else:
-                    lines.append(f"{exchange_emoji} {exchange.title()}: {volume}")
+            # Show "No volume" instead of $0 or N/A per spec §10.1
+            if volume == "N/A" or volume == 0 or volume == "0":
+                caption += f"{exchange_emoji} {exchange.title()}: No volume\n"
+            elif isinstance(volume, (int, float)):
+                caption += f"{exchange_emoji} {exchange.title()}: ${volume:,.0f}\n"
             else:
-                lines.append(f"{exchange_emoji} {exchange.title()}: No volume")
+                caption += f"{exchange_emoji} {exchange.title()}: {volume}\n"
         
-        return "\n".join(lines)
+        return caption
     
     @staticmethod
     def format_exit(coin: Dict) -> str:
-        """Format exit notification with CMC link"""
-        lines = []
-        
-        # Timestamp
-        lines.append(f"📅 {MessageFormatter.get_timestamp()}")
-        lines.append("")
-        
-        # Header
-        lines.append(f"🔴 {coin['symbol']} ({coin['name']})")
-        
-        # CMC link
+        """
+        Format exit notification per spec §10.2
+        Returns plain text message
+        """
+        symbol = coin['symbol']
+        name = coin['name']
         cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
-        lines.append(f"🔗 {cmc_url}")
         
-        # Message
-        lines.append(f"has left the qualified list")
+        message = f"🔴 {symbol} ({name})\n"
+        message += f"🔗 {cmc_url}\n"
+        message += f"has left the qualified list"
         
-        return "\n".join(lines)
+        return message
