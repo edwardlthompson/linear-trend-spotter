@@ -3,15 +3,29 @@ config.json
 *.json.backup
 *.json.fixed
 .env
+
+# Logs and output
 *.log
+bot_output.log
+trend_scanner.log
 
 # Python cache
 __pycache__/
 *.pyc
 
-# Database files
+# Database files (runtime)
+scanner.db
+exchanges.db
+mappings.db
+tv_mappings.db
 *.db
 *.db-*
+
+# Runtime lock and state files
+scan.lock
+*.pid
+scan_stats.json
+metrics.json
 
 # Local development files
 ## Allow vscode
