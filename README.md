@@ -10,7 +10,7 @@ Automated full-exchange scanner for identifying coins with sustained trend quali
 
 Linear Trend Spotter scans all symbols listed across target exchanges (default: Coinbase, Kraken, MEXC), then applies a strict multi-step qualification pipeline:
 
-1. CoinMarketCap snapshot pull (up to 5000 coins)
+1. CoinMarketCap snapshot pull (up to 2500 coins; controlled by `TOP_COINS_LIMIT`)
 2. Exchange listing universe build (all symbols in `exchange_listings`)
 3. Gain/volume filter
 4. CoinGecko ID mapping

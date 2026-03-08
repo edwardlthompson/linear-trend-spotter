@@ -145,11 +145,11 @@ def run_scanner():
                 )
         
         # ============================================================
-        # STEP 1: Get ALL coins with gains from CoinMarketCap (5000 coins)
+        # STEP 1: Get top configured coins with gains from CoinMarketCap
         # ============================================================
         app_logger.info("\n📡 Fetching all coins with gains from CoinMarketCap...")
         
-        all_cmc_coins = cmc.get_all_coins_with_gains(limit=5000)
+        all_cmc_coins = cmc.get_all_coins_with_gains(limit=settings.top_coins_limit)
         
         if not all_cmc_coins:
             app_logger.error("❌ Failed to fetch coins from CMC")

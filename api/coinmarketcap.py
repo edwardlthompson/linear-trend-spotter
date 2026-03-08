@@ -36,17 +36,17 @@ class CoinMarketCapClient:
             time.sleep(self.min_interval - elapsed)
         self.last_call = time.time()
     
-    def get_all_coins_with_gains(self, limit: int = 5000) -> Optional[List[Dict]]:
+    def get_all_coins_with_gains(self, limit: int = 2500) -> Optional[List[Dict]]:
         """
         Get ALL coins in ONE call with 7d, 30d, 60d, 90d gains
-        Using max limit (5000) to get as many coins as possible
+        Default limit is 2500 to preserve free-plan API credits.
         """
         self._rate_limit()
         
         url = f"{self.BASE_URL}/cryptocurrency/listings/latest"
         params = {
             'start': '1',
-            'limit': limit,  # CMC max is 5000
+            'limit': limit,  # CMC max is 5000, scanner default is 2500
             'convert': 'USD'
         }
         
