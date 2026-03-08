@@ -343,17 +343,18 @@ def run_scanner():
         app_logger.info(f"\n   Cached: {len(cached_coins)}, Need fetching: {len(uncached_coins)}")
         
         # Process uncached coins
+        uniformity_days = settings.uniformity_period
         for i, coin in enumerate(uncached_coins, 1):
             app_logger.info(f"\n   [{i}/{len(uncached_coins)}] {coin['symbol']}")
             
-            prices = gecko.get_market_chart(coin['cg_id'], 30)
+            prices = gecko.get_market_chart(coin['cg_id'], uniformity_days, interval='daily')
             
             if prices is None:
                 app_logger.info(f"      ⏳ Rate limited - will retry next scan")
                 continue
             
-            if prices and len(prices) >= 30:
-                score, gain = UniformityFilter.calculate(prices, 30)
+            if prices and len(prices) >= uniformity_days:
+                score, gain = UniformityFilter.calculate(prices, uniformity_days)
                 
                 coin['uniformity_score'] = score
                 coin['total_gain'] = gain

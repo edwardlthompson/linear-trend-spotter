@@ -108,12 +108,12 @@ class CoinGeckoClient:
             max_backoff_seconds=30
         )
     
-    def get_market_chart(self, coin_id: str, days: int = 30) -> Optional[List]:
-        """Get market chart data for uniformity calculation"""
+    def get_market_chart(self, coin_id: str, days: int = 30, interval: str = 'daily') -> Optional[List]:
+        """Get market chart data for uniformity calculation."""
         self.logger.info(f"Fetching market chart for {coin_id}")
         data = self._make_request(
             f"{self.BASE_URL}/coins/{coin_id}/market_chart",
-            {'vs_currency': 'usd', 'days': days}
+            {'vs_currency': 'usd', 'days': days, 'interval': interval}
         )
         if data and 'prices' in data:
             prices = [p[1] for p in data['prices']]
