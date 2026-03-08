@@ -109,18 +109,18 @@ class RateLimiter:
         self.backoff_wait = 60  # Start at 60s
     
     def record_success(self):
-        \"\"\"Record a successful API call - resets 429 counter\"\"\"
+        """Record a successful API call - resets 429 counter"""
         self.consecutive_429s = 0
         self.backoff_wait = 60
     
     def record_429(self):
-        \"\"\"Record a 429 response and calculate next backoff per spec §7.5\"\"\"
+        """Record a 429 response and calculate next backoff per spec §7.5"""
         self.consecutive_429s += 1
         # Double the wait time: 60 → 120 → 240 → 300 (capped)
         self.backoff_wait = min(60 * (2 ** (self.consecutive_429s - 1)), 300)
     
     def get_429_wait_time(self) -> float:
-        \"\"\"Get the current 429 backoff wait time\"\"\"
+        """Get the current 429 backoff wait time"""
         return self.backoff_wait
     
     def wait_if_needed(self) -> float:
@@ -185,7 +185,7 @@ class CircuitBreaker:
         recovery_timeout: float = 60.0,
         name: str = "default"
     ):
-        \"\"\"
+        """
         Initialize circuit breaker
         
         Args:
@@ -194,7 +194,7 @@ class CircuitBreaker:
             recovery_timeout: Seconds to wait before allowing test request
                             (use settings.circuit_recovery_timeout from config)
             name: Identifier for this circuit breaker
-        \"\"\"
+        """
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.name = name

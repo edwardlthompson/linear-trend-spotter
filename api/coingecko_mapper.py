@@ -72,9 +72,16 @@ class CoinGeckoMapper:
         self._execute('''
             CREATE TABLE IF NOT EXISTS mapping_metadata (
                 key     TEXT PRIMARY KEY,
-                value   TEXT
+                value   TEXT,
+                last_updated TEXT
             )
         ''')
+
+        # Backward compatibility: older DBs may not have last_updated
+        try:
+            self._execute('ALTER TABLE mapping_metadata ADD COLUMN last_updated TEXT')
+        except sqlite3.OperationalError:
+            pass
     
     def _rate_limit(self):
         """Simple rate limiting"""

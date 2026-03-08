@@ -17,7 +17,10 @@ class GainFilter:
     @staticmethod
     def check_gain_requirements(gains: Dict) -> Tuple[bool, Optional[Dict]]:
         """
-        Check if gains meet the >1% per day requirement for 7d and 30d
+        Check if gains meet requirements:
+        - 7d > 7%
+        - 30d > 30%
+        - 30d > 7d
         """
         try:
             # Get the gain values
@@ -28,9 +31,8 @@ class GainFilter:
             if gain_7d == 0 or gain_30d == 0:
                 return False, None
             
-            # Check >1% per day requirement
-            # 7d > 7%, 30d > 30%
-            if (gain_7d > 7 and gain_30d > 30):
+            # Check requirements
+            if (gain_7d > 7 and gain_30d > 30 and gain_30d > gain_7d):
                 return True, {
                     '7d': gain_7d,
                     '30d': gain_30d,

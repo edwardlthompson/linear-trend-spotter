@@ -16,6 +16,7 @@ class PriceCache:
 
     COIN_LIST_CACHE_DURATION = 24 * 60 * 60  # 24 hours
     PRICE_CACHE_DURATION = 6 * 60 * 60       # 6 hours
+    EXCHANGE_VOLUME_CACHE_DURATION = 24 * 60 * 60  # 24 hours
 
     def __init__(self, db_path: Path):
         self.db_path = db_path
@@ -61,6 +62,15 @@ class PriceCache:
                 prices              TEXT,
                 uniformity_score    REAL,
                 gains_30d           REAL,
+                cache_date          TEXT NOT NULL
+            )
+        ''')
+
+        # Exchange volume cache (24h)
+        self._execute('''
+            CREATE TABLE IF NOT EXISTS exchange_volume_cache (
+                coin_id             TEXT PRIMARY KEY,
+                volumes             TEXT NOT NULL,
                 cache_date          TEXT NOT NULL
             )
         ''')
@@ -183,6 +193,32 @@ class PriceCache:
                 VALUES (?, ?, ?, ?, ?)
             ''', (coin_id, json.dumps(prices), uniformity_score, gains_30d, now))
         except Exception as e:
+            pass
+
+    def get_exchange_volumes(self, coin_id: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+        """Get cached exchange volumes (24h TTL)."""
+        try:
+            cutoff = (datetime.now() - timedelta(seconds=self.EXCHANGE_VOLUME_CACHE_DURATION)).isoformat()
+            cursor = self._execute('''
+                SELECT volumes FROM exchange_volume_cache
+                WHERE coin_id = ? AND cache_date > ?
+            ''', (coin_id, cutoff))
+            row = cursor.fetchone()
+            if row:
+                return True, json.loads(row[0])
+            return False, None
+        except Exception:
+            return False, None
+
+    def cache_exchange_volumes(self, coin_id: str, volumes: Dict[str, Any]):
+        """Cache exchange volumes for 24h."""
+        try:
+            now = datetime.now().isoformat()
+            self._execute('''
+                INSERT OR REPLACE INTO exchange_volume_cache (coin_id, volumes, cache_date)
+                VALUES (?, ?, ?)
+            ''', (coin_id, json.dumps(volumes), now))
+        except Exception:
             pass
 
     def print_cache_summary(self):

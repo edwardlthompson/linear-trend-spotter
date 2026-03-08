@@ -35,6 +35,13 @@ class MessageFormatter:
         
         # Uniformity score
         caption += f"📈 Uniformity Score: {score:.0f}/100\n\n"
+
+        # Total CMC 24h volume
+        total_volume_24h = coin.get('volume_24h', 0)
+        if isinstance(total_volume_24h, (int, float)) and total_volume_24h > 0:
+            caption += f"💵 Total 24h Volume (CMC): ${total_volume_24h:,.0f}\n\n"
+        else:
+            caption += f"💵 Total 24h Volume (CMC): No volume\n\n"
         
         # Exchange volumes
         caption += f"💰 Exchange Volumes:\n"
@@ -65,9 +72,11 @@ class MessageFormatter:
         symbol = coin['symbol']
         name = coin['name']
         cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
+        reason = coin.get('exit_reason', 'No longer met qualification criteria')
         
         message = f"🔴 {symbol} ({name})\n"
         message += f"🔗 {cmc_url}\n"
-        message += f"has left the qualified list"
+        message += f"has left the qualified list\n"
+        message += f"Reason: {reason}"
         
         return message

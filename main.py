@@ -101,10 +101,10 @@ def run_scanner():
             active_db = ActiveCoinsDatabase(settings.db_paths['scanner'])
             cache = PriceCache(settings.db_paths['scanner'])
             
-            exchange_db_path = settings.db_paths['scanner'].parent / 'exchange_listings.db'
+            exchange_db_path = settings.db_paths['exchanges']
             exchange_db = ExchangeDatabase(exchange_db_path)
             
-            tv_mapper_db_path = settings.db_paths['scanner'].parent / 'tv_mappings.db'
+            tv_mapper_db_path = settings.db_paths['tv_mappings']
             tv_mapper = TradingViewMapper(tv_mapper_db_path)
             
             # Initialize CoinMarketCap client (for gains)
@@ -112,11 +112,11 @@ def run_scanner():
             app_logger.info("✅ CoinMarketCap client initialized")
             
             # Initialize CoinGecko client (for exchange volumes only)
-            gecko = CoinGeckoClient()
+            gecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
             app_logger.info("✅ CoinGecko client initialized")
             
             # Initialize CoinGecko Mapper
-            cg_mapper_db_path = settings.db_paths['scanner'].parent / 'coingecko_mappings.db'
+            cg_mapper_db_path = settings.db_paths['mappings']
             cg_mapper = CoinGeckoMapper(cg_mapper_db_path)
             
             stats = cg_mapper.get_stats()
@@ -199,6 +199,7 @@ def run_scanner():
             app_logger.warning("   No exchange data found - using default list")
             all_symbols = {'BTC', 'ETH', 'SOL', 'XRP'}
         
+        all_symbols_set = set(all_symbols)
         all_symbols = list(all_symbols)
         app_logger.info(f"   ✓ Scanning ALL {len(all_symbols)} coins from exchange listings")
 
@@ -222,8 +223,11 @@ def run_scanner():
                 
                 # Check volume filter
                 if info['volume_24h'] >= settings.min_volume:
-                    # Check gain filter (7d > 7% and 30d > 30%) per spec §5.5
-                    if gains['7d'] > 7 and gains['30d'] > 30:
+                    # Check gain filter:
+                    # - 7d > 7%
+                    # - 30d > 30%
+                    # - 30d must be higher than 7d
+                    if gains['7d'] > 7 and gains['30d'] > 30 and gains['30d'] > gains['7d']:
                         coin_info = {
                             'symbol': symbol,
                             'name': info['name'],
@@ -242,6 +246,8 @@ def run_scanner():
         
         app_logger.info(f"\n   ✅ PASSED gain filter: {len(gain_qualified)} coins")
         metrics.increment('gain_filter_passed', len(gain_qualified))
+
+        gain_qualified_symbols = {c['symbol'] for c in gain_qualified}
         
         if not gain_qualified:
             app_logger.warning("No coins passed gain filter")
@@ -278,6 +284,8 @@ def run_scanner():
                 coins_with_cg_ids.append(coin)
             else:
                 coins_without_cg_ids.append(coin['symbol'])
+
+        coins_with_cg_ids_symbols = {c['symbol'] for c in coins_with_cg_ids}
         
         app_logger.info(f"   Found CoinGecko IDs for {len(coins_with_cg_ids)} coins")
         
@@ -295,20 +303,23 @@ def run_scanner():
         
         for i, coin in enumerate(coins_with_cg_ids, 1):
             app_logger.info(f"   [{i}/{len(coins_with_cg_ids)}] {coin['symbol']}")
-            
-            rate_limiter.wait_if_needed()
+
+            found_cached_volumes, cached_volumes = cache.get_exchange_volumes(coin['cg_id'])
+            if found_cached_volumes and cached_volumes:
+                coin['exchange_volumes'] = cached_volumes
+                app_logger.info(f"      ✓ Using cached exchange volumes")
+                continue
             
             tickers = gecko.get_tickers(coin['cg_id'])
             
             if tickers:
                 volumes = process_tickers(tickers, settings.target_exchanges)
                 coin['exchange_volumes'] = volumes
+                cache.cache_exchange_volumes(coin['cg_id'], volumes)
                 app_logger.info(f"      ✓ Got exchange volumes")
-                rate_limiter.record_success()
             else:
                 coin['exchange_volumes'] = {ex: "N/A" for ex in settings.target_exchanges}
                 app_logger.info(f"      ⚠️ No ticker data")
-                rate_limiter.record_429()
 
         # ============================================================
         # STEP 7: Calculate uniformity scores
@@ -335,12 +346,9 @@ def run_scanner():
         for i, coin in enumerate(uncached_coins, 1):
             app_logger.info(f"\n   [{i}/{len(uncached_coins)}] {coin['symbol']}")
             
-            rate_limiter.wait_if_needed()
-            
             prices = gecko.get_market_chart(coin['cg_id'], 30)
             
             if prices is None:
-                rate_limiter.record_429()
                 app_logger.info(f"      ⏳ Rate limited - will retry next scan")
                 continue
             
@@ -353,13 +361,12 @@ def run_scanner():
                 # Cache the results per spec §8.1 (only gains_30d)
                 cache.cache_price_data(coin['cg_id'], prices, score, gain)
                 app_logger.info(f"      ✅ Score: {score:.1f}, Return: {gain:+.1f}%")
-                rate_limiter.record_success()
             else:
                 app_logger.info(f"      ⚠️ No price data")
-                rate_limiter.record_success()
         
         # Combine all processed coins
         all_processed = cached_coins + [c for c in uncached_coins if 'uniformity_score' in c]
+        all_processed_map = {c['symbol']: c for c in all_processed}
 
         # ============================================================
         # STEP 8: Apply uniformity filter
@@ -375,6 +382,8 @@ def run_scanner():
             else:
                 app_logger.info(f"   ❌ {coin['symbol']}: Failed uniformity")
 
+        uniformity_passed_symbols = {c['symbol'] for c in uniformity_passed}
+
         # ============================================================
         # STEP 9: Sort and process final results
         # ============================================================
@@ -386,6 +395,73 @@ def run_scanner():
         app_logger.info("\n🔄 Checking for entries/exits...")
         entered, exited = active_db.get_entered_exited(final_results)
         app_logger.info(f"   New entries: {len(entered)}, Exits: {len(exited)}")
+
+        # Attach precise exit reasons based on first failed pipeline stage
+        for coin in exited:
+            symbol = coin['symbol']
+
+            if symbol in STABLECOINS:
+                coin['exit_reason'] = "Filtered as stablecoin"
+                continue
+
+            if symbol not in all_symbols_set:
+                coin['exit_reason'] = "No longer listed on target exchanges"
+                continue
+
+            cmc_data = cmc_by_symbol.get(symbol)
+            if not cmc_data:
+                coin['exit_reason'] = "Missing from current CoinMarketCap snapshot"
+                continue
+
+            gains = cmc_data['gains']
+            info = cmc_data['info']
+
+            if info['volume_24h'] < settings.min_volume:
+                coin['exit_reason'] = (
+                    f"24h volume below threshold (${info['volume_24h']:,.0f} < ${settings.min_volume:,.0f})"
+                )
+                continue
+
+            gain_7d = gains.get('7d', 0)
+            gain_30d = gains.get('30d', 0)
+            if gain_7d <= 7:
+                coin['exit_reason'] = f"7d gain below threshold ({gain_7d:.1f}% ≤ 7.0%)"
+                continue
+            if gain_30d <= 30:
+                coin['exit_reason'] = f"30d gain below threshold ({gain_30d:.1f}% ≤ 30.0%)"
+                continue
+            if gain_30d <= gain_7d:
+                coin['exit_reason'] = f"30d gain not higher than 7d ({gain_30d:.1f}% ≤ {gain_7d:.1f}%)"
+                continue
+
+            if symbol not in gain_qualified_symbols:
+                coin['exit_reason'] = "Failed gain/volume filter"
+                continue
+
+            if symbol not in coins_with_cg_ids_symbols:
+                coin['exit_reason'] = "No CoinGecko ID mapping"
+                continue
+
+            if symbol not in all_processed_map:
+                coin['exit_reason'] = "Insufficient or missing 30d price history"
+                continue
+
+            processed_coin = all_processed_map[symbol]
+            if processed_coin.get('uniformity_score', 0) < settings.uniformity_min_score:
+                coin['exit_reason'] = (
+                    f"Uniformity score below threshold ({processed_coin.get('uniformity_score', 0):.1f} < {settings.uniformity_min_score})"
+                )
+                continue
+
+            if processed_coin.get('total_gain', 0) <= 0:
+                coin['exit_reason'] = f"30d return non-positive ({processed_coin.get('total_gain', 0):.1f}%)"
+                continue
+
+            if symbol not in uniformity_passed_symbols:
+                coin['exit_reason'] = "Failed final uniformity qualification"
+                continue
+
+            coin['exit_reason'] = "No longer met qualification criteria"
         
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images

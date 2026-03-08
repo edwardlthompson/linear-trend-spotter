@@ -31,7 +31,7 @@ class Settings:
         return {
             'MIN_VOLUME_M': 1000000,
             'TARGET_EXCHANGES': ['coinbase', 'kraken', 'mexc'],
-            'UNIFORMITY_MIN_SCORE': 45,
+            'UNIFORMITY_MIN_SCORE': 55,
             'UNIFORMITY_PERIOD': 30,
             'TOP_COINS_LIMIT': 2500,
             'ENTRY_NOTIFICATIONS': True,
@@ -95,7 +95,7 @@ class Settings:
     
     @property
     def uniformity_min_score(self) -> int:
-        return self._config.get('UNIFORMITY_MIN_SCORE', 45)
+        return self._config.get('UNIFORMITY_MIN_SCORE', 55)
     
     @property
     def uniformity_period(self) -> int:

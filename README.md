@@ -1,111 +1,175 @@
 # Linear Trend Spotter
 
-**Automated full-exchange scanner that identifies coins with strong, sustainable growth patterns.**
-
-Linear Trend Spotter continuously scans every coin listed on Coinbase, Kraken, and MEXC, applies a multi-stage filtering pipeline, and delivers real-time alerts — complete with professional chart images — directly to a Telegram group. It runs 24/7 so you don't have to.
+Automated full-exchange scanner for identifying coins with sustained trend quality (not one-candle pumps), then posting entry/exit alerts to Telegram.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 
 ---
 
-## Problem
+## What It Does
 
-Most traders face the same challenge: sifting through thousands of coins across multiple exchanges to find genuine, sustained momentum — not just short-lived pumps. Manual screening is time-consuming and error-prone, and most free tools lack the nuance to distinguish smooth uptrends from sudden spikes.
+Linear Trend Spotter scans all symbols listed across target exchanges (default: Coinbase, Kraken, MEXC), then applies a strict multi-step qualification pipeline:
 
-Linear Trend Spotter automates the entire discovery process with a data-driven approach.
+1. CoinMarketCap snapshot pull (up to 5000 coins)
+2. Exchange listing universe build (all symbols in `exchange_listings`)
+3. Gain/volume filter
+4. CoinGecko ID mapping
+5. Exchange-volume enrichment (CoinGecko tickers)
+6. 30-day uniformity scoring from market chart history
+7. Entry/exit detection vs active list
+8. Telegram notifications (with chart image when available)
+9. History persistence + metrics/log summary
 
-## How It Works
+---
 
-The system applies a three-stage filtering pipeline to every listed coin on the target exchanges.
+## Current Qualification Rules
 
-### Stage 1 — Fundamental Filters
+### Filter 1: Volume + gains
 
-- **Volume gate:** Coins must exceed a minimum 24-hour trading volume (default: $1 M) to ensure adequate liquidity.
-- **Multi-timeframe gain thresholds:** Average daily growth must be greater than 1% over both 7-day (cumulative > 7%) and 30-day (cumulative > 30%) windows. This eliminates one-off spikes and dead-cat bounces.
+- 24h CMC volume must be `>= MIN_VOLUME_M` (default `1,000,000`)
+- 7d gain must be `> 7%`
+- 30d gain must be `> 30%`
+- 30d gain must be strictly higher than 7d gain (`30d > 7d`)
+- Stablecoins are excluded
 
-### Stage 2 — Uniformity Analysis
+### Filter 2: Uniformity
 
-This is the core differentiator. The system analyzes 30 days of price history and calculates a **Uniformity Score** (0–100) that measures how evenly gains are distributed across the period.
+- Uses 30-day price history (CoinGecko market chart)
+- Computes a uniformity score from 0–100
+- Must pass `UNIFORMITY_MIN_SCORE` (default `55`)
+- Must also have positive 30d return
 
-| Score Range | Interpretation |
-|:-----------:|----------------|
-| **45+**     | Smooth, reliable uptrend — gains are spread consistently across the window. |
-| **< 45**    | Uneven distribution — e.g., "hockey stick" charts where most gains cluster at the end. Automatically excluded. |
+---
 
-### Stage 3 — Chart Generation
+## Notification Behavior
 
-When a coin passes both filters, the system generates a TradingView-style chart image showing the 30-day price action and attaches it directly to the Telegram notification.
+### Entry notifications
 
-## Alert Behavior
+- Sent once when a coin newly enters qualified state
+- Includes:
+  - Coin name/symbol with CMC link
+  - 7d and 30d gains
+  - Uniformity score
+  - **Total 24h volume (CMC)**
+  - Exchange-level volumes (Coinbase/Kraken/MEXC)
+- Sends chart image when Chart-IMG is available; otherwise text-only fallback
 
-Notifications follow a clean **enter/exit** model:
+### Exit notifications
 
-- **Entry alert** — Sent once when a coin first qualifies, including the chart image, Uniformity Score, 7-day and 30-day gain percentages, and exchange volume data.
-- **Exit alert** — Sent once when a coin falls below the qualifying thresholds.
+- Sent once when a previously active coin leaves qualification
+- Includes **precise exit reason** (first failed stage), for example:
+  - 24h volume below threshold
+  - 7d/30d threshold violation
+  - `30d <= 7d`
+  - Missing CMC/CoinGecko data
+  - Uniformity score below threshold
 
-No repeated alerts, no spam.
+---
 
-## Infrastructure
+## Caching + Rate Limit Strategy
 
-| Component       | Detail |
-|-----------------|--------|
-| **Hosting**     | [PythonAnywhere](https://www.pythonanywhere.com/) cloud (~$10/month) |
-| **Runtime**     | Python — runs continuously as a scheduled/always-on task |
-| **Exchanges**   | Coinbase, Kraken, MEXC (full listing coverage) |
-| **Delivery**    | Telegram Bot API |
+- CoinGecko ticker requests use adaptive retry/backoff + jitter and `Retry-After` handling
+- Non-critical ticker fetches fail fast after capped retries to prevent full-run stalls
+- Exchange-volume cache TTL: 24h (`exchange_volume_cache`)
+- Price/uniformity cache TTL: 6h (`price_cache`)
 
-## Setup Instructions
+---
 
-### Prerequisites
+## Configuration
 
-- Python 3.10+
-- PythonAnywhere account (or any Linux server with cron)
+### 1) Environment variables (`.env`)
 
-### Configuration
+```env
+CMC_API_KEY=your_cmc_api_key
+TELEGRAM_BOT_TOKEN=your_bot_token
+TELEGRAM_CHAT_ID=your_chat_id
+CHART_IMG_API_KEY=your_chart_img_api_key_optional
+```
 
-1. **Environment Variables** — Copy `.env.example` to `.env` and configure:
-   ```
-   TELEGRAM_BOT_TOKEN=your_bot_token_here
-   TELEGRAM_CHAT_ID=your_chat_id_here
-   ```
+### 2) App config (`config.json`)
 
-2. **Application Config** — Copy `config_json.example` to `config.json` and adjust settings as needed:
-   - Minimum volume threshold
-   - Gain filter percentages
-   - Target exchanges
-   - Rate limits
+Start from `config.json.example`:
 
-3. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```powershell
+Copy-Item config.json.example config.json
+```
 
-4. **Initialize Databases**:
-   ```bash
-   python update_mappings.py
-   python update_exchanges.py
-   ```
+Available parameters (defaults from `config/settings.py`):
 
-5. **Schedule Tasks** — Configure cron jobs (PythonAnywhere or standard cron):
-   - `55 * * * *` — `scheduler.py` (hourly scan)
-   - `0 0 * * 0` — `update_exchanges.py` (weekly)
-   - `0 0 1 * *` — `update_mappings.py` (monthly)
-   - `*/5 * * * *` — `bot_watchdog.py` (bot health check)
+| Key | Default | Purpose |
+|---|---:|---|
+| `MIN_VOLUME_M` | `1000000` | Minimum 24h CMC volume gate |
+| `TARGET_EXCHANGES` | `['coinbase','kraken','mexc']` | Exchanges scanned/listed |
+| `UNIFORMITY_MIN_SCORE` | `55` | Uniformity filter cutoff |
+| `UNIFORMITY_PERIOD` | `30` | Days used for score window |
+| `TOP_COINS_LIMIT` | `2500` | General list limit control |
+| `ENTRY_NOTIFICATIONS` | `true` | Enable entry alerts |
+| `EXIT_NOTIFICATIONS` | `true` | Enable exit alerts |
+| `RETRY_MAX_ATTEMPTS` | `3` | Generic retry attempts |
+| `RETRY_DELAY` | `2` | Base retry delay |
+| `RETRY_BACKOFF` | `2` | Retry backoff factor |
+| `COINGECKO_CALLS_PER_MINUTE` | `30` | CoinGecko pacing target |
+| `CMC_CALLS_PER_MINUTE` | `333` | CMC pacing target |
+| `CACHE_GECKO_ID_DAYS` | `30` | Mapping cache TTL |
+| `CACHE_EXCHANGE_HOURS` | `24` | Exchange-volume cache TTL |
+| `CACHE_PRICE_HOURS` | `6` | Price/uniformity cache TTL |
+| `CIRCUIT_FAILURE_THRESHOLD` | `5` | Circuit breaker fail threshold |
+| `CIRCUIT_RECOVERY_TIMEOUT` | `60` | Circuit recovery timeout (sec) |
+| `USE_14D_FILTER` | `false` | Reserved feature flag |
 
-6. **Start Bot**:
-   ```bash
-   python manage_bot.py start
-   ```
+---
 
-### Logs
+## Setup
 
-- `trend_scanner.log` — Scanner pipeline output
-- `bot_output.log` — Telegram bot activity
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-## Acknowledgments
+Initialize/refresh support data:
 
-This project was built with assistance from the [DeepSeek](https://www.deepseek.com/) coding agent.
+```powershell
+python update_mappings.py
+python update_exchanges.py
+```
 
-## Join
+Run a single scan:
 
-👉 **[Join the Telegram group](https://t.me/+pmZewVhuEFJjYTIx)** to see the scanner in action and receive alerts in real time.
+```powershell
+python main.py
+```
+
+---
+
+## Operations
+
+Useful operational scripts in this repo:
+
+- `scheduler.py` — scheduled scanner execution
+- `manage_bot.py` — bot process management helpers
+- `bot_watchdog.py` — process health monitoring/restarts
+- `update_exchanges.py` — exchange listing refresh
+- `update_mappings.py` — mapping refresh
+
+Suggested cadence:
+
+- Scanner: hourly
+- Exchange listing refresh: weekly
+- Mapping refresh: monthly
+- Watchdog: every 5 minutes
+
+---
+
+## Logs and Outputs
+
+- `trend_scanner.log` — full pipeline runtime log and summaries
+- `bot_output.log` — Telegram/bot-side output
+- `metrics.json` — persisted metrics snapshot
+
+---
+
+## Notes
+
+- If Chart-IMG key is missing, alerts still send as text-only.
+- If public CoinGecko limit pressure is high, scanner degrades gracefully using cache + fail-fast behavior on non-critical ticker fetches.

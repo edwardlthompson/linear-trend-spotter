@@ -8,6 +8,31 @@ from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
+
+class SafeStreamHandler(logging.StreamHandler):
+    """Stream handler that degrades unsupported Unicode safely."""
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            payload = msg + self.terminator
+
+            try:
+                stream.write(payload)
+            except UnicodeEncodeError:
+                encoding = getattr(stream, 'encoding', None) or 'utf-8'
+                safe_bytes = payload.encode(encoding, errors='replace')
+
+                if hasattr(stream, 'buffer'):
+                    stream.buffer.write(safe_bytes)
+                else:
+                    stream.write(safe_bytes.decode(encoding, errors='replace'))
+
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
 def setup_logger(name: str = None, log_file: str = None) -> logging.Logger:
     """
     Set up a logger with console and file handlers
@@ -27,6 +52,7 @@ def setup_logger(name: str = None, log_file: str = None) -> logging.Logger:
         return logger
     
     logger.setLevel(logging.INFO)
+    logger.propagate = False
     
     # Create formatters
     detailed_formatter = logging.Formatter(
@@ -36,7 +62,7 @@ def setup_logger(name: str = None, log_file: str = None) -> logging.Logger:
     simple_formatter = logging.Formatter('%(message)s')
     
     # Console handler
-    console = logging.StreamHandler(sys.stdout)
+    console = SafeStreamHandler(sys.stdout)
     console.setLevel(logging.INFO)
     console.setFormatter(simple_formatter)
     logger.addHandler(console)
@@ -49,7 +75,8 @@ def setup_logger(name: str = None, log_file: str = None) -> logging.Logger:
         file_handler = RotatingFileHandler(
             log_path,
             maxBytes=10*1024*1024,  # 10MB
-            backupCount=5
+            backupCount=5,
+            encoding='utf-8'
         )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(detailed_formatter)
