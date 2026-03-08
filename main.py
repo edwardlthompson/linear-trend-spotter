@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
+from config.constants import STABLECOINS
 from database.models import HistoryDatabase, ActiveCoinsDatabase
 from database.cache import PriceCache
 from api.coinmarketcap import CoinMarketCapClient
@@ -208,6 +209,11 @@ def run_scanner():
         gain_qualified = []
         
         for symbol in all_symbols:
+            # Filter out stablecoins per spec §5.5
+            if symbol in STABLECOINS:
+                app_logger.info(f"   ⏭️ {symbol}: Skipped (stablecoin)")
+                continue
+                
             if symbol in cmc_by_symbol:
                 cmc_data = cmc_by_symbol[symbol]
                 gains = cmc_data['gains']
@@ -215,7 +221,7 @@ def run_scanner():
                 
                 # Check volume filter
                 if info['volume_24h'] >= settings.min_volume:
-                    # Check gain filter (7d > 7% and 30d > 30%)
+                    # Check gain filter (7d > 7% and 30d > 30%) per spec §5.5
                     if gains['7d'] > 7 and gains['30d'] > 30:
                         coin_info = {
                             'symbol': symbol,
@@ -342,9 +348,8 @@ def run_scanner():
                 coin['uniformity_score'] = score
                 coin['total_gain'] = gain
                 
-                # Cache the results
-                cache.cache_price_data(coin['cg_id'], prices, score, 
-                                     gain, gain, gain)
+                # Cache the results per spec §8.1 (only gains_30d)
+                cache.cache_price_data(coin['cg_id'], prices, score, gain)
                 app_logger.info(f"      ✅ Score: {score:.1f}, Return: {gain:+.1f}%")
                 rate_limiter.record_success()
             else:
@@ -383,9 +388,9 @@ def run_scanner():
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
         # ============================================================
-        if telegram and entered:
+        if telegram and entered and settings.entry_notifications:
             with timed_block('notifications'):
-                app_logger.info(f"\n📱 Sending notifications for {len(entered)} new coins...")
+                app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
                 
                 for coin in entered:
                     app_logger.info(f"   🟢 {coin['symbol']}")
@@ -451,7 +456,8 @@ def run_scanner():
                     
                     metrics.increment('notifications_sent')
         
-        if telegram and exited:
+        if telegram and exited and settings.exit_notifications:
+            app_logger.info(f"\n📱 Sending exit notifications for {len(exited)} coins...")
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
                 cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
