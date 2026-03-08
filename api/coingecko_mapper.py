@@ -49,29 +49,30 @@ class CoinGeckoMapper:
         return cursor
     
     def _init_db(self):
-        """Initialize database tables"""
-        # Main mapping table
+        """Initialize database tables per spec §8.3"""
+        # Main mapping table - symbol_mapping per spec §8.3
         self._execute('''
-            CREATE TABLE IF NOT EXISTS coin_mappings (
-                symbol TEXT,
-                coin_id TEXT,
-                name TEXT,
-                last_updated TEXT,
-                PRIMARY KEY (symbol, coin_id)
+            CREATE TABLE IF NOT EXISTS symbol_mapping (
+                symbol          TEXT NOT NULL,
+                name            TEXT,
+                coingecko_id    TEXT NOT NULL,
+                confidence      INTEGER,
+                source          TEXT,
+                last_updated    TEXT,
+                PRIMARY KEY (symbol, coingecko_id)
             )
         ''')
         
-        # Create index for fast lookups
+        # Create index per spec §8.3
         self._execute('''
-            CREATE INDEX IF NOT EXISTS idx_coin_mappings_symbol ON coin_mappings(symbol)
+            CREATE INDEX IF NOT EXISTS idx_mapping_symbol ON symbol_mapping(symbol)
         ''')
         
-        # Cache metadata
+        # Cache metadata - mapping_metadata per spec §8.3
         self._execute('''
             CREATE TABLE IF NOT EXISTS mapping_metadata (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                last_updated TEXT
+                key     TEXT PRIMARY KEY,
+                value   TEXT
             )
         ''')
     
@@ -134,9 +135,9 @@ class CoinGeckoMapper:
         cursor = conn.cursor()
         
         # Clear old data and insert new
-        cursor.execute('DELETE FROM coin_mappings')
+        cursor.execute('DELETE FROM symbol_mapping')
         cursor.executemany('''
-            INSERT INTO coin_mappings (symbol, coin_id, name, last_updated)
+            INSERT INTO symbol_mapping (symbol, coingecko_id, name, last_updated)
             VALUES (?, ?, ?, ?)
         ''', data)
         
@@ -165,7 +166,7 @@ class CoinGeckoMapper:
             return None
         
         cursor = self._execute('''
-            SELECT coin_id FROM coin_mappings 
+            SELECT coingecko_id FROM symbol_mapping 
             WHERE symbol = ?
             ORDER BY rowid  -- This approximates market cap ranking
             LIMIT 1
@@ -187,7 +188,7 @@ class CoinGeckoMapper:
         placeholders = ','.join(['?' for _ in symbols_upper])
         
         cursor = self._execute(f'''
-            SELECT symbol, coin_id FROM coin_mappings 
+            SELECT symbol, coingecko_id FROM symbol_mapping 
             WHERE symbol IN ({placeholders})
             GROUP BY symbol  -- Take first occurrence (highest ranked)
         ''', symbols_upper)
@@ -200,12 +201,12 @@ class CoinGeckoMapper:
     
     def get_all_mappings(self) -> Dict[str, str]:
         """Get all symbol to ID mappings"""
-        cursor = self._execute('SELECT symbol, coin_id FROM coin_mappings')
+        cursor = self._execute('SELECT symbol, coingecko_id FROM symbol_mapping')
         return {row[0]: row[1] for row in cursor.fetchall()}
     
     def get_stats(self) -> Dict[str, any]:
         """Get mapping statistics"""
-        cursor = self._execute('SELECT COUNT(*) FROM coin_mappings')
+        cursor = self._execute('SELECT COUNT(*) FROM symbol_mapping')
         total = cursor.fetchone()[0]
         
         cursor = self._execute('SELECT value FROM mapping_metadata WHERE key = ?', ('last_update',))
@@ -219,7 +220,7 @@ class CoinGeckoMapper:
     def debug_check_symbol(self, symbol: str):
         """Debug method to check all mappings for a symbol"""
         cursor = self._execute('''
-            SELECT coin_id, name FROM coin_mappings 
+            SELECT coingecko_id, name FROM symbol_mapping 
             WHERE symbol = ?
         ''', (symbol.upper(),))
         

@@ -36,7 +36,7 @@ class ExchangeDatabase:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             
-            # Main listings table
+            # Main listings table per spec §8.2
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS exchange_listings (
                     exchange TEXT,
@@ -50,7 +50,13 @@ class ExchangeDatabase:
                 )
             ''')
             
-            # Exchange metadata
+            # Create index per spec §8.2
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_listings_symbol 
+                ON exchange_listings(symbol)
+            ''')
+            
+            # Exchange metadata per spec §8.2
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS exchange_metadata (
                     exchange TEXT PRIMARY KEY,

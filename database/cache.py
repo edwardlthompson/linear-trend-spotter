@@ -55,16 +55,13 @@ class PriceCache:
             CREATE INDEX IF NOT EXISTS idx_coin_list_symbol ON coin_list(symbol)
         ''')
 
-        # Price cache table
-        self._execute('''
-            CREATE TABLE IF NOT EXISTS price_cache (
-                coin_id TEXT PRIMARY KEY,
-                prices TEXT,
-                uniformity_score REAL DEFAULT 0,
-                gains_30d REAL DEFAULT 0,
-                gains_60d REAL DEFAULT 0,
-                gains_90d REAL DEFAULT 0,
-                cache_date TEXT
+        # Price cache table per spec §8.1
+        self._execute('''\n          CREATE TABLE IF NOT EXISTS price_cache (
+                coin_id             TEXT PRIMARY KEY,
+                prices              TEXT,
+                uniformity_score    REAL,
+                gains_30d           REAL,
+                cache_date          TEXT NOT NULL
             )
         ''')
 
@@ -153,12 +150,12 @@ class PriceCache:
             return 0
 
     def get_price_data(self, coin_id: str) -> Tuple[bool, Optional[Dict]]:
-        """Get cached price data"""
+        """Get cached price data per spec §8.1"""
         try:
             six_hours_ago = (datetime.now() - timedelta(seconds=self.PRICE_CACHE_DURATION)).isoformat()
 
             cursor = self._execute('''
-                SELECT prices, uniformity_score, gains_30d, gains_60d, gains_90d
+                SELECT prices, uniformity_score, gains_30d
                 FROM price_cache
                 WHERE coin_id = ? AND cache_date > ?
             ''', (coin_id, six_hours_ago))
@@ -169,8 +166,6 @@ class PriceCache:
                     'prices': json.loads(result[0]),
                     'uniformity_score': result[1],
                     'gains_30d': result[2],
-                    'gains_60d': result[3],
-                    'gains_90d': result[4],
                 }
 
             return False, None
@@ -178,15 +173,15 @@ class PriceCache:
             return False, None
 
     def cache_price_data(self, coin_id: str, prices: list, uniformity_score: float,
-                        gains_30d: float, gains_60d: float, gains_90d: float):
-        """Cache price data and metrics"""
+                        gains_30d: float):
+        """Cache price data and metrics per spec §8.1"""
         try:
             now = datetime.now().isoformat()
             self._execute('''
                 INSERT OR REPLACE INTO price_cache
-                (coin_id, prices, uniformity_score, gains_30d, gains_60d, gains_90d, cache_date)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (coin_id, json.dumps(prices), uniformity_score, gains_30d, gains_60d, gains_90d, now))
+                (coin_id, prices, uniformity_score, gains_30d, cache_date)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (coin_id, json.dumps(prices), uniformity_score, gains_30d, now))
         except Exception as e:
             pass
 

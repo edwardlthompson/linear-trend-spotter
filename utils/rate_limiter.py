@@ -89,8 +89,11 @@ def retry(
 
 class RateLimiter:
     """
-    Rate limiter for API calls
-    Ensures we don't exceed calls per minute limits
+    Rate limiter for API calls per spec §7.5
+    Ensures we don't exceed calls per minute limits with:
+    - Minimum interval enforcement
+    - 429-specific exponential backoff (60→120→240s, cap 300s)
+    - Jitter (0-100ms)
     """
     
     def __init__(self, calls_per_minute: int = 30, name: str = "default"):
@@ -100,10 +103,30 @@ class RateLimiter:
         self.name = name
         self.call_count = 0
         self.reset_time = time.time()
+        
+        # 429-specific backoff tracking per spec §7.5
+        self.consecutive_429s = 0
+        self.backoff_wait = 60  # Start at 60s
+    
+    def record_success(self):
+        \"\"\"Record a successful API call - resets 429 counter\"\"\"
+        self.consecutive_429s = 0
+        self.backoff_wait = 60
+    
+    def record_429(self):
+        \"\"\"Record a 429 response and calculate next backoff per spec §7.5\"\"\"
+        self.consecutive_429s += 1
+        # Double the wait time: 60 → 120 → 240 → 300 (capped)
+        self.backoff_wait = min(60 * (2 ** (self.consecutive_429s - 1)), 300)
+    
+    def get_429_wait_time(self) -> float:
+        \"\"\"Get the current 429 backoff wait time\"\"\"
+        return self.backoff_wait
     
     def wait_if_needed(self) -> float:
         """
         Wait if necessary to stay under rate limit
+        Applies jitter per spec §7.5 (0-100ms)
         Returns the time waited in seconds
         """
         now = time.time()
@@ -119,6 +142,11 @@ class RateLimiter:
         
         if time_since_last < self.min_interval:
             wait_time = self.min_interval - time_since_last
+            
+            # Add jitter per spec §7.5: random 0-100ms
+            jitter = random.uniform(0, 0.1)
+            wait_time += jitter
+            
             time.sleep(wait_time)
         
         self.last_call = time.time()
@@ -146,6 +174,7 @@ class RateLimiter:
 class CircuitBreaker:
     """
     Circuit breaker pattern to prevent repeated calls to failing services
+    Per spec §7.5: Uses CIRCUIT_FAILURE_THRESHOLD and CIRCUIT_RECOVERY_TIMEOUT from config
     """
     
     STATES = ['CLOSED', 'OPEN', 'HALF_OPEN']
@@ -156,6 +185,16 @@ class CircuitBreaker:
         recovery_timeout: float = 60.0,
         name: str = "default"
     ):
+        \"\"\"
+        Initialize circuit breaker
+        
+        Args:
+            failure_threshold: Number of consecutive failures before opening circuit
+                              (use settings.circuit_failure_threshold from config)
+            recovery_timeout: Seconds to wait before allowing test request
+                            (use settings.circuit_recovery_timeout from config)
+            name: Identifier for this circuit breaker
+        \"\"\"
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.name = name
