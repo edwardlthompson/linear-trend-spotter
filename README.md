@@ -4,12 +4,10 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 
 ## Key Features
 
-- **Trend Identification (Primary):** Scans the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
-- **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and surfaces ranked strategy performance in notifications.
-- **Full-Exchange Universe Scanning:** Evaluates all symbols listed on configured target exchanges (default Coinbase, Kraken, MEXC).
-- **Strict Multi-Stage Qualification:** Applies gain/volume thresholds plus 30-day uniformity scoring so only credible trend candidates are promoted.
-- **Actionable Telegram Alerts:** Sends enriched entry/exit notifications with charting and backtest context.
-- **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity.
+1. **Trend Identification (Primary):** Evaluates the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
+2. **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and ranks opportunities for alerts.
+3. **Actionable Telegram Alerts:** Sends enriched entry/exit notifications with charting and backtest context.
+4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 
@@ -19,17 +17,16 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 
 Linear Trend Spotter scans all symbols listed across target exchanges (default: Coinbase, Kraken, MEXC), then applies a strict multi-step qualification pipeline:
 
-- **Primary output is backtest-informed alerts**: final-stage qualified coins are optionally backtested across configured timeframes before notifications are sent.
-
 1. CoinMarketCap snapshot pull (up to 2500 coins; controlled by `TOP_COINS_LIMIT`)
 2. Exchange listing universe build (all symbols in `exchange_listings`)
 3. Gain/volume filter
 4. CoinGecko ID mapping
 5. Exchange-volume enrichment (CoinGecko tickers)
 6. 30-day uniformity scoring from market chart history
-7. Entry/exit detection vs active list
-8. Telegram notifications (with chart image when available)
-9. History persistence + metrics/log summary
+7. **Backtesting stage (featured):** optional multi-strategy, multi-timeframe backtests on final-stage qualified coins
+8. Entry/exit detection vs active list
+9. Telegram notifications (single combined image when chart available; fallback supported)
+10. History persistence + metrics/log summary
 
 ---
 
