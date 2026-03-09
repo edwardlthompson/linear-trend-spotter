@@ -47,6 +47,15 @@ class Settings:
             'CACHE_PRICE_HOURS': 6,
             'CIRCUIT_FAILURE_THRESHOLD': 5,
             'CIRCUIT_RECOVERY_TIMEOUT': 60,
+            'BACKTEST_ENABLED': False,
+            'BACKTEST_REQUIRE_TARGET_EXCHANGE': False,
+            'BACKTEST_EXCHANGES': ['kraken'],
+            'BACKTEST_STARTING_CAPITAL': 1000,
+            'BACKTEST_FEE_BPS_ROUND_TRIP': 52,
+            'BACKTEST_MAX_PARAM_COMBOS': 100,
+            'BACKTEST_PARALLEL_WORKERS': 4,
+            'BACKTEST_MAX_COINS_PER_RUN': 0,
+            'BACKTEST_TIMEFRAMES': ['1h', '4h', '1d'],
             'USE_14D_FILTER': False
         }
     
@@ -145,6 +154,49 @@ class Settings:
     @property
     def circuit_recovery_timeout(self) -> int:
         return self._config.get('CIRCUIT_RECOVERY_TIMEOUT', 60)
+
+    @property
+    def backtest_enabled(self) -> bool:
+        return self._config.get('BACKTEST_ENABLED', False)
+
+    @property
+    def backtest_require_target_exchange(self) -> bool:
+        return bool(self._config.get('BACKTEST_REQUIRE_TARGET_EXCHANGE', False))
+
+    @property
+    def backtest_exchanges(self) -> list:
+        return self._config.get('BACKTEST_EXCHANGES', ['kraken'])
+
+    @property
+    def backtest_starting_capital(self) -> float:
+        return float(self._config.get('BACKTEST_STARTING_CAPITAL', 1000))
+
+    @property
+    def backtest_fee_bps_round_trip(self) -> int:
+        return self._config.get('BACKTEST_FEE_BPS_ROUND_TRIP', 52)
+
+    @property
+    def backtest_max_param_combos(self) -> int:
+        return self._config.get('BACKTEST_MAX_PARAM_COMBOS', 100)
+
+    @property
+    def backtest_parallel_workers(self) -> int:
+        return self._config.get('BACKTEST_PARALLEL_WORKERS', 4)
+
+    @property
+    def backtest_max_coins_per_run(self) -> int:
+        return self._config.get('BACKTEST_MAX_COINS_PER_RUN', 0)
+
+    @property
+    def backtest_timeframes(self) -> list:
+        values = self._config.get('BACKTEST_TIMEFRAMES', ['1h', '4h', '1d'])
+        if isinstance(values, list) and values:
+            return [str(item).lower() for item in values]
+        return ['1h', '4h', '1d']
+
+    @property
+    def base_dir(self) -> Path:
+        return self.BASE_DIR
     
     @property
     def db_paths(self) -> Dict[str, Path]:

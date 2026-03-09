@@ -41,6 +41,77 @@ class PriceHistoryFallbackClient:
 
         return None, "none"
 
+    def get_polygon_30d_hourly_ohlcv(self, symbol: str) -> Optional[list[dict[str, float]]]:
+        """Get 30d hourly OHLCV from Polygon for non-Kraken intraday backtesting."""
+        if not self.polygon_api_key:
+            return None
+
+        today = date.today()
+        start = today - timedelta(days=30)
+        url = f"https://api.polygon.io/v2/aggs/ticker/X:{symbol.upper()}USD/range/1/hour/{start.isoformat()}/{today.isoformat()}"
+        params = {
+            "adjusted": "true",
+            "sort": "asc",
+            "limit": 50000,
+            "apiKey": self.polygon_api_key,
+        }
+
+        for attempt in range(6):
+            try:
+                response = self.polygon_session.get(url, params=params, timeout=20)
+                if response.status_code == 200:
+                    payload = response.json()
+                    results = payload.get("results", []) if isinstance(payload, dict) else []
+                    if not isinstance(results, list) or not results:
+                        return None
+
+                    rows: list[dict[str, float]] = []
+                    for row in results:
+                        if not isinstance(row, dict):
+                            continue
+                        if any(row.get(key) is None for key in ("t", "o", "h", "l", "c")):
+                            continue
+
+                        ts_sec = int(float(row.get("t", 0)) / 1000)
+                        rows.append(
+                            {
+                                "ts": ts_sec,
+                                "open": float(row.get("o", 0)),
+                                "high": float(row.get("h", 0)),
+                                "low": float(row.get("l", 0)),
+                                "close": float(row.get("c", 0)),
+                                "volume": float(row.get("v", 0.0) or 0.0),
+                            }
+                        )
+
+                    if len(rows) >= 600:
+                        return rows
+                    return None
+
+                if response.status_code == 429 and attempt < 5:
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after and retry_after.isdigit():
+                        wait_time = min(int(retry_after), 30)
+                    else:
+                        wait_time = min(3 * (attempt + 1), 20) + random.uniform(0, 1)
+                    self.logger.warning(f"Polygon hourly 429 for {symbol}; waiting {wait_time:.1f}s")
+                    time.sleep(wait_time)
+                    continue
+
+                if response.status_code in (408, 500, 503) and attempt < 5:
+                    wait_time = min(2 * (attempt + 1), 15) + random.uniform(0, 1)
+                    time.sleep(wait_time)
+                    continue
+
+                return None
+            except Exception:
+                if attempt < 5:
+                    time.sleep(min(2 * (attempt + 1), 15))
+                    continue
+                return None
+
+        return None
+
     def _get_polygon_30d_daily(self, symbol: str) -> Optional[list[float]]:
         if not self.polygon_api_key:
             return None

@@ -3,6 +3,7 @@
 import os
 import sys
 import time
+import json
 import io
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,9 @@ from processors.gain_filter import GainFilter
 from processors.uniformity_filter import UniformityFilter
 from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
+from notifications.image_renderer import build_fallback_chart_image, build_combined_notification_image
+from backtesting.runner import run_backtests_for_final_results
+from backtesting.report import notification_rows_for_symbol
 from utils.metrics import metrics, timed_block
 from utils.logger import app_logger
 
@@ -408,11 +412,62 @@ def run_scanner():
         final_results = sorted(uniformity_passed, 
                               key=lambda x: x['uniformity_score'], 
                               reverse=True)
+
+        # ============================================================
+        # STEP 9.1: Optional backtesting run (feature-flagged)
+        # ============================================================
+        backtest_summary = None
+        if settings.backtest_enabled:
+            app_logger.info("\n🧪 Running backtests for final-stage qualified coins...")
+            try:
+                backtest_summary = run_backtests_for_final_results(final_results)
+                app_logger.info(
+                    "   ✅ Backtests complete: "
+                    f"eligible={backtest_summary.get('coins_eligible', 0)}, "
+                    f"processed={backtest_summary.get('coins_processed', 0)}, "
+                    f"failed={backtest_summary.get('coins_failed', 0)}, "
+                    f"rows={backtest_summary.get('rows_generated', 0)}"
+                )
+                metrics.increment('backtests_processed', int(backtest_summary.get('coins_processed', 0)))
+            except Exception as backtest_error:
+                app_logger.error(f"   ❌ Backtesting failed: {backtest_error}")
+                app_logger.info("   ℹ️ Continuing scanner flow despite backtesting failure")
+
+        if backtest_summary:
+            for coin in final_results:
+                symbol = coin.get('symbol', '')
+                if not symbol:
+                    continue
+                details = notification_rows_for_symbol(backtest_summary, symbol, top_n=5)
+                coin['backtest_top_strategies'] = details.get('top_strategies', [])
+                coin['backtest_buy_hold'] = details.get('buy_hold')
         
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
         entered, exited = active_db.get_entered_exited(final_results)
         app_logger.info(f"   New entries: {len(entered)}, Exits: {len(exited)}")
+
+        if entered:
+            fallback_summary = backtest_summary
+            if not fallback_summary:
+                artifact_path = settings.base_dir / "backtest_results.json"
+                if artifact_path.exists():
+                    try:
+                        with artifact_path.open("r", encoding="utf-8") as handle:
+                            fallback_summary = json.load(handle)
+                    except Exception as artifact_error:
+                        app_logger.warning(f"   ⚠️ Could not read backtest artifact for notifications: {artifact_error}")
+
+            if fallback_summary:
+                for coin in entered:
+                    if coin.get('backtest_top_strategies') and coin.get('backtest_buy_hold'):
+                        continue
+                    symbol = coin.get('symbol', '')
+                    if not symbol:
+                        continue
+                    details = notification_rows_for_symbol(fallback_summary, symbol, top_n=5)
+                    coin['backtest_top_strategies'] = details.get('top_strategies', [])
+                    coin['backtest_buy_hold'] = details.get('buy_hold')
 
         # Attach precise exit reasons based on first failed pipeline stage
         for coin in exited:
@@ -504,18 +559,31 @@ def run_scanner():
                             )
                         except Exception as e:
                             app_logger.error(f"      ❌ Chart error: {e}")
+
+                    if not chart_bytes:
+                        chart_bytes = build_fallback_chart_image(coin['symbol'], settings.db_paths['scanner'])
+                        if chart_bytes:
+                            app_logger.info("      ℹ️ Using cached OHLCV fallback chart")
                     
                     # Use MessageFormatter per spec §10.1
                     caption = MessageFormatter.format_entry(coin)
                     
-                    # Send with chart image
+                    # Send one combined image notification (chart + strategy table)
                     if chart_bytes:
-                        img_data = io.BytesIO(chart_bytes)
-                        telegram.send_photo(img_data, caption=caption)
-                        app_logger.info(f"      📤 Sent chart image with notification")
+                        combined_image = build_combined_notification_image(coin, chart_bytes)
+                        image_payload = combined_image if combined_image else chart_bytes
+                        img_data = io.BytesIO(image_payload)
+                        message_id = telegram.send_photo(img_data, caption=caption)
+                        if message_id:
+                            app_logger.info(f"      📤 Sent combined image notification")
+                        else:
+                            app_logger.error(f"      ❌ Failed to send combined image notification")
                     else:
-                        telegram.send_message(caption)
-                        app_logger.info(f"      📤 Sent text-only notification")
+                        message_id = telegram.send_message(caption)
+                        if message_id:
+                            app_logger.info(f"      📤 Sent text-only notification")
+                        else:
+                            app_logger.error(f"      ❌ Failed to send text-only notification")
                     
                     metrics.increment('notifications_sent')
         

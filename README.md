@@ -52,7 +52,14 @@ Linear Trend Spotter scans all symbols listed across target exchanges (default: 
   - Uniformity score
   - **Total 24h volume (CMC)**
   - Exchange-level volumes (Coinbase/Kraken/MEXC)
-- Sends chart image when Chart-IMG is available; otherwise text-only fallback
+- Sends a **single combined image** (one ping) containing:
+  - Price chart (top)
+  - Ranked backtest strategy table with bordered cells (bottom)
+- Strategy table columns:
+  - `Indicator | TF | Key Settings | Stop Loss % | Final $ | Net % | Trades | Win %`
+- Cell text wraps automatically when long values overflow
+- If Chart-IMG fails, chart generation falls back to cached `ohlcv_cache` 1h data
+- If no chart can be built, message gracefully degrades to text-only
 
 ### Exit notifications
 
@@ -97,7 +104,7 @@ Copy-Item config.json.example config.json
 Available parameters (defaults from `config/settings.py`):
 
 | Key | Default | Purpose |
-|---|---:|---|
+| --- | ---: | --- |
 | `MIN_VOLUME_M` | `1000000` | Minimum 24h CMC volume gate |
 | `TARGET_EXCHANGES` | `['coinbase','kraken','mexc']` | Exchanges scanned/listed |
 | `UNIFORMITY_MIN_SCORE` | `55` | Uniformity filter cutoff |
@@ -115,6 +122,15 @@ Available parameters (defaults from `config/settings.py`):
 | `CACHE_PRICE_HOURS` | `6` | Price/uniformity cache TTL |
 | `CIRCUIT_FAILURE_THRESHOLD` | `5` | Circuit breaker fail threshold |
 | `CIRCUIT_RECOVERY_TIMEOUT` | `60` | Circuit recovery timeout (sec) |
+| `BACKTEST_ENABLED` | `false` | Enable integrated post-filter backtesting |
+| `BACKTEST_REQUIRE_TARGET_EXCHANGE` | `false` | When `true`, gate backtests by `BACKTEST_EXCHANGES` |
+| `BACKTEST_EXCHANGES` | `['kraken']` | Exchange allowlist used only when exchange gating is enabled |
+| `BACKTEST_STARTING_CAPITAL` | `1000` | Starting capital per simulated strategy run |
+| `BACKTEST_FEE_BPS_ROUND_TRIP` | `52` | Round-trip taker fee in bps |
+| `BACKTEST_MAX_PARAM_COMBOS` | `100` | Max param combos per indicator/timeframe |
+| `BACKTEST_PARALLEL_WORKERS` | `4` | Process workers for per-coin backtesting |
+| `BACKTEST_MAX_COINS_PER_RUN` | `0` | Safety cap for eligible coins per scanner run (`0` = unlimited) |
+| `BACKTEST_TIMEFRAMES` | `['1h','4h','1d']` | Timeframes to evaluate for each coin |
 | `USE_14D_FILTER` | `false` | Reserved feature flag |
 
 ---
@@ -139,6 +155,44 @@ Run a single scan:
 ```powershell
 python main.py
 ```
+
+---
+
+## Backtesting
+
+Backtesting can run inside scanner flow after final qualification.
+
+Enable in `config.json`:
+
+- `BACKTEST_ENABLED: true`
+- `BACKTEST_REQUIRE_TARGET_EXCHANGE: false` (default: include all final-phase coins)
+- Optional gate mode: `BACKTEST_REQUIRE_TARGET_EXCHANGE: true` and set `BACKTEST_EXCHANGES`
+
+Data source behavior:
+
+- Primary source for all symbols: CoinGecko OHLCV (`1h/4h/1d` when hourly available)
+- Intraday fallback: Polygon hourly OHLCV
+- Last-resort fallback: CoinGecko daily OHLC (`1d` only)
+
+Run scanner:
+
+```powershell
+python main.py
+```
+
+Render ranked output and top settings from artifact:
+
+```powershell
+python scripts/render_backtest_report.py
+```
+
+Backtesting artifact:
+
+- `backtest_results.json`
+
+Operational recovery checklist:
+
+- `docs/backtesting-runbook.md`
 
 ---
 
@@ -171,5 +225,5 @@ Suggested cadence:
 
 ## Notes
 
-- If Chart-IMG key is missing, alerts still send as text-only.
+- If Chart-IMG key is missing or unavailable, notifications can still use cached OHLCV fallback chart when present.
 - If public CoinGecko limit pressure is high, scanner degrades gracefully using cache + fail-fast behavior on non-critical ticker fetches.

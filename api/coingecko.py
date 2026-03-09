@@ -1,8 +1,10 @@
 """CoinGecko API client with rate limiting - for volume data and price charts"""
+import os
 import time
 import random
+import json
 import requests
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import threading
 import logging
 
@@ -31,15 +33,24 @@ class CoinGeckoClient:
     """CoinGecko API client - for volume data and price charts"""
     
     BASE_URL = "https://api.coingecko.com/api/v3"
+    PRO_BASE_URL = "https://pro-api.coingecko.com/api/v3"
     
     def __init__(self, calls_per_minute: int = 10):
         self.session = requests.Session()
         # Public API is shared; cap to a conservative upper bound for reliability
         self.rate_limiter = RateLimiter(max(1, min(calls_per_minute, 12)))
         self.logger = logging.getLogger('CoinGeckoClient')
-        self.session.headers.update({
-            'User-Agent': 'Linear-Trend-Spotter/1.0'
-        })
+        headers = {'User-Agent': 'Linear-Trend-Spotter/1.0'}
+        api_key = os.getenv('COINGECKO_API_KEY', '').strip()
+        if api_key and api_key.startswith('CG-'):
+            headers['x-cg-demo-api-key'] = api_key
+            self.base_url = self.BASE_URL
+        elif api_key:
+            headers['x-cg-pro-api-key'] = api_key
+            self.base_url = self.PRO_BASE_URL
+        else:
+            self.base_url = self.BASE_URL
+        self.session.headers.update(headers)
     
     def _make_request(
         self,
@@ -49,6 +60,13 @@ class CoinGeckoClient:
         max_backoff_seconds: int = 120
     ) -> Optional[Dict]:
         """Make a rate-limited request with retries and adaptive backoff."""
+        def _swap_host(input_url: str) -> str:
+            if self.BASE_URL in input_url:
+                return input_url.replace(self.BASE_URL, self.PRO_BASE_URL)
+            if self.PRO_BASE_URL in input_url:
+                return input_url.replace(self.PRO_BASE_URL, self.BASE_URL)
+            return input_url
+
         for attempt in range(max_retries):
             try:
                 self.rate_limiter.wait()
@@ -80,6 +98,20 @@ class CoinGeckoClient:
                     time.sleep(wait_time)
                     continue
                 else:
+                    if response.status_code == 400:
+                        try:
+                            payload = json.loads(response.text)
+                            error_code = payload.get('error_code')
+                        except Exception:
+                            error_code = None
+
+                        if error_code in (10010, 10011) and attempt < max_retries - 1:
+                            new_url = _swap_host(url)
+                            if new_url != url:
+                                self.logger.warning(f"CoinGecko host mismatch ({error_code}); retrying with alternate host")
+                                url = new_url
+                                continue
+
                     self.logger.error(f"API error {response.status_code}: {response.text[:200]}")
                     return None
                     
@@ -103,7 +135,7 @@ class CoinGeckoClient:
         self.logger.info(f"Fetching tickers for {coin_id}")
         # Non-critical endpoint in this pipeline: fail fast to avoid scan stalls
         return self._make_request(
-            f"{self.BASE_URL}/coins/{coin_id}/tickers",
+            f"{self.base_url}/coins/{coin_id}/tickers",
             max_retries=1,
             max_backoff_seconds=10
         )
@@ -112,7 +144,7 @@ class CoinGeckoClient:
         """Get market chart data for uniformity calculation."""
         self.logger.info(f"Fetching market chart for {coin_id}")
         data = self._make_request(
-            f"{self.BASE_URL}/coins/{coin_id}/market_chart",
+            f"{self.base_url}/coins/{coin_id}/market_chart",
             {'vs_currency': 'usd', 'days': days, 'interval': interval}
         )
         if data and 'prices' in data:
@@ -123,3 +155,112 @@ class CoinGeckoClient:
         
         self.logger.error(f"❌ Failed to get price data for {coin_id}")
         return None
+
+    def get_ohlc(self, coin_id: str, days: int = 30) -> Optional[List[List[float]]]:
+        """Get OHLC candles from CoinGecko for fallback backtesting paths."""
+        self.logger.info(f"Fetching OHLC for {coin_id}")
+        data: Any = self._make_request(
+            f"{self.base_url}/coins/{coin_id}/ohlc",
+            {'vs_currency': 'usd', 'days': days},
+            max_retries=3,
+            max_backoff_seconds=30,
+        )
+
+        if not isinstance(data, list):
+            self.logger.error(f"❌ Failed to get OHLC data for {coin_id}")
+            return None
+
+        rows: List[List[float]] = []
+        for row in data:
+            if not isinstance(row, list) or len(row) < 5:
+                continue
+            try:
+                ts_ms = float(row[0])
+                open_p = float(row[1])
+                high_p = float(row[2])
+                low_p = float(row[3])
+                close_p = float(row[4])
+            except (TypeError, ValueError):
+                continue
+            rows.append([ts_ms, open_p, high_p, low_p, close_p])
+
+        if not rows:
+            self.logger.error(f"❌ Empty OHLC payload for {coin_id}")
+            return None
+
+        self.logger.info(f"✅ Got {len(rows)} OHLC rows for {coin_id}")
+        return rows
+
+    def get_hourly_ohlcv(self, coin_id: str, days: int = 30) -> Optional[List[Dict[str, float]]]:
+        """Build hourly OHLCV candles from CoinGecko market_chart hourly data."""
+        data: Any = self._make_request(
+            f"{self.base_url}/coins/{coin_id}/market_chart",
+            {'vs_currency': 'usd', 'days': days},
+            max_retries=3,
+            max_backoff_seconds=30,
+        )
+
+        if not isinstance(data, dict):
+            data = self._make_request(
+                f"{self.base_url}/coins/{coin_id}/market_chart",
+                {'vs_currency': 'usd', 'days': days, 'interval': 'hourly'},
+                max_retries=1,
+                max_backoff_seconds=10,
+            )
+
+        if not isinstance(data, dict):
+            return None
+
+        prices = data.get('prices', [])
+        volumes = data.get('total_volumes', [])
+        if not isinstance(prices, list) or len(prices) < 50:
+            return None
+
+        volume_by_hour: Dict[int, float] = {}
+        if isinstance(volumes, list):
+            for item in volumes:
+                if not isinstance(item, list) or len(item) < 2:
+                    continue
+                try:
+                    ts_ms = float(item[0])
+                    vol = float(item[1])
+                except (TypeError, ValueError):
+                    continue
+                hour_sec = int(ts_ms // 1000 // 3600 * 3600)
+                volume_by_hour[hour_sec] = vol
+
+        price_by_hour: Dict[int, list[float]] = {}
+        for item in prices:
+            if not isinstance(item, list) or len(item) < 2:
+                continue
+            try:
+                ts_ms = float(item[0])
+                price = float(item[1])
+            except (TypeError, ValueError):
+                continue
+            hour_sec = int(ts_ms // 1000 // 3600 * 3600)
+            price_by_hour.setdefault(hour_sec, []).append(price)
+
+        if not price_by_hour:
+            return None
+
+        rows: List[Dict[str, float]] = []
+        for hour_sec in sorted(price_by_hour.keys()):
+            bucket = price_by_hour[hour_sec]
+            if not bucket:
+                continue
+            rows.append(
+                {
+                    'ts': float(hour_sec),
+                    'open': float(bucket[0]),
+                    'high': float(max(bucket)),
+                    'low': float(min(bucket)),
+                    'close': float(bucket[-1]),
+                    'volume': float(volume_by_hour.get(hour_sec, 0.0)),
+                }
+            )
+
+        if len(rows) < 300:
+            return None
+
+        return rows

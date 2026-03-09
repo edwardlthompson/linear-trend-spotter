@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-03-09T02:06:26.724210+00:00",
+  "duration_sec": 77.54,
+  "coins_eligible": 3,
+  "coins_processed": 3,
+  "coins_failed": 0,
+  "rows_generated": 78,
+  "skipped_count": 0,
+  "timeframes": [
+    "1h",
+    "4h"
+  ],
+  "max_param_combos": 5,
+  "parallel_workers": 2
+}

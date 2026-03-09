@@ -8,6 +8,50 @@ from config.constants import EXCHANGE_EMOJIS
 
 class MessageFormatter:
     """Format notification messages per spec §10.1-10.2"""
+
+    @staticmethod
+    def _format_key_settings(params: Dict) -> str:
+        if not params:
+            return "none"
+
+        key_aliases = {
+            'period': 'p',
+            'lower': 'lo',
+            'upper': 'hi',
+            'overbought': 'ob',
+            'oversold': 'os',
+            'fast_period': 'fast',
+            'slow_period': 'slow',
+            'signal_period': 'sig',
+            'short_period': 'short',
+            'long_period': 'long',
+            'std_dev': 'std',
+            'buy_threshold': 'buy<',
+            'sell_threshold': 'sell>',
+            'adx_threshold': 'adx>',
+            'di_diff_min': 'diΔ>',
+            'k_period': 'k',
+            'd_period': 'd',
+            'smooth': 'sm',
+        }
+
+        def compact_value(value):
+            if isinstance(value, float):
+                if value.is_integer():
+                    return str(int(value))
+                return f"{value:.4g}"
+            return str(value)
+
+        parts = []
+        for key in sorted(params.keys()):
+            label = key_aliases.get(key, key)
+            parts.append(f"{label}={compact_value(params[key])}")
+
+        compact = "; ".join(parts)
+        if len(compact) > 56:
+            return compact[:53] + "..."
+        return compact
+
     
     @staticmethod
     def format_entry(coin: Dict) -> str:
@@ -60,6 +104,8 @@ class MessageFormatter:
                 caption += f"{exchange_emoji} {exchange.title()}: ${volume:,.0f}\n"
             else:
                 caption += f"{exchange_emoji} {exchange.title()}: {volume}\n"
+
+        caption += "\n🧪 Backtest ranked strategies are attached as a separate image."
         
         return caption
     

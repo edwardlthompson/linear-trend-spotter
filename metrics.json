@@ -1743,5 +1743,248 @@
     },
     "coins_processed": 0,
     "timestamp": "2026-03-08T20:59:46.326359"
+  },
+  {
+    "duration": 6.892917633056641,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "backtests_processed": 0
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.014244318008422852
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:17:09.135869"
+  },
+  {
+    "duration": 1.5105090141296387,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "backtests_processed": 0
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.016573190689086914
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:20:59.501757"
+  },
+  {
+    "duration": 3.1184513568878174,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "backtests_processed": 3
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.014530420303344727
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:27:07.502164"
+  },
+  {
+    "duration": 98.11667919158936,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 32,
+      "backtests_processed": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.02055072784423828
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:39:33.983394"
+  },
+  {
+    "duration": 86.76209878921509,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 32,
+      "backtests_processed": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.013577938079833984
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:39:42.530356"
+  },
+  {
+    "duration": 116.49888682365417,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "backtests_processed": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.014119386672973633
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:44:29.967981"
+  },
+  {
+    "duration": 31.437525272369385,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "backtests_processed": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.014530181884765625
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:46:16.844504"
+  },
+  {
+    "duration": 13.300857782363892,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 32,
+      "backtests_processed": 1
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.03373098373413086
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T22:55:40.746294"
+  },
+  {
+    "duration": 398.7729277610779,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 32,
+      "backtests_processed": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.019441843032836914
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T23:10:26.525023"
+  },
+  {
+    "duration": 11.591561079025269,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 32,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.01585865020751953,
+      "notifications": 8.554168462753296
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T23:19:00.057597"
+  },
+  {
+    "duration": 10.894068241119385,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 32,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.016913414001464844,
+      "notifications": 9.475523710250854
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T23:22:34.786683"
+  },
+  {
+    "duration": 10.179841756820679,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.015096426010131836,
+      "notifications": 8.429579734802246
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T23:27:16.116749"
+  },
+  {
+    "duration": 10.139936208724976,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.016239166259765625,
+      "notifications": 8.424360275268555
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T23:33:14.136966"
+  },
+  {
+    "duration": 10.632950782775879,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 31,
+      "notifications_sent": 2
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.017299652099609375,
+      "notifications": 9.32258915901184
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T23:37:19.049298"
   }
 ]

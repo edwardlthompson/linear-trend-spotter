@@ -179,6 +179,43 @@
 			"type": "shell",
 			"command": "Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item benchmark_40_tuned_results.json,benchmark_40_tuned_progress.log,benchmark_40_tuned_error.txt -ErrorAction SilentlyContinue; C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe benchmark_40_tuned.py",
 			"isBackground": false
+		},
+		{
+			"label": "run-full-scan-backtest-allcoins",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"scripts/run_full_scan_backtest_allcoins.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-full-unbounded-cg-first",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"-c",
+				"from config.settings import settings; settings._config['BACKTEST_ENABLED']=True; settings._config['BACKTEST_REQUIRE_TARGET_EXCHANGE']=False; settings._config['ENTRY_NOTIFICATIONS']=False; settings._config['EXIT_NOTIFICATIONS']=False; settings._config['NO_CHANGE_NOTIFICATIONS']=False; settings._config['BACKTEST_MAX_PARAM_COMBOS']=100; settings._config['BACKTEST_PARALLEL_WORKERS']=4; settings._config['BACKTEST_MAX_COINS_PER_RUN']=0; import main; main.run_scanner()"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-full-unbounded-script",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"scripts/run_full_unbounded_cg_first.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-full-unbounded-script-fixed",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"scripts/run_full_unbounded_cg_first.py"
+			],
+			"isBackground": false
 		}
 	]
 }

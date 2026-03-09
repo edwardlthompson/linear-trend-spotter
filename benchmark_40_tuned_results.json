@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-03-09T00:48:33Z",
+  "generated_at_utc": "2026-03-09T03:15:17Z",
   "symbols_40": [
     "BTC",
     "ETH",
@@ -46,28 +46,28 @@
     {
       "source": "CoinGecko",
       "status_code": 200,
-      "latency_ms": 38.23,
+      "latency_ms": 72.31,
       "records_returned": 250,
       "covers_40": true
     },
     {
       "source": "CoinMarketCap",
       "status_code": 200,
-      "latency_ms": 778.92,
+      "latency_ms": 441.69,
       "records_returned": 40,
       "covers_40": true
     },
     {
       "source": "CoinLore",
       "status_code": 200,
-      "latency_ms": 722.1,
+      "latency_ms": 557.23,
       "records_returned": 100,
       "covers_40": true
     },
     {
       "source": "Polygon",
       "status_code": 200,
-      "latency_ms": 217.12,
+      "latency_ms": 135.81,
       "records_returned": 625,
       "covers_40": true
     }
@@ -83,8 +83,8 @@
       "status_codes_seen": [
         200
       ],
-      "total_ms": 2424.56,
-      "median_request_ms": 150.44,
+      "total_ms": 2485.04,
+      "median_request_ms": 119.24,
       "batch_size": 1,
       "effective_batch_size": 1,
       "timeout_seconds": 15,
@@ -100,8 +100,8 @@
       "status_codes_seen": [
         200
       ],
-      "total_ms": 274.53,
-      "median_request_ms": 202.15,
+      "total_ms": 141.39,
+      "median_request_ms": 129.62,
       "batch_size": 1,
       "effective_batch_size": 1,
       "timeout_seconds": 15,

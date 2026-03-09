@@ -5,6 +5,7 @@ import json
 from typing import Optional, Dict, List
 from datetime import datetime
 import logging
+from notifications.formatter import MessageFormatter
 
 class TelegramClient:
     """Send notifications via Telegram with interactive features"""
@@ -76,43 +77,8 @@ class TelegramClient:
             return None
     
     def send_entry_notification(self, coin: Dict, chart_bytes: bytes = None) -> Optional[int]:
-        """Send entry notification with chart and exchange volumes"""
-        cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
-        
-        # Get gains
-        gain_7d = coin['gains'].get('7d', 0)
-        gain_14d = coin['gains'].get('14d', 0)
-        gain_30d = coin['gains'].get('30d', 0)
-        
-        caption = (
-            f"🟢 <a href='{cmc_url}'>{coin['symbol']} ({coin['name']})</a>\n\n"
-            f"📊 Gains:\n"
-            f"   7d: +{gain_7d:.1f}%\n"
-            f"   14d: +{gain_14d:.1f}%\n"
-            f"   30d: +{gain_30d:.1f}%\n\n"
-            f"📈 Uniformity: {coin['uniformity_score']}/100\n\n"
-            f"💰 Exchange Volumes:\n"
-        )
-        
-        # Add exchange volumes
-        for exchange in coin.get('listed_on', []):
-            volume = coin.get('exchange_volumes', {}).get(exchange, "N/A")
-            if exchange == 'coinbase':
-                emoji = "🟦"
-            elif exchange == 'kraken':
-                emoji = "🐙"
-            elif exchange == 'mexc':
-                emoji = "🟪"
-            else:
-                emoji = "💱"
-            
-            if volume != "N/A" and volume != 0:
-                if isinstance(volume, (int, float)):
-                    caption += f"{emoji} {exchange.title()}: ${volume:,.0f}\n"
-                else:
-                    caption += f"{emoji} {exchange.title()}: {volume}\n"
-            else:
-                caption += f"{emoji} {exchange.title()}: No volume\n"
+        """Send entry notification with chart and backtest details"""
+        caption = MessageFormatter.format_entry(coin)
         
         # Send with chart if available
         if chart_bytes:

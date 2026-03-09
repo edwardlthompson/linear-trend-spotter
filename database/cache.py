@@ -75,6 +75,29 @@ class PriceCache:
             )
         ''')
 
+        # OHLCV cache for backtesting (1h base; 4h/1d derived locally)
+        self._execute('''
+            CREATE TABLE IF NOT EXISTS ohlcv_cache (
+                exchange    TEXT NOT NULL,
+                symbol      TEXT NOT NULL,
+                timeframe   TEXT NOT NULL,
+                ts          INTEGER NOT NULL,
+                open        REAL NOT NULL,
+                high        REAL NOT NULL,
+                low         REAL NOT NULL,
+                close       REAL NOT NULL,
+                volume      REAL NOT NULL,
+                source      TEXT,
+                fetched_at  TEXT NOT NULL,
+                PRIMARY KEY (exchange, symbol, timeframe, ts)
+            )
+        ''')
+
+        self._execute('''
+            CREATE INDEX IF NOT EXISTS idx_ohlcv_lookup
+            ON ohlcv_cache(exchange, symbol, timeframe, ts)
+        ''')
+
     def update_coin_list(self, coins: List[Dict]) -> int:
         """Bulk update coin list"""
         try:
@@ -220,6 +243,86 @@ class PriceCache:
             ''', (coin_id, json.dumps(volumes), now))
         except Exception:
             pass
+
+    def cache_ohlcv_rows(
+        self,
+        exchange: str,
+        symbol: str,
+        timeframe: str,
+        rows: List[Dict[str, Any]],
+        source: str = 'kraken_api'
+    ) -> int:
+        """Cache OHLCV candles for a symbol/timeframe."""
+        if not rows:
+            return 0
+
+        now = datetime.now().isoformat()
+        exchange_key = exchange.lower()
+        symbol_key = symbol.upper()
+        timeframe_key = timeframe.lower()
+
+        payload = []
+        for row in rows:
+            payload.append((
+                exchange_key,
+                symbol_key,
+                timeframe_key,
+                int(row['ts']),
+                float(row['open']),
+                float(row['high']),
+                float(row['low']),
+                float(row['close']),
+                float(row.get('volume', 0.0)),
+                source,
+                now,
+            ))
+
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.executemany('''
+            INSERT OR REPLACE INTO ohlcv_cache
+            (exchange, symbol, timeframe, ts, open, high, low, close, volume, source, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', payload)
+        conn.commit()
+        return len(payload)
+
+    def get_ohlcv_rows(
+        self,
+        exchange: str,
+        symbol: str,
+        timeframe: str,
+        max_age_hours: int = 6
+    ) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
+        """Get cached OHLCV candles for a symbol/timeframe within max age."""
+        try:
+            cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+            cursor = self._execute('''
+                SELECT ts, open, high, low, close, volume, source, fetched_at
+                FROM ohlcv_cache
+                WHERE exchange = ? AND symbol = ? AND timeframe = ? AND fetched_at > ?
+                ORDER BY ts ASC
+            ''', (exchange.lower(), symbol.upper(), timeframe.lower(), cutoff))
+            result = cursor.fetchall()
+            if not result:
+                return False, None
+
+            rows = [
+                {
+                    'ts': row['ts'],
+                    'open': row['open'],
+                    'high': row['high'],
+                    'low': row['low'],
+                    'close': row['close'],
+                    'volume': row['volume'],
+                    'source': row['source'],
+                    'fetched_at': row['fetched_at'],
+                }
+                for row in result
+            ]
+            return True, rows
+        except Exception:
+            return False, None
 
     def print_cache_summary(self):
         """Print a comprehensive cache summary"""
