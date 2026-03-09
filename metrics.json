@@ -1693,5 +1693,55 @@
     },
     "coins_processed": 0,
     "timestamp": "2026-03-08T18:15:30.540840"
+  },
+  {
+    "duration": 122.12886261940002,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 30,
+      "notifications_sent": 1
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.014573812484741211,
+      "notifications": 6.633553743362427
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T20:59:24.157348"
+  },
+  {
+    "duration": 1.8497035503387451,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 30
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.015501260757446289
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T20:59:26.516960"
+  },
+  {
+    "duration": 0.8770554065704346,
+    "counts": {
+      "coins_retrieved": 2500,
+      "gain_filter_passed": 30
+    },
+    "api_calls": {},
+    "cache_hits": {},
+    "cache_misses": {},
+    "errors": {},
+    "avg_timings": {
+      "initialization": 0.0143585205078125
+    },
+    "coins_processed": 0,
+    "timestamp": "2026-03-08T20:59:46.326359"
   }
 ]

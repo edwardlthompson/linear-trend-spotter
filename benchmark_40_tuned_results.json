@@ -1,0 +1,111 @@
+{
+  "generated_at_utc": "2026-03-09T00:48:33Z",
+  "symbols_40": [
+    "BTC",
+    "ETH",
+    "USDT",
+    "BNB",
+    "XRP",
+    "USDC",
+    "SOL",
+    "TRX",
+    "DOGE",
+    "ADA",
+    "BCH",
+    "XMR",
+    "LINK",
+    "DAI",
+    "XLM",
+    "HBAR",
+    "LTC",
+    "AVAX",
+    "TON",
+    "SHIB",
+    "CRO",
+    "PAXG",
+    "DOT",
+    "UNI",
+    "MNT",
+    "OKB",
+    "TAO",
+    "ETC",
+    "APT",
+    "NEAR",
+    "ATOM",
+    "FIL",
+    "ARB",
+    "OP",
+    "AAVE",
+    "ALGO",
+    "VET",
+    "ICP",
+    "INJ",
+    "SUI"
+  ],
+  "snapshot_bulk_40": [
+    {
+      "source": "CoinGecko",
+      "status_code": 200,
+      "latency_ms": 38.23,
+      "records_returned": 250,
+      "covers_40": true
+    },
+    {
+      "source": "CoinMarketCap",
+      "status_code": 200,
+      "latency_ms": 778.92,
+      "records_returned": 40,
+      "covers_40": true
+    },
+    {
+      "source": "CoinLore",
+      "status_code": 200,
+      "latency_ms": 722.1,
+      "records_returned": 100,
+      "covers_40": true
+    },
+    {
+      "source": "Polygon",
+      "status_code": 200,
+      "latency_ms": 217.12,
+      "records_returned": 625,
+      "covers_40": true
+    }
+  ],
+  "history_40_simulation": [
+    {
+      "provider": "coingecko",
+      "scenario": "reliability_timeout15",
+      "coins_target": 40,
+      "coins_resolved": 40,
+      "coins_success": 40,
+      "success_ratio": 1.0,
+      "status_codes_seen": [
+        200
+      ],
+      "total_ms": 2424.56,
+      "median_request_ms": 150.44,
+      "batch_size": 1,
+      "effective_batch_size": 1,
+      "timeout_seconds": 15,
+      "provider_tuning": true
+    },
+    {
+      "provider": "polygon",
+      "scenario": "reliability_timeout15",
+      "coins_target": 40,
+      "coins_resolved": 39,
+      "coins_success": 39,
+      "success_ratio": 1.0,
+      "status_codes_seen": [
+        200
+      ],
+      "total_ms": 274.53,
+      "median_request_ms": 202.15,
+      "batch_size": 1,
+      "effective_batch_size": 1,
+      "timeout_seconds": 15,
+      "provider_tuning": true
+    }
+  ]
+}

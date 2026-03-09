@@ -1,0 +1,184 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "run-apples-40-benchmark",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"benchmark_apples_to_apples_40.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-apples-40-benchmark-v2",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"benchmark_apples_to_apples_40.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-apples-40-benchmark-clean",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"benchmark_apples_to_apples_40.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-apples-40-tuned",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"benchmark_apples_to_apples_40.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "debug-python-output",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"-c",
+				"print('ok')"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-apples-40-tuned-clean2",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"benchmark_apples_to_apples_40.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-apples-inline-main",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"-c",
+				"import benchmark_apples_to_apples_40 as b; b.main(); print('done')"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-apples-inline-main2",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe -c \"import benchmark_apples_to_apples_40 as b; b.main(); print('done')\"",
+			"isBackground": false
+		},
+		{
+			"label": "run-bench40-once",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"run_bench40_once.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-bench40-logged",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe run_bench40_once.py > bench40_stdout.log 2> bench40_stderr.log",
+			"isBackground": false
+		},
+		{
+			"label": "check-python-procs",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,CPU,StartTime | Format-Table -AutoSize",
+			"isBackground": false
+		},
+		{
+			"label": "kill-python-procs",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
+			"isBackground": false
+		},
+		{
+			"label": "run-bench40-patched",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"run_bench40_once.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-benchmark-40-tuned",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"benchmark_40_tuned.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "check-python-active",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,CPU,StartTime | Format-Table -AutoSize",
+			"isBackground": false
+		},
+		{
+			"label": "run-bench40-tuned-once",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"run_bench40_tuned_once.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "bench40-reliability-run",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item benchmark_40_tuned_results.json,benchmark_40_tuned_progress.log -ErrorAction SilentlyContinue; C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe benchmark_40_tuned.py",
+			"isBackground": false
+		},
+		{
+			"label": "py-version-check",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe --version",
+			"isBackground": false
+		},
+		{
+			"label": "bench40-run-only",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe benchmark_40_tuned.py",
+			"isBackground": false
+		},
+		{
+			"label": "check-python-active-now",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,CPU,StartTime | Format-Table -AutoSize",
+			"isBackground": false
+		},
+		{
+			"label": "check-python-after-start",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,CPU,StartTime | Format-Table -AutoSize",
+			"isBackground": false
+		},
+		{
+			"label": "bench40-reliability-final",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item benchmark_40_tuned_results.json,benchmark_40_tuned_progress.log -ErrorAction SilentlyContinue; C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe benchmark_40_tuned.py",
+			"isBackground": false
+		},
+		{
+			"label": "bench40-reliability-errorcap",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item benchmark_40_tuned_results.json,benchmark_40_tuned_progress.log,benchmark_40_tuned_error.txt -ErrorAction SilentlyContinue; C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe benchmark_40_tuned.py",
+			"isBackground": false
+		},
+		{
+			"label": "bench40-reliability-capturebase",
+			"type": "shell",
+			"command": "Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Remove-Item benchmark_40_tuned_results.json,benchmark_40_tuned_progress.log,benchmark_40_tuned_error.txt -ErrorAction SilentlyContinue; C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe benchmark_40_tuned.py",
+			"isBackground": false
+		}
+	]
+}
