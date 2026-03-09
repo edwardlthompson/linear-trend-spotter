@@ -36,6 +36,7 @@ class Settings:
             'TOP_COINS_LIMIT': 2500,
             'ENTRY_NOTIFICATIONS': True,
             'EXIT_NOTIFICATIONS': True,
+            'NO_CHANGE_NOTIFICATIONS': False,
             'RETRY_MAX_ATTEMPTS': 3,
             'RETRY_DELAY': 2,
             'RETRY_BACKOFF': 2,
@@ -112,6 +113,10 @@ class Settings:
     @property
     def exit_notifications(self) -> bool:
         return self._config.get('EXIT_NOTIFICATIONS', True)
+
+    @property
+    def no_change_notifications(self) -> bool:
+        return self._config.get('NO_CHANGE_NOTIFICATIONS', False)
     
     @property
     def coingecko_calls_per_minute(self) -> int:

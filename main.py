@@ -527,6 +527,16 @@ def run_scanner():
                 message = MessageFormatter.format_exit(coin)
                 telegram.send_message(message)
                 metrics.increment('notifications_sent')
+
+        if telegram and not entered and not exited and settings.no_change_notifications:
+            app_logger.info("\n📱 Sending no-change scan summary notification...")
+            summary_message = (
+                "ℹ️ <b>Scan complete</b>\n"
+                f"No entries or exits this cycle.\n"
+                f"Qualified coins: {len(final_results)}"
+            )
+            telegram.send_message(summary_message)
+            metrics.increment('notifications_sent')
         
         # Save results
         if final_results:
