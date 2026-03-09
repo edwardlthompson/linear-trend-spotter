@@ -34,8 +34,8 @@ class CoinGeckoClient:
     
     def __init__(self, calls_per_minute: int = 10):
         self.session = requests.Session()
-        # Public API is ~30/min and shared; use conservative defaults for reliability
-        self.rate_limiter = RateLimiter(max(1, min(calls_per_minute, 20)))
+        # Public API is shared; cap to a conservative upper bound for reliability
+        self.rate_limiter = RateLimiter(max(1, min(calls_per_minute, 12)))
         self.logger = logging.getLogger('CoinGeckoClient')
         self.session.headers.update({
             'User-Agent': 'Linear-Trend-Spotter/1.0'
@@ -104,8 +104,8 @@ class CoinGeckoClient:
         # Non-critical endpoint in this pipeline: fail fast to avoid scan stalls
         return self._make_request(
             f"{self.BASE_URL}/coins/{coin_id}/tickers",
-            max_retries=2,
-            max_backoff_seconds=30
+            max_retries=1,
+            max_backoff_seconds=10
         )
     
     def get_market_chart(self, coin_id: str, days: int = 30, interval: str = 'daily') -> Optional[List]:

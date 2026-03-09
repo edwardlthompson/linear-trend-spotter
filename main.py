@@ -17,6 +17,7 @@ from database.cache import PriceCache
 from api.coinmarketcap import CoinMarketCapClient
 from api.coingecko import CoinGeckoClient
 from api.coingecko_mapper import CoinGeckoMapper
+from api.price_history_fallback import PriceHistoryFallbackClient
 from api.chart_img import ChartIMGClient
 from api.tradingview_mapper import TradingViewMapper
 from processors.gain_filter import GainFilter
@@ -114,6 +115,13 @@ def run_scanner():
             # Initialize CoinGecko client (for exchange volumes only)
             gecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
             app_logger.info("✅ CoinGecko client initialized")
+
+            # Initialize fallback providers for 30d price history (reliability-first)
+            history_fallback = PriceHistoryFallbackClient(
+                polygon_api_key=os.getenv('POLYGON_API_KEY', ''),
+                cmc_api_key=settings.cmc_api_key
+            )
+            app_logger.info("✅ Price history fallback chain initialized (Polygon -> CMC)")
             
             # Initialize CoinGecko Mapper
             cg_mapper_db_path = settings.db_paths['mappings']
@@ -346,8 +354,17 @@ def run_scanner():
         uniformity_days = settings.uniformity_period
         for i, coin in enumerate(uncached_coins, 1):
             app_logger.info(f"\n   [{i}/{len(uncached_coins)}] {coin['symbol']}")
-            
+
+            price_source = 'coingecko'
             prices = gecko.get_market_chart(coin['cg_id'], uniformity_days, interval='daily')
+
+            # Reliability-first fallback chain when CoinGecko is rate limited or incomplete
+            if prices is None or len(prices) < uniformity_days:
+                fallback_prices, fallback_source = history_fallback.get_30d_prices(coin['symbol'])
+                if fallback_prices:
+                    prices = fallback_prices
+                    price_source = fallback_source
+                    app_logger.info(f"      🔁 Fallback source: {fallback_source}")
             
             if prices is None:
                 app_logger.info(f"      ⏳ Rate limited - will retry next scan")
