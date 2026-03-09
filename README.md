@@ -1,6 +1,15 @@
 # Linear Trend Spotter
 
-Automated full-exchange scanner for identifying coins with sustained trend quality (not one-candle pumps), then posting entry/exit alerts to Telegram.
+Automated full-exchange scanner focused on identifying sustained trend quality (not one-candle pumps), with integrated multi-strategy backtesting to validate and rank opportunities before alerting.
+
+## Key Features
+
+- **Trend Identification (Primary):** Scans the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
+- **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and surfaces ranked strategy performance in notifications.
+- **Full-Exchange Universe Scanning:** Evaluates all symbols listed on configured target exchanges (default Coinbase, Kraken, MEXC).
+- **Strict Multi-Stage Qualification:** Applies gain/volume thresholds plus 30-day uniformity scoring so only credible trend candidates are promoted.
+- **Actionable Telegram Alerts:** Sends enriched entry/exit notifications with charting and backtest context.
+- **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 
@@ -9,6 +18,8 @@ Automated full-exchange scanner for identifying coins with sustained trend quali
 ## What It Does
 
 Linear Trend Spotter scans all symbols listed across target exchanges (default: Coinbase, Kraken, MEXC), then applies a strict multi-step qualification pipeline:
+
+- **Primary output is backtest-informed alerts**: final-stage qualified coins are optionally backtested across configured timeframes before notifications are sent.
 
 1. CoinMarketCap snapshot pull (up to 2500 coins; controlled by `TOP_COINS_LIMIT`)
 2. Exchange listing universe build (all symbols in `exchange_listings`)
@@ -23,6 +34,8 @@ Linear Trend Spotter scans all symbols listed across target exchanges (default: 
 ---
 
 ## Current Qualification Rules
+
+Qualification determines which coins enter the **backtesting stage** (when enabled) and therefore which backtest-ranked strategy outputs are included in alerts.
 
 ### Filter 1: Volume + gains
 
