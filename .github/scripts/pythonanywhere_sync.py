@@ -51,7 +51,18 @@ def get_or_create_bash_console(base_url: str, username: str, token: str) -> int:
 
 
 def build_sync_command() -> str:
-    project_path = env("PA_PROJECT_PATH")
+    username = env("PA_USERNAME")
+    project_path = env("PA_PROJECT_PATH", required=False, default="")
+    if not project_path:
+        repository = os.getenv("GITHUB_REPOSITORY", "").strip()
+        repository_name = repository.split("/")[-1] if repository else ""
+        if not repository_name:
+            raise RuntimeError(
+                "Missing required environment variable: PA_PROJECT_PATH. "
+                "Set PA_PROJECT_PATH or run in a GitHub Actions context with GITHUB_REPOSITORY available."
+            )
+        project_path = f"/home/{username}/{repository_name}"
+
     branch = env("PA_BRANCH", required=False, default="main")
     install_requirements = env("PA_INSTALL_REQUIREMENTS", required=False, default="false").lower() == "true"
     venv_python = env("PA_VENV_PYTHON", required=False, default="")

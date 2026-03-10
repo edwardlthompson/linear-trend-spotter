@@ -22,6 +22,8 @@ Optional secrets:
 - `PA_VENV_PYTHON` (example: `/home/<username>/.virtualenvs/venv-name/bin/python`)
 - `PA_POST_SYNC_COMMAND` (any extra command to run after sync)
 
+If `PA_PROJECT_PATH` is not set, the workflow now falls back to `/home/<PA_USERNAME>/<repo-name>` using `GITHUB_REPOSITORY`.
+
 ## How it works
 
 On push to `main` (or manual run), GitHub Actions calls the PythonAnywhere API and sends this command to a bash console:
