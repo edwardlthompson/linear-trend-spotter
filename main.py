@@ -87,6 +87,32 @@ def process_tickers(tickers_data, target_exchanges):
     
     return volumes
 
+
+def aggregate_daily_bars_from_hourly(hourly_rows):
+    """Aggregate hourly OHLCV rows into daily bars for OHLCV uniformity scoring."""
+    buckets = {}
+    for row in hourly_rows:
+        ts = int(row['ts'])
+        day_key = ts // 86400
+        buckets.setdefault(day_key, []).append(row)
+
+    daily_bars = []
+    for day_key in sorted(buckets.keys()):
+        day_rows = sorted(buckets[day_key], key=lambda item: int(item['ts']))
+        if not day_rows:
+            continue
+        daily_bars.append(
+            {
+                'open': float(day_rows[0]['open']),
+                'high': max(float(item['high']) for item in day_rows),
+                'low': min(float(item['low']) for item in day_rows),
+                'close': float(day_rows[-1]['close']),
+                'volume': sum(float(item.get('volume', 0.0) or 0.0) for item in day_rows),
+            }
+        )
+
+    return daily_bars
+
 def run_scanner():
     """Main orchestration function"""
     app_logger.info("=" * 60)
@@ -120,12 +146,12 @@ def run_scanner():
             gecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
             app_logger.info("✅ CoinGecko client initialized")
 
-            # Initialize fallback providers for 30d price history (reliability-first)
+            # Initialize fallback providers for OHLCV reliability chain
             history_fallback = PriceHistoryFallbackClient(
                 polygon_api_key=os.getenv('POLYGON_API_KEY', ''),
                 cmc_api_key=settings.cmc_api_key
             )
-            app_logger.info("✅ Price history fallback chain initialized (Polygon -> CMC)")
+            app_logger.info("✅ OHLCV fallback chain initialized (Polygon hourly)")
             
             # Initialize CoinGecko Mapper
             cg_mapper_db_path = settings.db_paths['mappings']
@@ -354,37 +380,51 @@ def run_scanner():
         
         app_logger.info(f"\n   Cached: {len(cached_coins)}, Need fetching: {len(uncached_coins)}")
         
-        # Process uncached coins
+        # Process uncached coins (OHLCV-only uniformity)
         uniformity_days = settings.uniformity_period
         for i, coin in enumerate(uncached_coins, 1):
             app_logger.info(f"\n   [{i}/{len(uncached_coins)}] {coin['symbol']}")
 
-            price_source = 'coingecko'
-            prices = gecko.get_market_chart(coin['cg_id'], uniformity_days, interval='daily')
-
-            # Reliability-first fallback chain when CoinGecko is rate limited or incomplete
-            if prices is None or len(prices) < uniformity_days:
-                fallback_prices, fallback_source = history_fallback.get_30d_prices(coin['symbol'])
-                if fallback_prices:
-                    prices = fallback_prices
-                    price_source = fallback_source
-                    app_logger.info(f"      🔁 Fallback source: {fallback_source}")
-            
-            if prices is None:
-                app_logger.info(f"      ⏳ Rate limited - will retry next scan")
-                continue
-            
-            if prices and len(prices) >= uniformity_days:
-                score, gain = UniformityFilter.calculate(prices, uniformity_days)
-                
-                coin['uniformity_score'] = score
-                coin['total_gain'] = gain
-                
-                # Cache the results per spec §8.1 (only gains_30d)
-                cache.cache_price_data(coin['cg_id'], prices, score, gain)
-                app_logger.info(f"      ✅ Score: {score:.1f}, Return: {gain:+.1f}%")
+            ohlcv_source = 'none'
+            found, cached_rows = cache.get_ohlcv_rows('coingecko', coin['symbol'], '1h', max_age_hours=settings.cache_price_hours)
+            hourly_rows = cached_rows if found and cached_rows else None
+            if hourly_rows:
+                ohlcv_source = 'coingecko_cache'
             else:
-                app_logger.info(f"      ⚠️ No price data")
+                api_rows = gecko.get_hourly_ohlcv(coin['cg_id'], days=max(30, uniformity_days))
+                if api_rows:
+                    cache.cache_ohlcv_rows('coingecko', coin['symbol'], '1h', api_rows, source='coingecko_api')
+                    hourly_rows = api_rows
+                    ohlcv_source = 'coingecko_api'
+
+            if not hourly_rows:
+                found_polygon, cached_polygon_rows = cache.get_ohlcv_rows('polygon', coin['symbol'], '1h', max_age_hours=settings.cache_price_hours)
+                if found_polygon and cached_polygon_rows:
+                    hourly_rows = cached_polygon_rows
+                    ohlcv_source = 'polygon_cache'
+                else:
+                    polygon_rows = history_fallback.get_polygon_30d_hourly_ohlcv(coin['symbol'])
+                    if polygon_rows:
+                        cache.cache_ohlcv_rows('polygon', coin['symbol'], '1h', polygon_rows, source='polygon_api')
+                        hourly_rows = polygon_rows
+                        ohlcv_source = 'polygon_api'
+
+            if not hourly_rows:
+                app_logger.info("      ⏳ No OHLCV data available - will retry next scan")
+                continue
+
+            daily_bars = aggregate_daily_bars_from_hourly(hourly_rows)
+            if len(daily_bars) < uniformity_days:
+                app_logger.info("      ⚠️ Insufficient OHLCV history")
+                continue
+
+            score, gain = UniformityFilter.calculate_from_ohlcv(daily_bars, uniformity_days)
+            coin['uniformity_score'] = score
+            coin['total_gain'] = gain
+
+            closes_for_cache = [float(bar['close']) for bar in daily_bars[-uniformity_days:]]
+            cache.cache_price_data(coin['cg_id'], closes_for_cache, score, gain)
+            app_logger.info(f"      ✅ Score: {score:.1f}, Return: {gain:+.1f}% ({ohlcv_source})")
         
         # Combine all processed coins
         all_processed = cached_coins + [c for c in uncached_coins if 'uniformity_score' in c]

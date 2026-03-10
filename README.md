@@ -44,8 +44,10 @@ Qualification determines which coins enter the **backtesting stage** (when enabl
 
 ### Filter 2: Uniformity
 
-- Uses 30-day price history (CoinGecko market chart)
-- Computes a uniformity score from 0–100
+- Uses 30-day **OHLCV-derived** daily bars (hourly aggregation)
+- Primary source: CoinGecko hourly OHLCV
+- Fallback source: Polygon hourly OHLCV
+- Computes an OHLCV-aware uniformity score from 0–100 (trend + candle-structure stability)
 - Must pass `UNIFORMITY_MIN_SCORE` (default `55`)
 - Must also have positive 30d return
 
