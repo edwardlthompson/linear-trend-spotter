@@ -21,6 +21,37 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Validate required sync config
+        env:
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+          PA_PROJECT_PATH: ${{ secrets.PA_PROJECT_PATH }}
+        run: |
+          missing=0
+          if [ -z "$PA_USERNAME" ]; then
+            echo "::error::Missing required secret: PA_USERNAME"
+            missing=1
+          else
+            echo "PA_USERNAME is configured"
+          fi
+
+          if [ -z "$PA_API_TOKEN" ]; then
+            echo "::error::Missing required secret: PA_API_TOKEN"
+            missing=1
+          else
+            echo "PA_API_TOKEN is configured"
+          fi
+
+          if [ -z "$PA_PROJECT_PATH" ]; then
+            echo "PA_PROJECT_PATH is not set; workflow will use fallback: /home/<PA_USERNAME>/<repo-name>"
+          else
+            echo "PA_PROJECT_PATH is configured"
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Trigger PythonAnywhere sync
         env:
           PA_USERNAME: ${{ secrets.PA_USERNAME }}

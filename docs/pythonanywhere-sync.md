@@ -49,3 +49,4 @@ On push to `main` (or manual run), GitHub Actions calls the PythonAnywhere API a
 
 - The API call queues the command in a PythonAnywhere bash console.
 - If you need strict deployment verification, inspect console output on PythonAnywhere after the workflow run.
+- Workflow preflight now fails early with clear errors if `PA_USERNAME` or `PA_API_TOKEN` is missing.
