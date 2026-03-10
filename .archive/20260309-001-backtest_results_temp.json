@@ -1,0 +1,274 @@
+{
+  "generated_at": "2026-03-09T02:31:43.629266+00:00",
+  "backtest_enabled": false,
+  "exchange_gate_enabled": false,
+  "target_exchanges": [
+    "kraken"
+  ],
+  "timeframes": [
+    "1h",
+    "4h",
+    "1d"
+  ],
+  "coins_considered": 1,
+  "coins_eligible": 1,
+  "coins_processed": 1,
+  "coins_failed": 0,
+  "rows_generated": 13,
+  "failures": [],
+  "skipped": [
+    {
+      "symbol": "FOO",
+      "timeframe": "1h",
+      "reason": "no_kraken_ohlcv"
+    },
+    {
+      "symbol": "FOO",
+      "timeframe": "4h",
+      "reason": "no_kraken_ohlcv"
+    }
+  ],
+  "results": [
+    {
+      "indicator": "B&H",
+      "timeframe": "1d",
+      "params": {},
+      "trailing_stop_pct": null,
+      "final_equity": 927.8549625479866,
+      "net_pct": -7.214503745201341,
+      "trades": "-",
+      "win_pct": "-",
+      "symbol": "FOO",
+      "combos_evaluated": 1,
+      "stops_tested": 0,
+      "total_runs": 1,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "RSI",
+      "timeframe": "1d",
+      "params": {
+        "period": 16,
+        "lower": 30,
+        "upper": 70
+      },
+      "trailing_stop_pct": 0.0,
+      "final_equity": 1163.9609905845032,
+      "net_pct": 16.396099058450318,
+      "trades": 1,
+      "win_pct": 100.0,
+      "symbol": "FOO",
+      "combos_evaluated": 100,
+      "stops_tested": 21,
+      "total_runs": 2100,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "Stochastic",
+      "timeframe": "1d",
+      "params": {
+        "k_period": 14,
+        "d_period": 3,
+        "smooth": 3,
+        "oversold": 20,
+        "overbought": 80
+      },
+      "trailing_stop_pct": 0.0,
+      "final_equity": 1197.9488444074368,
+      "net_pct": 19.794884440743683,
+      "trades": 4,
+      "win_pct": 75.0,
+      "symbol": "FOO",
+      "combos_evaluated": 100,
+      "stops_tested": 21,
+      "total_runs": 2100,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "MACD",
+      "timeframe": "1d",
+      "params": {
+        "fast_period": 8,
+        "slow_period": 26,
+        "signal_period": 12
+      },
+      "trailing_stop_pct": 0.0,
+      "final_equity": 1067.0261873792895,
+      "net_pct": 6.702618737928947,
+      "trades": 4,
+      "win_pct": 75.0,
+      "symbol": "FOO",
+      "combos_evaluated": 27,
+      "stops_tested": 21,
+      "total_runs": 567,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "EMA Crossover",
+      "timeframe": "1d",
+      "params": {
+        "short_period": 20,
+        "long_period": 75
+      },
+      "trailing_stop_pct": 5.0,
+      "final_equity": 1014.9061498920479,
+      "net_pct": 1.4906149892047893,
+      "trades": 1,
+      "win_pct": 100.0,
+      "symbol": "FOO",
+      "combos_evaluated": 16,
+      "stops_tested": 21,
+      "total_runs": 336,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "SMA Crossover",
+      "timeframe": "1d",
+      "params": {
+        "short_period": 20,
+        "long_period": 100
+      },
+      "trailing_stop_pct": 4.0,
+      "final_equity": 1030.8586313257354,
+      "net_pct": 3.085863132573536,
+      "trades": 1,
+      "win_pct": 100.0,
+      "symbol": "FOO",
+      "combos_evaluated": 9,
+      "stops_tested": 21,
+      "total_runs": 189,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "Bollinger %B",
+      "timeframe": "1d",
+      "params": {
+        "period": 20,
+        "std_dev": 2.5,
+        "buy_threshold": 0.1,
+        "sell_threshold": 0.9
+      },
+      "trailing_stop_pct": 0.0,
+      "final_equity": 1145.2382444856353,
+      "net_pct": 14.523824448563527,
+      "trades": 4,
+      "win_pct": 100.0,
+      "symbol": "FOO",
+      "combos_evaluated": 81,
+      "stops_tested": 21,
+      "total_runs": 1701,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "CCI",
+      "timeframe": "1d",
+      "params": {
+        "period": 20,
+        "oversold": -150,
+        "overbought": 100
+      },
+      "trailing_stop_pct": 0.0,
+      "final_equity": 1105.718892965284,
+      "net_pct": 10.571889296528411,
+      "trades": 4,
+      "win_pct": 100.0,
+      "symbol": "FOO",
+      "combos_evaluated": 27,
+      "stops_tested": 21,
+      "total_runs": 567,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "Ultimate Oscillator",
+      "timeframe": "1d",
+      "params": {
+        "short_period": 5,
+        "medium_period": 10,
+        "long_period": 20,
+        "oversold": 25,
+        "overbought": 70
+      },
+      "trailing_stop_pct": 0.0,
+      "final_equity": 1104.5330008570972,
+      "net_pct": 10.453300085709726,
+      "trades": 2,
+      "win_pct": 50.0,
+      "symbol": "FOO",
+      "combos_evaluated": 100,
+      "stops_tested": 21,
+      "total_runs": 2100,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "MFI",
+      "timeframe": "1d",
+      "params": {
+        "period": 10,
+        "lower": 25,
+        "upper": 70
+      },
+      "trailing_stop_pct": 6.0,
+      "final_equity": 1096.2256742470588,
+      "net_pct": 9.62256742470588,
+      "trades": 4,
+      "win_pct": 75.0,
+      "symbol": "FOO",
+      "combos_evaluated": 27,
+      "stops_tested": 21,
+      "total_runs": 567,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "ADX",
+      "timeframe": "1d",
+      "params": {
+        "period": 14,
+        "adx_threshold": 15,
+        "di_diff_min": 3
+      },
+      "trailing_stop_pct": 1.0,
+      "final_equity": 1019.7411803728304,
+      "net_pct": 1.9741180372830398,
+      "trades": 6,
+      "win_pct": 66.66666666666666,
+      "symbol": "FOO",
+      "combos_evaluated": 36,
+      "stops_tested": 21,
+      "total_runs": 756,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "Parabolic SAR",
+      "timeframe": "1d",
+      "params": {
+        "accel_step": 0.01,
+        "max_step": 0.1
+      },
+      "trailing_stop_pct": 1.0,
+      "final_equity": 1000.5542193994104,
+      "net_pct": 0.05542193994103854,
+      "trades": 4,
+      "win_pct": 25.0,
+      "symbol": "FOO",
+      "combos_evaluated": 9,
+      "stops_tested": 21,
+      "total_runs": 189,
+      "skipped_combos": 0
+    },
+    {
+      "indicator": "Heikin Ashi",
+      "timeframe": "1d",
+      "params": {},
+      "trailing_stop_pct": 1.0,
+      "final_equity": 864.5312143930855,
+      "net_pct": -13.546878560691447,
+      "trades": 24,
+      "win_pct": 20.833333333333336,
+      "symbol": "FOO",
+      "combos_evaluated": 1,
+      "stops_tested": 21,
+      "total_runs": 21,
+      "skipped_combos": 0
+    }
+  ]
+}

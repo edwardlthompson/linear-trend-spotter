@@ -4,6 +4,7 @@ Price cache management for coin price data
 
 import sqlite3
 import json
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
@@ -21,6 +22,7 @@ class PriceCache:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._local = threading.local()
+        self.logger = logging.getLogger('PriceCache')
         self._init_cache()
 
     def _get_connection(self):
@@ -216,7 +218,7 @@ class PriceCache:
                 VALUES (?, ?, ?, ?, ?)
             ''', (coin_id, json.dumps(prices), uniformity_score, gains_30d, now))
         except Exception as e:
-            pass
+            self.logger.warning(f"Failed to cache price data for {coin_id}: {e}")
 
     def get_exchange_volumes(self, coin_id: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
         """Get cached exchange volumes (24h TTL)."""
@@ -241,8 +243,8 @@ class PriceCache:
                 INSERT OR REPLACE INTO exchange_volume_cache (coin_id, volumes, cache_date)
                 VALUES (?, ?, ?)
             ''', (coin_id, json.dumps(volumes), now))
-        except Exception:
-            pass
+        except Exception as e:
+            self.logger.warning(f"Failed to cache exchange volumes for {coin_id}: {e}")
 
     def cache_ohlcv_rows(
         self,

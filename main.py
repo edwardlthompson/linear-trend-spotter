@@ -2,7 +2,6 @@
 """Linear Trend Spotter - Scans ALL exchange-listed coins"""
 import os
 import sys
-import time
 import json
 import io
 from datetime import datetime
@@ -21,7 +20,6 @@ from api.coingecko_mapper import CoinGeckoMapper
 from api.price_history_fallback import PriceHistoryFallbackClient
 from api.chart_img import ChartIMGClient
 from api.tradingview_mapper import TradingViewMapper
-from processors.gain_filter import GainFilter
 from processors.uniformity_filter import UniformityFilter
 from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
@@ -33,40 +31,6 @@ from utils.logger import app_logger
 
 # Import exchange database
 from exchange_data.exchange_db import ExchangeDatabase
-
-class RateLimiter:
-    """Intelligent rate limiter with exponential backoff"""
-    def __init__(self, calls_per_minute=30):
-        self.calls_per_minute = calls_per_minute
-        self.min_interval = 60.0 / calls_per_minute
-        self.last_call_time = 0
-        self.consecutive_429s = 0
-        self.max_backoff = 300
-        
-    def wait_if_needed(self):
-        now = time.time()
-        time_since_last = now - self.last_call_time
-        if time_since_last < self.min_interval:
-            wait_time = self.min_interval - time_since_last
-        else:
-            wait_time = 0
-        
-        if self.consecutive_429s > 0:
-            backoff_time = min(2 ** self.consecutive_429s, self.max_backoff)
-            wait_time = max(wait_time, backoff_time)
-            app_logger.info(f"      ⏱️  Backoff active: +{backoff_time}s")
-        
-        if wait_time > 0:
-            time.sleep(wait_time)
-        
-        self.last_call_time = time.time()
-    
-    def record_success(self):
-        self.consecutive_429s = 0
-    
-    def record_429(self):
-        self.consecutive_429s += 1
-        app_logger.warning(f"      ⚠️ Rate limit hit ({self.consecutive_429s}x)")
 
 def process_tickers(tickers_data, target_exchanges):
     """Process ticker data to extract exchange volumes"""
@@ -164,8 +128,6 @@ def run_scanner():
                 cg_mapper.update_mappings()
             else:
                 app_logger.info(f"✅ CoinGecko mapper ready with {stats['total_mappings']} mappings")
-            
-            rate_limiter = RateLimiter(calls_per_minute=25)
             
             # Initialize Chart-IMG client
             chart_img = None

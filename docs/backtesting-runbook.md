@@ -68,10 +68,10 @@ Actions:
 - First full integrated scan can be long due to external API calls and per-indicator optimization loops.
 - `B&H` is included for comparison in report rows and does not use trailing stops.
 - Report output is ranked by net % descending.
-- Data source behavior is modular by availability:
-   - Primary source for all symbols: CoinGecko hourly/daily OHLCV.
-   - Intraday fallback when CoinGecko hourly is unavailable: Polygon `1h` OHLCV.
-   - Last-resort fallback: CoinGecko `1d` OHLC (strategy rows for `1d` only).
+- Data source behavior is modular by availability.
+- Primary source for all symbols: CoinGecko hourly/daily OHLCV.
+- Intraday fallback when CoinGecko hourly is unavailable: Polygon `1h` OHLCV.
+- Last-resort fallback: CoinGecko `1d` OHLC (strategy rows for `1d` only).
 
 ## Baseline Snapshot (Controlled)
 

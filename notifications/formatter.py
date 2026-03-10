@@ -105,7 +105,7 @@ class MessageFormatter:
             else:
                 caption += f"{exchange_emoji} {exchange.title()}: {volume}\n"
 
-        caption += "\n🧪 Backtest ranked strategies are attached as a separate image."
+        caption += "\n🧪 Backtest ranked strategies are included in the combined chart image."
         
         return caption
     
