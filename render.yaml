@@ -1,0 +1,35 @@
+services:
+  - type: worker
+    name: linear-trend-spotter-worker
+    runtime: python
+    plan: starter
+    autoDeployTrigger: commit
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash scripts/run_render_worker.sh
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: DATA_DIR
+        value: /var/data
+      - key: SCAN_INTERVAL_SECONDS
+        value: "3600"
+      - key: CMC_API_KEY
+        sync: false
+      - key: COINCAP_API_KEY
+        sync: false
+      - key: POLYGON_API_KEY
+        sync: false
+      - key: COINAPI_API_KEY
+        sync: false
+      - key: COINGECKO_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: CHART_IMG_API_KEY
+        sync: false
+    disk:
+      name: app-data
+      mountPath: /var/data
+      sizeGB: 10

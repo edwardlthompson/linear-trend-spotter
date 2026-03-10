@@ -12,8 +12,12 @@ class Settings:
     """Centralized settings management"""
     
     def __init__(self, config_path: Optional[str] = None):
-        self.BASE_DIR = Path(__file__).parent.parent
-        self.config_path = Path(config_path) if config_path else self.BASE_DIR / 'config.json'
+        self.CODE_DIR = Path(__file__).parent.parent
+        data_dir_raw = os.getenv('DATA_DIR', '').strip()
+        self.DATA_DIR = Path(data_dir_raw).expanduser() if data_dir_raw else self.CODE_DIR
+        self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self.BASE_DIR = self.CODE_DIR
+        self.config_path = Path(config_path) if config_path else self.CODE_DIR / 'config.json'
         
         # Initialize with defaults
         self._config = self._get_default_config()
@@ -339,12 +343,12 @@ class Settings:
     @property
     def backtest_checkpoint_file(self) -> Path:
         raw_path = str(self._config.get('BACKTEST_CHECKPOINT_FILE', 'backtest_checkpoint.json')).strip()
-        return self.BASE_DIR / raw_path
+        return self.DATA_DIR / raw_path
 
     @property
     def backtest_telemetry_file(self) -> Path:
         raw_path = str(self._config.get('BACKTEST_TELEMETRY_FILE', 'backtest_telemetry.jsonl')).strip()
-        return self.BASE_DIR / raw_path
+        return self.DATA_DIR / raw_path
 
     @property
     def backtest_failure_samples_limit(self) -> int:
@@ -361,7 +365,7 @@ class Settings:
     @property
     def artifact_archive_dir(self) -> Path:
         raw_path = str(self._config.get('ARTIFACT_ARCHIVE_DIR', '.archive/auto')).strip()
-        return self.BASE_DIR / raw_path
+        return self.DATA_DIR / raw_path
 
     @property
     def notification_include_quality_panel(self) -> bool:
@@ -370,32 +374,32 @@ class Settings:
     @property
     def exit_analytics_file(self) -> Path:
         raw_path = str(self._config.get('EXIT_ANALYTICS_FILE', 'exit_reason_analytics.json')).strip()
-        return self.BASE_DIR / raw_path
+        return self.DATA_DIR / raw_path
 
     @property
     def base_dir(self) -> Path:
-        return self.BASE_DIR
+        return self.DATA_DIR
     
     @property
     def db_paths(self) -> Dict[str, Path]:
         return {
-            'scanner': self.BASE_DIR / 'scanner.db',
-            'exchanges': self.BASE_DIR / 'exchanges.db',
-            'mappings': self.BASE_DIR / 'mappings.db',
-            'tv_mappings': self.BASE_DIR / 'tv_mappings.db'
+            'scanner': self.DATA_DIR / 'scanner.db',
+            'exchanges': self.DATA_DIR / 'exchanges.db',
+            'mappings': self.DATA_DIR / 'mappings.db',
+            'tv_mappings': self.DATA_DIR / 'tv_mappings.db'
         }
     
     @property
     def lock_file(self) -> Path:
-        return self.BASE_DIR / 'scan.lock'
+        return self.DATA_DIR / 'scan.lock'
     
     @property
     def metrics_file(self) -> Path:
-        return self.BASE_DIR / 'metrics.json'
+        return self.DATA_DIR / 'metrics.json'
     
     @property
     def log_file(self) -> Path:
-        return self.BASE_DIR / 'trend_scanner.log'
+        return self.DATA_DIR / 'trend_scanner.log'
     
     @property
     def retry_settings(self) -> dict:

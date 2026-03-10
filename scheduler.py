@@ -28,7 +28,7 @@ class ScanLock:
 
     def __init__(self, lock_file=None):
         if lock_file is None:
-            self.lock_file = Path(settings.BASE_DIR) / 'scan.lock'
+            self.lock_file = settings.lock_file
         else:
             self.lock_file = Path(lock_file)
         self.fp = None
@@ -75,7 +75,7 @@ class ScanScheduler:
     def __init__(self):
         self.logger = setup_logger('scheduler')
         self.lock = ScanLock()
-        self.stats_file = Path(settings.BASE_DIR) / 'scan_stats.json'
+        self.stats_file = settings.base_dir / 'scan_stats.json'
 
     def should_run(self):
         """
