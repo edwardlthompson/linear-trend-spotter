@@ -32,6 +32,7 @@ from utils.logger import app_logger
 
 # Import exchange database
 from exchange_data.exchange_db import ExchangeDatabase
+from exchange_data.exchange_fetcher import ExchangeFetcher
 
 def process_tickers(tickers_data, target_exchanges):
     """Process ticker data to extract exchange volumes"""
@@ -272,7 +273,25 @@ def run_scanner():
         
         # Fallback if no exchange data (shouldn't happen with proper setup)
         if not all_symbols:
-            app_logger.warning("   No exchange data found - using default list")
+            app_logger.warning("   No exchange data found. Attempting one-time exchange listings refresh...")
+            try:
+                ExchangeFetcher(exchange_db).update_all_exchanges()
+
+                import sqlite3
+                conn = sqlite3.connect(exchange_db_path)
+                cursor = conn.cursor()
+                cursor.execute('SELECT DISTINCT symbol FROM exchange_listings')
+                for row in cursor.fetchall():
+                    all_symbols.add(row[0])
+                conn.close()
+
+                if all_symbols:
+                    app_logger.info(f"   ✓ Exchange listings refreshed: {len(all_symbols)} symbols")
+            except Exception as refresh_error:
+                app_logger.warning(f"   Exchange listings refresh failed: {refresh_error}")
+
+        if not all_symbols:
+            app_logger.warning("   No exchange data found after refresh - using default list")
             all_symbols = {'BTC', 'ETH', 'SOL', 'XRP'}
         
         all_symbols_set = set(all_symbols)
