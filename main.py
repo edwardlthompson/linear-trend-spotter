@@ -121,6 +121,7 @@ def run_scanner():
     app_logger.info(f"Started: {datetime.now()}")
     app_logger.info(f"Minimum 24h Volume: ${settings.min_volume:,}")
     app_logger.info(f"Uniformity Minimum Score: {settings.uniformity_min_score}")
+    app_logger.info("Uniformity Mode: OHLCV-only")
     app_logger.info(f"Scanning ALL coins from: {', '.join(settings.target_exchanges)}")
     
     metrics.reset()
