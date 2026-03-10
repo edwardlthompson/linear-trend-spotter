@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -56,6 +57,37 @@ def _telemetry_event(event_type: str, **fields: Any) -> dict[str, Any]:
     }
     payload.update(fields)
     return payload
+
+
+def _fmt_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _log_progress(
+    total: int,
+    completed: int,
+    failed: int,
+    symbol: str,
+    status: str,
+    rows: int,
+    skipped: int,
+    started_at: float,
+) -> None:
+    elapsed = max(0.0, time.monotonic() - started_at)
+    rate = completed / elapsed if elapsed > 0 else 0.0
+    remaining = max(0, total - completed)
+    eta_seconds = (remaining / rate) if rate > 0 else 0.0
+    print(
+        "[BACKTEST] "
+        f"{completed}/{total} | failed={failed} | {status} {symbol} "
+        f"| rows={rows} skipped={skipped} "
+        f"| elapsed={_fmt_duration(elapsed)} eta={_fmt_duration(eta_seconds)} "
+        f"rate={rate:.2f} coin/s",
+        flush=True,
+    )
 
 
 def _load_checkpoint(path: Path) -> dict[str, Any] | None:
@@ -376,6 +408,24 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
 
     worker_count = max(1, min(settings.backtest_parallel_workers, len(pending_coins)))
 
+    expected_runs_per_coin = (
+        len(timeframes) * (1 + (len(SIGNAL_REGISTRY) * int(settings.backtest_max_param_combos) * 21))
+    )
+    print(
+        "[BACKTEST] "
+        f"starting run | eligible={len(eligible_symbols)} pending={len(pending_coins)} "
+        f"workers={worker_count} timeframes={timeframes} indicators={len(SIGNAL_REGISTRY)} "
+        f"max_param_combos={int(settings.backtest_max_param_combos)} "
+        f"est_max_runs_per_coin={expected_runs_per_coin}",
+        flush=True,
+    )
+    if resumed_symbols:
+        print(
+            "[BACKTEST] "
+            f"resume detected | resumed_symbols={len(resumed_symbols)}",
+            flush=True,
+        )
+
     if not pending_coins:
         if summary["coins_processed"] == 0 and summary["coins_failed"] == 0:
             summary["coins_processed"] = len(eligible_symbols) - len(summary["failures"])
@@ -396,8 +446,12 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
         return summary
 
     if worker_count == 1:
+        progress_started_at = time.monotonic()
+        total_to_process = len(pending_coins)
+        completed_count = 0
         for coin in pending_coins:
             symbol = coin["symbol"]
+            print(f"[BACKTEST] processing {symbol} (single-worker mode)", flush=True)
             try:
                 result = _optimize_coin_task(
                     symbol,
@@ -417,6 +471,17 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     for item in result.get("skipped", [])
                 )
                 completed_symbols.append(symbol)
+                completed_count += 1
+                _log_progress(
+                    total=total_to_process,
+                    completed=completed_count,
+                    failed=summary["coins_failed"],
+                    symbol=symbol,
+                    status="ok",
+                    rows=len(result.get("rows", [])),
+                    skipped=len(result.get("skipped", [])),
+                    started_at=progress_started_at,
+                )
                 _append_jsonl(
                     telemetry_path,
                     _telemetry_event(
@@ -446,6 +511,17 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                 if len(summary["failures"]) < max_failure_samples:
                     summary["failures"].append({"symbol": symbol, "reason": reason, "class_name": class_name})
                 completed_symbols.append(symbol)
+                completed_count += 1
+                _log_progress(
+                    total=total_to_process,
+                    completed=completed_count,
+                    failed=summary["coins_failed"],
+                    symbol=symbol,
+                    status="failed",
+                    rows=0,
+                    skipped=0,
+                    started_at=progress_started_at,
+                )
                 _append_jsonl(
                     telemetry_path,
                     _telemetry_event(
@@ -467,6 +543,9 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     summary["failures"],
                 )
     else:
+        progress_started_at = time.monotonic()
+        total_to_process = len(pending_coins)
+        completed_count = 0
         with ProcessPoolExecutor(max_workers=worker_count) as executor:
             future_map = {
                 executor.submit(
@@ -482,6 +561,11 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                 ): coin["symbol"]
                 for coin in pending_coins
             }
+            print(
+                "[BACKTEST] "
+                f"submitted {len(future_map)} coins to worker pool",
+                flush=True,
+            )
 
             for future in as_completed(future_map):
                 symbol = future_map[future]
@@ -495,6 +579,17 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                         for item in result.get("skipped", [])
                     )
                     completed_symbols.append(symbol)
+                    completed_count += 1
+                    _log_progress(
+                        total=total_to_process,
+                        completed=completed_count,
+                        failed=summary["coins_failed"],
+                        symbol=symbol,
+                        status="ok",
+                        rows=len(result.get("rows", [])),
+                        skipped=len(result.get("skipped", [])),
+                        started_at=progress_started_at,
+                    )
                     _append_jsonl(
                         telemetry_path,
                         _telemetry_event(
@@ -524,6 +619,17 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     if len(summary["failures"]) < max_failure_samples:
                         summary["failures"].append({"symbol": symbol, "reason": reason, "class_name": class_name})
                     completed_symbols.append(symbol)
+                    completed_count += 1
+                    _log_progress(
+                        total=total_to_process,
+                        completed=completed_count,
+                        failed=summary["coins_failed"],
+                        symbol=symbol,
+                        status="failed",
+                        rows=0,
+                        skipped=0,
+                        started_at=progress_started_at,
+                    )
                     _append_jsonl(
                         telemetry_path,
                         _telemetry_event(
@@ -549,6 +655,12 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
     summary["failure_breakdown"] = dict(failure_counter)
 
     _write_json(output_path, summary)
+    print(
+        "[BACKTEST] "
+        f"complete | processed={summary['coins_processed']} failed={summary['coins_failed']} "
+        f"rows={summary['rows_generated']}",
+        flush=True,
+    )
     _append_jsonl(
         telemetry_path,
         _telemetry_event(
