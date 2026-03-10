@@ -25,6 +25,9 @@ class Settings:
                 self._config.update(loaded_config)
         except Exception as e:
             print(f"⚠️ Warning: Could not load config file: {e}")
+
+        # Fail-fast safety validation and normalization
+        self._config = self._validate_and_normalize(self._config)
     
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration values per spec §9.3"""
@@ -47,17 +50,151 @@ class Settings:
             'CACHE_PRICE_HOURS': 6,
             'CIRCUIT_FAILURE_THRESHOLD': 5,
             'CIRCUIT_RECOVERY_TIMEOUT': 60,
-            'BACKTEST_ENABLED': False,
+            'BACKTEST_ENABLED': True,
             'BACKTEST_REQUIRE_TARGET_EXCHANGE': False,
             'BACKTEST_EXCHANGES': ['kraken'],
             'BACKTEST_STARTING_CAPITAL': 1000,
             'BACKTEST_FEE_BPS_ROUND_TRIP': 52,
             'BACKTEST_MAX_PARAM_COMBOS': 100,
-            'BACKTEST_PARALLEL_WORKERS': 4,
+            'BACKTEST_PARALLEL_WORKERS': 16,
             'BACKTEST_MAX_COINS_PER_RUN': 0,
             'BACKTEST_TIMEFRAMES': ['1h', '4h', '1d'],
+            'BACKTEST_RESUME_ENABLED': True,
+            'BACKTEST_CHECKPOINT_FILE': 'backtest_checkpoint.json',
+            'BACKTEST_TELEMETRY_FILE': 'backtest_telemetry.jsonl',
+            'BACKTEST_FAILURE_SAMPLES_LIMIT': 200,
+            'ARTIFACT_HYGIENE_ENABLED': True,
+            'ARTIFACT_RETENTION_DAYS': 7,
+            'ARTIFACT_ARCHIVE_DIR': '.archive/auto',
+            'NOTIFICATION_INCLUDE_QUALITY_PANEL': True,
+            'EXIT_ANALYTICS_FILE': 'exit_reason_analytics.json',
             'USE_14D_FILTER': False
         }
+
+    def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate config shape/ranges and normalize values.
+
+        Raises ValueError with actionable diagnostics when invalid.
+        """
+        normalized = dict(candidate)
+        defaults = self._get_default_config()
+
+        unknown = sorted(set(normalized.keys()) - set(defaults.keys()))
+        if unknown:
+            print(f"⚠️ Warning: Unknown config keys ignored by app logic: {', '.join(unknown)}")
+
+        errors: list[str] = []
+
+        def require_bool(key: str) -> None:
+            if not isinstance(normalized.get(key), bool):
+                errors.append(f"{key} must be boolean")
+
+        def require_int(key: str, min_value: int | None = None, max_value: int | None = None) -> None:
+            value = normalized.get(key)
+            if not isinstance(value, int):
+                errors.append(f"{key} must be integer")
+                return
+            if min_value is not None and value < min_value:
+                errors.append(f"{key} must be >= {min_value}")
+            if max_value is not None and value > max_value:
+                errors.append(f"{key} must be <= {max_value}")
+
+        def require_number(key: str, min_value: float | None = None, max_value: float | None = None) -> None:
+            value = normalized.get(key)
+            if not isinstance(value, (int, float)):
+                errors.append(f"{key} must be numeric")
+                return
+            as_float = float(value)
+            if min_value is not None and as_float < min_value:
+                errors.append(f"{key} must be >= {min_value}")
+            if max_value is not None and as_float > max_value:
+                errors.append(f"{key} must be <= {max_value}")
+
+        require_int('MIN_VOLUME_M', min_value=0)
+        require_int('UNIFORMITY_MIN_SCORE', min_value=0, max_value=100)
+        require_int('UNIFORMITY_PERIOD', min_value=7, max_value=120)
+        require_int('TOP_COINS_LIMIT', min_value=1, max_value=10000)
+
+        for bool_key in [
+            'ENTRY_NOTIFICATIONS',
+            'EXIT_NOTIFICATIONS',
+            'NO_CHANGE_NOTIFICATIONS',
+            'BACKTEST_ENABLED',
+            'BACKTEST_REQUIRE_TARGET_EXCHANGE',
+            'BACKTEST_RESUME_ENABLED',
+            'ARTIFACT_HYGIENE_ENABLED',
+            'NOTIFICATION_INCLUDE_QUALITY_PANEL',
+            'USE_14D_FILTER',
+        ]:
+            require_bool(bool_key)
+
+        for int_key, lower, upper in [
+            ('RETRY_MAX_ATTEMPTS', 1, 10),
+            ('RETRY_DELAY', 1, 60),
+            ('RETRY_BACKOFF', 1, 10),
+            ('COINGECKO_CALLS_PER_MINUTE', 1, 120),
+            ('CMC_CALLS_PER_MINUTE', 1, 1000),
+            ('CACHE_GECKO_ID_DAYS', 1, 365),
+            ('CACHE_EXCHANGE_HOURS', 1, 168),
+            ('CACHE_PRICE_HOURS', 1, 72),
+            ('CIRCUIT_FAILURE_THRESHOLD', 1, 100),
+            ('CIRCUIT_RECOVERY_TIMEOUT', 1, 3600),
+            ('BACKTEST_MAX_PARAM_COMBOS', 1, 5000),
+            ('BACKTEST_PARALLEL_WORKERS', 1, 32),
+            ('BACKTEST_MAX_COINS_PER_RUN', 0, 10000),
+            ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
+            ('ARTIFACT_RETENTION_DAYS', 1, 3650),
+        ]:
+            require_int(int_key, min_value=lower, max_value=upper)
+
+        require_number('BACKTEST_STARTING_CAPITAL', min_value=1.0)
+        require_number('BACKTEST_FEE_BPS_ROUND_TRIP', min_value=0.0, max_value=1000.0)
+
+        exchanges = normalized.get('TARGET_EXCHANGES')
+        if not isinstance(exchanges, list) or not exchanges:
+            errors.append('TARGET_EXCHANGES must be a non-empty list')
+        elif any(not isinstance(item, str) or not item.strip() for item in exchanges):
+            errors.append('TARGET_EXCHANGES must contain non-empty strings only')
+        else:
+            normalized['TARGET_EXCHANGES'] = [item.strip().lower() for item in exchanges]
+
+        backtest_exchanges = normalized.get('BACKTEST_EXCHANGES')
+        if not isinstance(backtest_exchanges, list):
+            errors.append('BACKTEST_EXCHANGES must be a list')
+        elif any(not isinstance(item, str) or not item.strip() for item in backtest_exchanges):
+            errors.append('BACKTEST_EXCHANGES must contain non-empty strings only')
+        else:
+            normalized['BACKTEST_EXCHANGES'] = [item.strip().lower() for item in backtest_exchanges]
+
+        allowed_timeframes = {'1h', '4h', '1d'}
+        timeframes = normalized.get('BACKTEST_TIMEFRAMES')
+        if not isinstance(timeframes, list) or not timeframes:
+            errors.append('BACKTEST_TIMEFRAMES must be a non-empty list')
+        else:
+            normalized_tfs = [str(item).strip().lower() for item in timeframes if str(item).strip()]
+            if not normalized_tfs:
+                errors.append('BACKTEST_TIMEFRAMES cannot be empty')
+            elif any(item not in allowed_timeframes for item in normalized_tfs):
+                errors.append('BACKTEST_TIMEFRAMES supports only: 1h, 4h, 1d')
+            else:
+                normalized['BACKTEST_TIMEFRAMES'] = normalized_tfs
+
+        for path_key in ['BACKTEST_CHECKPOINT_FILE', 'BACKTEST_TELEMETRY_FILE', 'ARTIFACT_ARCHIVE_DIR', 'EXIT_ANALYTICS_FILE']:
+            value = normalized.get(path_key)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"{path_key} must be a non-empty string path")
+
+        # Architectural policy: integrated backtesting is mandatory for this app.
+        # Keep key for compatibility, but enforce enabled behavior consistently.
+        if normalized.get('BACKTEST_ENABLED') is False:
+            print("⚠️ Warning: BACKTEST_ENABLED=false is ignored; backtesting is always enabled by design.")
+            normalized['BACKTEST_ENABLED'] = True
+
+        if errors:
+            joined = '\n- '.join(errors)
+            raise ValueError(f"Invalid configuration in {self.config_path}:\n- {joined}")
+
+        return normalized
     
     def _load_config(self) -> Dict[str, Any]:
         """Load non-sensitive settings from config.json"""
@@ -157,7 +294,8 @@ class Settings:
 
     @property
     def backtest_enabled(self) -> bool:
-        return self._config.get('BACKTEST_ENABLED', False)
+        # Always-on policy for this application.
+        return True
 
     @property
     def backtest_require_target_exchange(self) -> bool:
@@ -181,7 +319,7 @@ class Settings:
 
     @property
     def backtest_parallel_workers(self) -> int:
-        return self._config.get('BACKTEST_PARALLEL_WORKERS', 4)
+        return self._config.get('BACKTEST_PARALLEL_WORKERS', 16)
 
     @property
     def backtest_max_coins_per_run(self) -> int:
@@ -193,6 +331,46 @@ class Settings:
         if isinstance(values, list) and values:
             return [str(item).lower() for item in values]
         return ['1h', '4h', '1d']
+
+    @property
+    def backtest_resume_enabled(self) -> bool:
+        return bool(self._config.get('BACKTEST_RESUME_ENABLED', True))
+
+    @property
+    def backtest_checkpoint_file(self) -> Path:
+        raw_path = str(self._config.get('BACKTEST_CHECKPOINT_FILE', 'backtest_checkpoint.json')).strip()
+        return self.BASE_DIR / raw_path
+
+    @property
+    def backtest_telemetry_file(self) -> Path:
+        raw_path = str(self._config.get('BACKTEST_TELEMETRY_FILE', 'backtest_telemetry.jsonl')).strip()
+        return self.BASE_DIR / raw_path
+
+    @property
+    def backtest_failure_samples_limit(self) -> int:
+        return int(self._config.get('BACKTEST_FAILURE_SAMPLES_LIMIT', 200))
+
+    @property
+    def artifact_hygiene_enabled(self) -> bool:
+        return bool(self._config.get('ARTIFACT_HYGIENE_ENABLED', True))
+
+    @property
+    def artifact_retention_days(self) -> int:
+        return int(self._config.get('ARTIFACT_RETENTION_DAYS', 7))
+
+    @property
+    def artifact_archive_dir(self) -> Path:
+        raw_path = str(self._config.get('ARTIFACT_ARCHIVE_DIR', '.archive/auto')).strip()
+        return self.BASE_DIR / raw_path
+
+    @property
+    def notification_include_quality_panel(self) -> bool:
+        return bool(self._config.get('NOTIFICATION_INCLUDE_QUALITY_PANEL', True))
+
+    @property
+    def exit_analytics_file(self) -> Path:
+        raw_path = str(self._config.get('EXIT_ANALYTICS_FILE', 'exit_reason_analytics.json')).strip()
+        return self.BASE_DIR / raw_path
 
     @property
     def base_dir(self) -> Path:

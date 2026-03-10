@@ -36,18 +36,24 @@ def run_backtest(
         else pd.Series(False, index=frame.index)
     )
 
-    cash = float(config.starting_capital)
-    position_qty = 0.0
-    entry_price = 0.0
-    entry_fee = 0.0
-    highest_price = 0.0
-    entry_time = None
+    first_timestamp = frame.index[0]
+    first_close = float(frame.iloc[0]["close"])
+
+    entry_notional = float(config.starting_capital)
+    entry_fee = entry_notional * config.side_fee_rate
+    net_to_asset = entry_notional - entry_fee
+
+    cash = 0.0
+    position_qty = (net_to_asset / first_close) if first_close > 0 and net_to_asset > 0 else 0.0
+    entry_price = first_close if position_qty > 0 else 0.0
+    highest_price = first_close if position_qty > 0 else 0.0
+    entry_time = first_timestamp if position_qty > 0 else None
 
     trades: list[Trade] = []
 
-    previous_buy_signal = False
+    previous_buy_signal = bool(aligned_buy.iloc[0]) if len(aligned_buy) > 0 else False
 
-    for timestamp, row in frame.iterrows():
+    for index_position, (timestamp, row) in enumerate(frame.iterrows()):
         close_price = float(row["close"])
         high_price = float(row["high"])
         low_price = float(row["low"])
@@ -56,6 +62,11 @@ def run_backtest(
         sell_signal = bool(aligned_sell.loc[timestamp])
 
         new_buy_edge = buy_signal and not previous_buy_signal
+
+        # Initial position is entered at first bar close; do not evaluate exits on same bar.
+        if index_position == 0 and position_qty > 0:
+            previous_buy_signal = buy_signal
+            continue
 
         if position_qty > 0:
             if high_price > highest_price:

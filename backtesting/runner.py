@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,79 @@ from .engine import compute_buy_and_hold
 from .models import BacktestConfig
 from .optimizer import optimize_indicator
 from .signals import SIGNAL_REGISTRY
+
+
+def _iso_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _classify_failure(reason: str) -> str:
+    normalized = str(reason or "unknown").lower()
+    if normalized.startswith("optimize_error"):
+        return "optimizer_error"
+    if normalized in {"load_failed", "insufficient_history", "no_market_data"}:
+        return "data_unavailable"
+    if "pickle" in normalized or "brokenprocesspool" in normalized:
+        return "worker_pool_error"
+    if "timeout" in normalized:
+        return "timeout"
+    if "mapping" in normalized:
+        return "mapping_error"
+    return "other"
+
+
+def _telemetry_event(event_type: str, **fields: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "timestamp": _iso_now(),
+        "event": event_type,
+    }
+    payload.update(fields)
+    return payload
+
+
+def _load_checkpoint(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _save_checkpoint(
+    checkpoint_path: Path,
+    eligible_symbols: list[str],
+    completed_symbols: list[str],
+    coins_processed: int,
+    coins_failed: int,
+    failure_breakdown: dict[str, int],
+    results: list[dict[str, Any]],
+    skipped: list[dict[str, Any]],
+    failures: list[dict[str, Any]],
+) -> None:
+    payload = {
+        "updated_at": _iso_now(),
+        "eligible_symbols": eligible_symbols,
+        "completed_symbols": sorted(set(completed_symbols)),
+        "coins_processed": int(coins_processed),
+        "coins_failed": int(coins_failed),
+        "failure_breakdown": dict(failure_breakdown),
+        "results": results,
+        "skipped": skipped,
+        "failures": failures,
+    }
+    _write_json(checkpoint_path, payload)
 
 
 def _optimize_coin_task(
@@ -187,32 +261,142 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
     if output_path is None:
         output_path = settings.base_dir / "backtest_results.json"
 
+    checkpoint_path = settings.backtest_checkpoint_file
+    telemetry_path = settings.backtest_telemetry_file
+
     timeframes = settings.backtest_timeframes
+    max_failure_samples = int(settings.backtest_failure_samples_limit)
 
     summary: dict[str, Any] = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": _iso_now(),
         "backtest_enabled": settings.backtest_enabled,
         "exchange_gate_enabled": exchange_gate_enabled,
         "target_exchanges": sorted(target_exchanges),
         "timeframes": timeframes,
+        "resume_enabled": settings.backtest_resume_enabled,
+        "checkpoint_file": str(checkpoint_path),
+        "telemetry_file": str(telemetry_path),
         "coins_considered": len(final_results),
         "coins_eligible": len(eligible_coins),
         "coins_processed": 0,
         "coins_failed": 0,
         "rows_generated": 0,
+        "resumed_from_checkpoint": False,
+        "resumed_completed_symbols": 0,
+        "failure_breakdown": {},
         "failures": [],
         "skipped": preflight_skipped,
         "results": [],
     }
 
+    _append_jsonl(
+        telemetry_path,
+        _telemetry_event(
+            "run_start",
+            eligible=len(eligible_coins),
+            considered=len(final_results),
+            worker_cap=settings.backtest_parallel_workers,
+            timeframes=timeframes,
+        ),
+    )
+
+    if preflight_skipped:
+        for row in preflight_skipped:
+            _append_jsonl(
+                telemetry_path,
+                _telemetry_event(
+                    "coin_preflight_skipped",
+                    symbol=row.get("symbol"),
+                    reason=row.get("reason"),
+                    class_name=_classify_failure(str(row.get("reason", ""))),
+                ),
+            )
+
     if not eligible_coins:
-        output_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        _write_json(output_path, summary)
+        _append_jsonl(telemetry_path, _telemetry_event("run_complete", **{
+            "processed": 0,
+            "failed": 0,
+            "rows": 0,
+        }))
         return summary
 
-    worker_count = max(1, min(settings.backtest_parallel_workers, len(eligible_coins)))
+    eligible_symbols = [coin["symbol"] for coin in eligible_coins]
+    resumed_symbols: set[str] = set()
+    completed_symbols: list[str] = []
+    failure_counter: Counter[str] = Counter()
+
+    if settings.backtest_resume_enabled:
+        checkpoint = _load_checkpoint(checkpoint_path)
+        if checkpoint:
+            prior_eligible = {
+                str(symbol).upper()
+                for symbol in checkpoint.get("eligible_symbols", [])
+            }
+            if prior_eligible == set(eligible_symbols):
+                resumed_symbols = {
+                    str(symbol).upper()
+                    for symbol in checkpoint.get("completed_symbols", [])
+                }
+                summary["coins_processed"] = int(checkpoint.get("coins_processed", 0))
+                summary["coins_failed"] = int(checkpoint.get("coins_failed", 0))
+                summary["results"] = list(checkpoint.get("results", []))
+                summary["skipped"].extend(list(checkpoint.get("skipped", [])))
+                summary["failures"].extend(list(checkpoint.get("failures", [])))
+                existing_breakdown = checkpoint.get("failure_breakdown", {})
+                if isinstance(existing_breakdown, dict):
+                    for key, count in existing_breakdown.items():
+                        failure_counter[str(key)] += int(count)
+                if not failure_counter:
+                    for item in summary["failures"]:
+                        failure_counter[_classify_failure(str(item.get("reason", "")))] += 1
+                summary["resumed_from_checkpoint"] = True
+                summary["resumed_completed_symbols"] = len(resumed_symbols)
+                _append_jsonl(
+                    telemetry_path,
+                    _telemetry_event(
+                        "resume_loaded",
+                        resumed=len(resumed_symbols),
+                        prior_rows=len(summary["results"]),
+                    ),
+                )
+            else:
+                _append_jsonl(
+                    telemetry_path,
+                    _telemetry_event(
+                        "resume_discarded",
+                        reason="eligible_set_changed",
+                        previous_eligible=len(prior_eligible),
+                        current_eligible=len(eligible_symbols),
+                    ),
+                )
+
+    pending_coins = [coin for coin in eligible_coins if coin["symbol"] not in resumed_symbols]
+    completed_symbols.extend(sorted(resumed_symbols))
+
+    worker_count = max(1, min(settings.backtest_parallel_workers, len(pending_coins)))
+
+    if not pending_coins:
+        if summary["coins_processed"] == 0 and summary["coins_failed"] == 0:
+            summary["coins_processed"] = len(eligible_symbols) - len(summary["failures"])
+            summary["coins_failed"] = len(summary["failures"])
+        summary["rows_generated"] = len(summary["results"])
+        summary["failure_breakdown"] = dict(failure_counter)
+        _write_json(output_path, summary)
+        _append_jsonl(
+            telemetry_path,
+            _telemetry_event(
+                "run_complete",
+                processed=summary["coins_processed"],
+                failed=summary["coins_failed"],
+                rows=summary["rows_generated"],
+                resumed_only=True,
+            ),
+        )
+        return summary
 
     if worker_count == 1:
-        for coin in eligible_coins:
+        for coin in pending_coins:
             symbol = coin["symbol"]
             try:
                 result = _optimize_coin_task(
@@ -228,9 +412,60 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                 summary["coins_processed"] += 1
                 summary["results"].extend(result.get("rows", []))
                 summary["skipped"].extend(result.get("skipped", []))
+                skipped_reason_counts = Counter(
+                    str(item.get("reason", "unknown"))
+                    for item in result.get("skipped", [])
+                )
+                completed_symbols.append(symbol)
+                _append_jsonl(
+                    telemetry_path,
+                    _telemetry_event(
+                        "coin_processed",
+                        symbol=symbol,
+                        rows=len(result.get("rows", [])),
+                        skipped=len(result.get("skipped", [])),
+                        skipped_reason_counts=dict(skipped_reason_counts),
+                    ),
+                )
+                _save_checkpoint(
+                    checkpoint_path,
+                    eligible_symbols,
+                    completed_symbols,
+                    summary["coins_processed"],
+                    summary["coins_failed"],
+                    dict(failure_counter),
+                    summary["results"],
+                    summary["skipped"],
+                    summary["failures"],
+                )
             except Exception as exc:
                 summary["coins_failed"] += 1
-                summary["failures"].append({"symbol": symbol, "reason": str(exc)})
+                reason = str(exc)
+                class_name = _classify_failure(reason)
+                failure_counter[class_name] += 1
+                if len(summary["failures"]) < max_failure_samples:
+                    summary["failures"].append({"symbol": symbol, "reason": reason, "class_name": class_name})
+                completed_symbols.append(symbol)
+                _append_jsonl(
+                    telemetry_path,
+                    _telemetry_event(
+                        "coin_failed",
+                        symbol=symbol,
+                        reason=reason,
+                        class_name=class_name,
+                    ),
+                )
+                _save_checkpoint(
+                    checkpoint_path,
+                    eligible_symbols,
+                    completed_symbols,
+                    summary["coins_processed"],
+                    summary["coins_failed"],
+                    dict(failure_counter),
+                    summary["results"],
+                    summary["skipped"],
+                    summary["failures"],
+                )
     else:
         with ProcessPoolExecutor(max_workers=worker_count) as executor:
             future_map = {
@@ -245,7 +480,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     float(settings.backtest_starting_capital),
                     float(settings.backtest_fee_bps_round_trip),
                 ): coin["symbol"]
-                for coin in eligible_coins
+                for coin in pending_coins
             }
 
             for future in as_completed(future_map):
@@ -255,11 +490,73 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     summary["coins_processed"] += 1
                     summary["results"].extend(result.get("rows", []))
                     summary["skipped"].extend(result.get("skipped", []))
+                    skipped_reason_counts = Counter(
+                        str(item.get("reason", "unknown"))
+                        for item in result.get("skipped", [])
+                    )
+                    completed_symbols.append(symbol)
+                    _append_jsonl(
+                        telemetry_path,
+                        _telemetry_event(
+                            "coin_processed",
+                            symbol=symbol,
+                            rows=len(result.get("rows", [])),
+                            skipped=len(result.get("skipped", [])),
+                            skipped_reason_counts=dict(skipped_reason_counts),
+                        ),
+                    )
+                    _save_checkpoint(
+                        checkpoint_path,
+                        eligible_symbols,
+                        completed_symbols,
+                        summary["coins_processed"],
+                        summary["coins_failed"],
+                        dict(failure_counter),
+                        summary["results"],
+                        summary["skipped"],
+                        summary["failures"],
+                    )
                 except Exception as exc:
                     summary["coins_failed"] += 1
-                    summary["failures"].append({"symbol": symbol, "reason": str(exc)})
+                    reason = str(exc)
+                    class_name = _classify_failure(reason)
+                    failure_counter[class_name] += 1
+                    if len(summary["failures"]) < max_failure_samples:
+                        summary["failures"].append({"symbol": symbol, "reason": reason, "class_name": class_name})
+                    completed_symbols.append(symbol)
+                    _append_jsonl(
+                        telemetry_path,
+                        _telemetry_event(
+                            "coin_failed",
+                            symbol=symbol,
+                            reason=reason,
+                            class_name=class_name,
+                        ),
+                    )
+                    _save_checkpoint(
+                        checkpoint_path,
+                        eligible_symbols,
+                        completed_symbols,
+                        summary["coins_processed"],
+                        summary["coins_failed"],
+                        dict(failure_counter),
+                        summary["results"],
+                        summary["skipped"],
+                        summary["failures"],
+                    )
 
     summary["rows_generated"] = len(summary["results"])
+    summary["failure_breakdown"] = dict(failure_counter)
 
-    output_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    _write_json(output_path, summary)
+    _append_jsonl(
+        telemetry_path,
+        _telemetry_event(
+            "run_complete",
+            processed=summary["coins_processed"],
+            failed=summary["coins_failed"],
+            rows=summary["rows_generated"],
+            resumed=summary["resumed_completed_symbols"],
+        ),
+    )
     return summary

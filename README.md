@@ -23,7 +23,7 @@ Linear Trend Spotter scans all symbols listed across target exchanges (default: 
 4. CoinGecko ID mapping
 5. Exchange-volume enrichment (CoinGecko tickers)
 6. 30-day uniformity scoring from market chart history
-7. **Backtesting stage (featured):** optional multi-strategy, multi-timeframe backtests on final-stage qualified coins
+7. **Backtesting stage (featured):** always-on multi-strategy, multi-timeframe backtests on final-stage qualified coins
 8. Entry/exit detection vs active list
 9. Telegram notifications (single combined image when chart available; fallback supported)
 10. History persistence + metrics/log summary
@@ -32,7 +32,7 @@ Linear Trend Spotter scans all symbols listed across target exchanges (default: 
 
 ## Current Qualification Rules
 
-Qualification determines which coins enter the **backtesting stage** (when enabled) and therefore which backtest-ranked strategy outputs are included in alerts.
+Qualification determines which coins enter the **backtesting stage** and therefore which backtest-ranked strategy outputs are included in alerts.
 
 ### Filter 1: Volume + gains
 
@@ -62,6 +62,7 @@ Qualification determines which coins enter the **backtesting stage** (when enabl
   - Coin name/symbol with CMC link
   - 7d and 30d gains
   - Uniformity score
+  - Data quality confidence score
   - **Total 24h volume (CMC)**
   - Exchange-level volumes (Coinbase/Kraken/MEXC)
 - Sends a **single combined image** (one ping) containing:
@@ -72,6 +73,23 @@ Qualification determines which coins enter the **backtesting stage** (when enabl
 - Cell text wraps automatically when long values overflow
 - If Chart-IMG fails, chart generation falls back to cached `ohlcv_cache` 1h data
 - If no chart can be built, message gracefully degrades to text-only
+
+#### Confidence score (in notification text)
+
+The confidence score is a heuristic quality signal (not a prediction probability). It is designed to summarize data reliability + strategy support for the current alert.
+
+- Formula (clamped to 0–100):
+  - `0.55 × uniformity_score + source_bonus + candle_bonus + edge_bonus`
+- `source_bonus` rewards stronger data-source path:
+  - CoinGecko cache/api (higher), price cache (mid), Polygon fallback (lower), unknown (lowest)
+- `candle_bonus` rewards deeper hourly history coverage:
+  - highest bonus near full 30d hourly coverage, lower bonus for thinner history
+- `edge_bonus` rewards strategy edge versus B&H:
+  - higher bonus when top strategy materially outperforms buy-and-hold
+- Label bands:
+  - `High` for score `>= 80`
+  - `Medium` for score `>= 60` and `< 80`
+  - `Low` for score `< 60`
 
 ### Exit notifications
 
@@ -134,15 +152,24 @@ Available parameters (defaults from `config/settings.py`):
 | `CACHE_PRICE_HOURS` | `6` | Price/uniformity cache TTL |
 | `CIRCUIT_FAILURE_THRESHOLD` | `5` | Circuit breaker fail threshold |
 | `CIRCUIT_RECOVERY_TIMEOUT` | `60` | Circuit recovery timeout (sec) |
-| `BACKTEST_ENABLED` | `false` | Enable integrated post-filter backtesting |
+| `BACKTEST_ENABLED` | `true` | Always-on in runtime (value kept for compatibility; `false` is ignored) |
 | `BACKTEST_REQUIRE_TARGET_EXCHANGE` | `false` | When `true`, gate backtests by `BACKTEST_EXCHANGES` |
 | `BACKTEST_EXCHANGES` | `['kraken']` | Exchange allowlist used only when exchange gating is enabled |
 | `BACKTEST_STARTING_CAPITAL` | `1000` | Starting capital per simulated strategy run |
 | `BACKTEST_FEE_BPS_ROUND_TRIP` | `52` | Round-trip taker fee in bps |
 | `BACKTEST_MAX_PARAM_COMBOS` | `100` | Max param combos per indicator/timeframe |
-| `BACKTEST_PARALLEL_WORKERS` | `4` | Process workers for per-coin backtesting |
+| `BACKTEST_PARALLEL_WORKERS` | `16` | Process workers for per-coin backtesting |
 | `BACKTEST_MAX_COINS_PER_RUN` | `0` | Safety cap for eligible coins per scanner run (`0` = unlimited) |
 | `BACKTEST_TIMEFRAMES` | `['1h','4h','1d']` | Timeframes to evaluate for each coin |
+| `BACKTEST_RESUME_ENABLED` | `true` | Resume interrupted backtests using checkpoint state |
+| `BACKTEST_CHECKPOINT_FILE` | `backtest_checkpoint.json` | Incremental backtest checkpoint artifact |
+| `BACKTEST_TELEMETRY_FILE` | `backtest_telemetry.jsonl` | Structured per-event backtest telemetry stream |
+| `BACKTEST_FAILURE_SAMPLES_LIMIT` | `200` | Max failure samples retained in summary artifact |
+| `ARTIFACT_HYGIENE_ENABLED` | `true` | Enable startup archival of old generated artifacts |
+| `ARTIFACT_RETENTION_DAYS` | `7` | Age threshold (days) before archiving matched artifacts |
+| `ARTIFACT_ARCHIVE_DIR` | `.archive/auto` | Archive target directory for hygiene moves |
+| `NOTIFICATION_INCLUDE_QUALITY_PANEL` | `true` | Include data-quality panel in entry caption/image |
+| `EXIT_ANALYTICS_FILE` | `exit_reason_analytics.json` | Cumulative exit-reason analytics artifact |
 | `USE_14D_FILTER` | `false` | Reserved feature flag |
 
 ---
@@ -172,19 +199,24 @@ python main.py
 
 ## Backtesting
 
-Backtesting can run inside scanner flow after final qualification.
+Backtesting runs inside scanner flow after final qualification.
 
-Enable in `config.json`:
+Configure in `config.json`:
 
-- `BACKTEST_ENABLED: true`
+- `BACKTEST_ENABLED: true` (always enforced at runtime; `false` is ignored)
 - `BACKTEST_REQUIRE_TARGET_EXCHANGE: false` (default: include all final-phase coins)
-- Optional gate mode: `BACKTEST_REQUIRE_TARGET_EXCHANGE: true` and set `BACKTEST_EXCHANGES`
+- Gate mode (still supported): `BACKTEST_REQUIRE_TARGET_EXCHANGE: true` and set `BACKTEST_EXCHANGES`
 
 Data source behavior:
 
 - Primary source for all symbols: CoinGecko OHLCV (`1h/4h/1d` when hourly available)
 - Intraday fallback: Polygon hourly OHLCV
 - Last-resort fallback: CoinGecko daily OHLC (`1d` only)
+
+Backtest fairness + result quality rules:
+
+- Strategy runs start long on the first bar (same start posture as `B&H`)
+- Strategy rows with `win_pct <= 50.0` are filtered out before ranked output
 
 Run scanner:
 
@@ -201,6 +233,8 @@ python scripts/render_backtest_report.py
 Backtesting artifact:
 
 - `backtest_results.json`
+- `backtest_checkpoint.json` (when resume is enabled)
+- `backtest_telemetry.jsonl` (structured telemetry)
 
 Operational recovery checklist:
 
@@ -232,6 +266,7 @@ Suggested cadence:
 - `trend_scanner.log` — full pipeline runtime log and summaries
 - `bot_output.log` — Telegram/bot-side output
 - `metrics.json` — persisted metrics snapshot
+- `exit_reason_analytics.json` — cumulative exit reason breakdowns
 
 ---
 

@@ -27,6 +27,7 @@ from notifications.image_renderer import build_fallback_chart_image, build_combi
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
 from utils.metrics import metrics, timed_block
+from utils.runtime_hygiene import run_artifact_hygiene, update_exit_reason_analytics
 from utils.logger import app_logger
 
 # Import exchange database
@@ -77,6 +78,65 @@ def aggregate_daily_bars_from_hourly(hourly_rows):
 
     return daily_bars
 
+
+def _build_quality_panel(coin: dict) -> dict:
+    score = float(coin.get('uniformity_score', 0.0) or 0.0)
+    source = str(coin.get('ohlcv_source', 'unknown'))
+    candles = int(coin.get('quality_candles', 0) or 0)
+
+    source_bonus_map = {
+        'coingecko_cache': 20,
+        'coingecko_api': 18,
+        'price_cache': 14,
+        'polygon_cache': 12,
+        'polygon_api': 10,
+    }
+    source_bonus = source_bonus_map.get(source, 6)
+
+    if candles >= 720:
+        candle_bonus = 20
+    elif candles >= 500:
+        candle_bonus = 15
+    elif candles >= 300:
+        candle_bonus = 10
+    elif candles > 0:
+        candle_bonus = 6
+    else:
+        candle_bonus = 0
+
+    strategies = coin.get('backtest_top_strategies', []) or []
+    buy_hold = coin.get('backtest_buy_hold') or {}
+    best_net = None
+    if strategies:
+        try:
+            best_net = max(float(row.get('net_pct', float('-inf'))) for row in strategies)
+        except Exception:
+            best_net = None
+
+    try:
+        bh_net = float(buy_hold.get('net_pct')) if buy_hold else None
+    except Exception:
+        bh_net = None
+
+    edge_bonus = 0
+    if best_net is not None and bh_net is not None:
+        if best_net - bh_net >= 10:
+            edge_bonus = 18
+        elif best_net - bh_net >= 0:
+            edge_bonus = 10
+        else:
+            edge_bonus = 2
+
+    confidence_score = int(round(min(100.0, max(0.0, score * 0.55 + source_bonus + candle_bonus + edge_bonus))))
+    confidence = 'High' if confidence_score >= 80 else 'Medium' if confidence_score >= 60 else 'Low'
+
+    return {
+        'price_source': source,
+        'candles_1h_lookback': candles,
+        'backtest_coverage': f"{len(strategies)}/5 strategies" if strategies else 'No strategy rows',
+        'confidence': f"{confidence} ({confidence_score}/100)",
+    }
+
 def run_scanner():
     """Main orchestration function"""
     app_logger.info("=" * 60)
@@ -89,6 +149,21 @@ def run_scanner():
     app_logger.info(f"Scanning ALL coins from: {', '.join(settings.target_exchanges)}")
     
     metrics.reset()
+
+    if settings.artifact_hygiene_enabled:
+        try:
+            hygiene_result = run_artifact_hygiene(
+                settings.base_dir,
+                settings.artifact_archive_dir,
+                settings.artifact_retention_days,
+            )
+            if hygiene_result.get('archived_count', 0) > 0:
+                app_logger.info(
+                    "🧹 Artifact hygiene archived "
+                    f"{hygiene_result.get('archived_count', 0)} files to {hygiene_result.get('archive_dir')}"
+                )
+        except Exception as hygiene_error:
+            app_logger.warning(f"⚠️ Artifact hygiene failed: {hygiene_error}")
     
     try:
         # Initialize components
@@ -336,6 +411,8 @@ def run_scanner():
             if found and cached:
                 coin['uniformity_score'] = cached['uniformity_score']
                 coin['total_gain'] = cached['gains_30d']
+                coin['ohlcv_source'] = 'price_cache'
+                coin['quality_candles'] = 0
                 cached_coins.append(coin)
                 app_logger.info(f"   ✓ {coin['symbol']}: Using cached (score: {cached['uniformity_score']:.1f})")
             else:
@@ -375,6 +452,9 @@ def run_scanner():
             if not hourly_rows:
                 app_logger.info("      ⏳ No OHLCV data available - will retry next scan")
                 continue
+
+            coin['quality_candles'] = len(hourly_rows)
+            coin['ohlcv_source'] = ohlcv_source
 
             daily_bars = aggregate_daily_bars_from_hourly(hourly_rows)
             if len(daily_bars) < uniformity_days:
@@ -431,6 +511,14 @@ def run_scanner():
                     f"failed={backtest_summary.get('coins_failed', 0)}, "
                     f"rows={backtest_summary.get('rows_generated', 0)}"
                 )
+                if backtest_summary.get('resumed_from_checkpoint'):
+                    app_logger.info(
+                        "   ♻️ Resume active: "
+                        f"{backtest_summary.get('resumed_completed_symbols', 0)} symbols loaded from checkpoint"
+                    )
+                failure_breakdown = backtest_summary.get('failure_breakdown', {}) or {}
+                if failure_breakdown:
+                    app_logger.info(f"   📉 Failure breakdown: {failure_breakdown}")
                 metrics.increment('backtests_processed', int(backtest_summary.get('coins_processed', 0)))
             except Exception as backtest_error:
                 app_logger.error(f"   ❌ Backtesting failed: {backtest_error}")
@@ -538,6 +626,17 @@ def run_scanner():
                 continue
 
             coin['exit_reason'] = "No longer met qualification criteria"
+
+        try:
+            analytics = update_exit_reason_analytics(settings.exit_analytics_file, exited)
+            if exited:
+                app_logger.info(
+                    "📈 Exit analytics updated: "
+                    f"run_exits={analytics.get('last_run', {}).get('exits', 0)}, "
+                    f"total_exits={analytics.get('total_exits', 0)}"
+                )
+        except Exception as analytics_error:
+            app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
         
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
@@ -545,6 +644,10 @@ def run_scanner():
         if telegram and entered and settings.entry_notifications:
             with timed_block('notifications'):
                 app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
+
+                if settings.notification_include_quality_panel:
+                    for coin in entered:
+                        coin['quality_panel'] = _build_quality_panel(coin)
                 
                 for coin in entered:
                     app_logger.info(f"   🟢 {coin['symbol']}")

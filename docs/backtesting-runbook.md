@@ -5,10 +5,10 @@
 
 ## Quick Start
 
-1. Enable backtesting in `config.json`:
-   - `BACKTEST_ENABLED: true`
+1. Confirm backtesting runtime policy in `config.json`:
+   - `BACKTEST_ENABLED: true` (`false` is ignored at runtime)
    - `BACKTEST_REQUIRE_TARGET_EXCHANGE: false` (default; includes all final-phase coins)
-   - Optional gate mode: set `BACKTEST_REQUIRE_TARGET_EXCHANGE: true` and choose `BACKTEST_EXCHANGES`
+   - Exchange gate mode (supported): set `BACKTEST_REQUIRE_TARGET_EXCHANGE: true` and choose `BACKTEST_EXCHANGES`
 2. Run scanner:
    - `python main.py`
 3. Render final backtesting report:
@@ -66,6 +66,8 @@ Actions:
 ## Known Constraints
 
 - First full integrated scan can be long due to external API calls and per-indicator optimization loops.
+- Strategy rows with `win_pct <= 50.0` are filtered out before ranking/report output.
+- Strategy backtests now start in a long position on the first bar (same start posture as `B&H`).
 - `B&H` is included for comparison in report rows and does not use trailing stops.
 - Report output is ranked by net % descending.
 - Data source behavior is modular by availability.

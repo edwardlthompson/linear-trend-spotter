@@ -54,6 +54,34 @@ class MessageFormatter:
 
     
     @staticmethod
+    def _format_quality_panel(coin: Dict) -> str:
+        quality = coin.get('quality_panel') or {}
+        if not isinstance(quality, dict) or not quality:
+            return ""
+
+        lines = ["\n📎 Data Quality:"]
+
+        data_source = quality.get('price_source')
+        if data_source:
+            lines.append(f"   Source: {data_source}")
+
+        candles = quality.get('candles_1h_lookback')
+        if isinstance(candles, int) and candles > 0:
+            lines.append(f"   1h candles: {candles}")
+
+        coverage = quality.get('backtest_coverage')
+        if coverage:
+            lines.append(f"   Backtest: {coverage}")
+
+        confidence = quality.get('confidence')
+        if confidence:
+            lines.append(f"   Confidence: {confidence}")
+
+        if len(lines) == 1:
+            return ""
+        return "\n".join(lines)
+
+    @staticmethod
     def format_entry(coin: Dict) -> str:
         """
         Format entry notification per spec §10.1
@@ -104,6 +132,10 @@ class MessageFormatter:
                 caption += f"{exchange_emoji} {exchange.title()}: ${volume:,.0f}\n"
             else:
                 caption += f"{exchange_emoji} {exchange.title()}: {volume}\n"
+
+        quality_block = MessageFormatter._format_quality_panel(coin)
+        if quality_block:
+            caption += quality_block
 
         caption += "\n🧪 Backtest ranked strategies are included in the combined chart image."
         

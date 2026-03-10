@@ -13,6 +13,9 @@ from .selection import select_best_result
 from .signals import generate_indicator_signals
 
 
+MIN_STRATEGY_WIN_PCT = 50.0
+
+
 @dataclass
 class OptimizationSummary:
     indicator: str
@@ -83,6 +86,9 @@ def optimize_indicator(
                 "trades": int(result.total_trades),
                 "win_pct": float(result.win_pct),
             }
+
+            if float(row["win_pct"]) <= MIN_STRATEGY_WIN_PCT:
+                continue
 
             if best_for_combo is None or row["net_pct"] > best_for_combo["net_pct"]:
                 best_for_combo = row
