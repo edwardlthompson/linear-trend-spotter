@@ -12,6 +12,15 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      PA_USERNAME: ${{ secrets.PA_USERNAME }}
+      PA_PROJECT_PATH: ${{ secrets.PA_PROJECT_PATH }}
+      PA_BRANCH: ${{ secrets.PA_BRANCH }}
+      PA_INSTALL_REQUIREMENTS: ${{ secrets.PA_INSTALL_REQUIREMENTS }}
+      PA_VENV_PYTHON: ${{ secrets.PA_VENV_PYTHON }}
+      PA_POST_SYNC_COMMAND: ${{ secrets.PA_POST_SYNC_COMMAND }}
+      PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+      PA_SSH_PRIVATE_KEY: ${{ secrets.PA_SSH_PRIVATE_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,10 +31,6 @@ jobs:
           python-version: "3.11"
 
       - name: Validate required sync config
-        env:
-          PA_USERNAME: ${{ secrets.PA_USERNAME }}
-          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
-          PA_PROJECT_PATH: ${{ secrets.PA_PROJECT_PATH }}
         run: |
           missing=0
           if [ -z "$PA_USERNAME" ]; then
@@ -35,9 +40,11 @@ jobs:
             echo "PA_USERNAME is configured"
           fi
 
-          if [ -z "$PA_API_TOKEN" ]; then
-            echo "::error::Missing required secret: PA_API_TOKEN"
+          if [ -z "$PA_API_TOKEN" ] && [ -z "$PA_SSH_PRIVATE_KEY" ]; then
+            echo "::error::Missing authentication config. Set PA_SSH_PRIVATE_KEY (preferred) or PA_API_TOKEN."
             missing=1
+          elif [ -n "$PA_SSH_PRIVATE_KEY" ]; then
+            echo "Using SSH sync mode (preferred unattended mode)"
           else
             echo "PA_API_TOKEN is configured"
           fi
@@ -52,13 +59,36 @@ jobs:
             exit 1
           fi
 
+      - name: Trigger sync via SSH
+        if: ${{ env.PA_SSH_PRIVATE_KEY != '' }}
+        run: |
+          set -e
+          branch="${PA_BRANCH:-main}"
+          if [ -n "${PA_PROJECT_PATH:-}" ]; then
+            project_path="$PA_PROJECT_PATH"
+          else
+            project_path="/home/$PA_USERNAME/${GITHUB_REPOSITORY##*/}"
+          fi
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$PA_SSH_PRIVATE_KEY" > ~/.ssh/pythonanywhere_deploy_key
+          chmod 600 ~/.ssh/pythonanywhere_deploy_key
+          ssh-keyscan -H ssh.pythonanywhere.com >> ~/.ssh/known_hosts
+
+          remote_cmd="set -e; cd '$project_path'; git fetch origin '$branch'; git reset --hard origin/'$branch'; git clean -fd"
+          if [ "${PA_INSTALL_REQUIREMENTS:-false}" = "true" ]; then
+            if [ -n "${PA_VENV_PYTHON:-}" ]; then
+              remote_cmd="$remote_cmd; '$PA_VENV_PYTHON' -m pip install -r requirements.txt"
+            else
+              remote_cmd="$remote_cmd; python3 -m pip install -r requirements.txt"
+            fi
+          fi
+          if [ -n "${PA_POST_SYNC_COMMAND:-}" ]; then
+            remote_cmd="$remote_cmd; ${PA_POST_SYNC_COMMAND}"
+          fi
+
+          ssh -i ~/.ssh/pythonanywhere_deploy_key "$PA_USERNAME@ssh.pythonanywhere.com" "$remote_cmd"
+
       - name: Trigger PythonAnywhere sync
-        env:
-          PA_USERNAME: ${{ secrets.PA_USERNAME }}
-          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
-          PA_PROJECT_PATH: ${{ secrets.PA_PROJECT_PATH }}
-          PA_BRANCH: ${{ secrets.PA_BRANCH }}
-          PA_INSTALL_REQUIREMENTS: ${{ secrets.PA_INSTALL_REQUIREMENTS }}
-          PA_VENV_PYTHON: ${{ secrets.PA_VENV_PYTHON }}
-          PA_POST_SYNC_COMMAND: ${{ secrets.PA_POST_SYNC_COMMAND }}
+        if: ${{ env.PA_SSH_PRIVATE_KEY == '' }}
         run: python .github/scripts/pythonanywhere_sync.py

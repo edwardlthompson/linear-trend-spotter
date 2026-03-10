@@ -34,6 +34,13 @@ def api_request(method: str, url: str, token: str, payload: dict | None = None) 
             return json.loads(body)
     except urllib.error.HTTPError as error:
         details = error.read().decode("utf-8", errors="replace")
+        if error.code == 412 and "Console not yet started" in details:
+            raise RuntimeError(
+                "API request failed (412): Console not yet started. "
+                "PythonAnywhere console API requires a browser-opened console process. "
+                "For unattended CI, set PA_SSH_PRIVATE_KEY and use SSH sync mode, "
+                "or manually open a PythonAnywhere bash console once before API mode."
+            ) from error
         raise RuntimeError(f"API request failed ({error.code}): {details}") from error
 
 
