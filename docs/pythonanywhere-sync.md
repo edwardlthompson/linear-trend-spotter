@@ -28,7 +28,14 @@ If `PA_PROJECT_PATH` is not set, the workflow now falls back to `/home/<PA_USERN
 
 ## How it works
 
-On push to `main` (or manual run), GitHub Actions calls the PythonAnywhere API and sends this command to a bash console:
+On push to `main` (or manual run), GitHub Actions runs in this order:
+
+1. Validate required config/secrets.
+2. If `PA_SSH_PRIVATE_KEY` is set (recommended): connect over SSH and run sync commands directly.
+3. Else, if `PA_ALLOW_CONSOLE_MODE=true`: call PythonAnywhere console API mode.
+4. Else: fail fast with a clear configuration error.
+
+The sync command is:
 
 1. `cd <PA_PROJECT_PATH>`
 2. `git fetch origin <PA_BRANCH>`
@@ -39,8 +46,29 @@ On push to `main` (or manual run), GitHub Actions calls the PythonAnywhere API a
 ## First-time PythonAnywhere setup
 
 1. Ensure your project exists on PythonAnywhere and has a Git remote named `origin`.
-2. Ensure PythonAnywhere can access your GitHub repo (HTTPS auth or SSH key setup on PythonAnywhere).
-3. Create/verify your virtualenv path if you enable `PA_INSTALL_REQUIREMENTS=true`.
+2. Add your deploy public key to `~/.ssh/authorized_keys` on PythonAnywhere (documented best practice).
+3. Ensure PythonAnywhere can pull your GitHub repo (SSH deploy key on GitHub repo or working HTTPS credentials).
+4. Create/verify your virtualenv path if you enable `PA_INSTALL_REQUIREMENTS=true`.
+
+### Adding the SSH key on PythonAnywhere (recommended methods)
+
+Method A (most reliable): PythonAnywhere Bash console
+
+```bash
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+cat >> ~/.ssh/authorized_keys
+```
+
+Then paste your public key line, press Enter, and finish with `Ctrl+D`.
+
+Method B: Files tab editor
+
+1. Open **Files** in PythonAnywhere.
+2. Navigate to `.ssh/authorized_keys` (create folder/file if missing).
+3. Paste one public key per line and save.
+
+Reference: PythonAnywhere SSH docs explain that passwordless login keys go in `~/.ssh/authorized_keys`.
 
 ## Trigger options
 
@@ -49,7 +77,8 @@ On push to `main` (or manual run), GitHub Actions calls the PythonAnywhere API a
 
 ## Notes
 
-- The API call queues the command in a PythonAnywhere bash console.
+- SSH mode is preferred for unattended CI and does not depend on browser-started consoles.
+- Console API mode queues commands in a PythonAnywhere bash console.
 - If you need strict deployment verification, inspect console output on PythonAnywhere after the workflow run.
 - Workflow preflight now fails early with clear errors if `PA_USERNAME` or `PA_API_TOKEN` is missing.
 - PythonAnywhere console API cannot start console processes by itself; if no console has been browser-started, API mode can fail with HTTP 412.
