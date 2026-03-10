@@ -449,9 +449,13 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
         progress_started_at = time.monotonic()
         total_to_process = len(pending_coins)
         completed_count = 0
-        for coin in pending_coins:
+        for index, coin in enumerate(pending_coins, start=1):
             symbol = coin["symbol"]
-            print(f"[BACKTEST] processing {symbol} (single-worker mode)", flush=True)
+            print(
+                "[BACKTEST] "
+                f"starting {index}/{total_to_process} | symbol={symbol} | mode=single-worker",
+                flush=True,
+            )
             try:
                 result = _optimize_coin_task(
                     symbol,
@@ -546,7 +550,18 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
         progress_started_at = time.monotonic()
         total_to_process = len(pending_coins)
         completed_count = 0
+        symbol_to_index = {
+            coin["symbol"]: index
+            for index, coin in enumerate(pending_coins, start=1)
+        }
         with ProcessPoolExecutor(max_workers=worker_count) as executor:
+            for coin in pending_coins:
+                idx = symbol_to_index[coin["symbol"]]
+                print(
+                    "[BACKTEST] "
+                    f"queued {idx}/{total_to_process} | symbol={coin['symbol']} | mode=parallel",
+                    flush=True,
+                )
             future_map = {
                 executor.submit(
                     _optimize_coin_task,
@@ -569,6 +584,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
 
             for future in as_completed(future_map):
                 symbol = future_map[future]
+                idx = symbol_to_index.get(symbol, 0)
                 try:
                     result = future.result()
                     summary["coins_processed"] += 1
@@ -595,6 +611,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                         _telemetry_event(
                             "coin_processed",
                             symbol=symbol,
+                            queue_index=idx,
                             rows=len(result.get("rows", [])),
                             skipped=len(result.get("skipped", [])),
                             skipped_reason_counts=dict(skipped_reason_counts),
@@ -635,6 +652,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                         _telemetry_event(
                             "coin_failed",
                             symbol=symbol,
+                            queue_index=idx,
                             reason=reason,
                             class_name=class_name,
                         ),
