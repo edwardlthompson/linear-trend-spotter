@@ -22,6 +22,7 @@ Optional secrets:
 - `PA_VENV_PYTHON` (example: `/home/<username>/.virtualenvs/venv-name/bin/python`)
 - `PA_POST_SYNC_COMMAND` (any extra command to run after sync)
 - `PA_SSH_PRIVATE_KEY` (recommended for unattended deploys; if set, workflow uses SSH mode and skips console API mode)
+- `PA_ALLOW_CONSOLE_MODE` (`true` to allow console API fallback when `PA_SSH_PRIVATE_KEY` is not set; default behavior is blocked)
 
 If `PA_PROJECT_PATH` is not set, the workflow now falls back to `/home/<PA_USERNAME>/<repo-name>` using `GITHUB_REPOSITORY`.
 
@@ -53,3 +54,4 @@ On push to `main` (or manual run), GitHub Actions calls the PythonAnywhere API a
 - Workflow preflight now fails early with clear errors if `PA_USERNAME` or `PA_API_TOKEN` is missing.
 - PythonAnywhere console API cannot start console processes by itself; if no console has been browser-started, API mode can fail with HTTP 412.
 - To avoid that limitation in CI, set `PA_SSH_PRIVATE_KEY` and use SSH mode.
+- Console API fallback is now blocked by default; set `PA_ALLOW_CONSOLE_MODE=true` only if you intentionally want API mode.

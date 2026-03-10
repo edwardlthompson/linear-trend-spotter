@@ -21,6 +21,7 @@ jobs:
       PA_POST_SYNC_COMMAND: ${{ secrets.PA_POST_SYNC_COMMAND }}
       PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
       PA_SSH_PRIVATE_KEY: ${{ secrets.PA_SSH_PRIVATE_KEY }}
+      PA_ALLOW_CONSOLE_MODE: ${{ secrets.PA_ALLOW_CONSOLE_MODE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +48,15 @@ jobs:
             echo "Using SSH sync mode (preferred unattended mode)"
           else
             echo "PA_API_TOKEN is configured"
+          fi
+
+          allow_console_mode="${PA_ALLOW_CONSOLE_MODE:-false}"
+          allow_console_mode="$(echo "$allow_console_mode" | tr '[:upper:]' '[:lower:]')"
+          if [ -z "$PA_SSH_PRIVATE_KEY" ] && [ "$allow_console_mode" != "true" ]; then
+            echo "::error::Console API mode is disabled by default. Set PA_SSH_PRIVATE_KEY for unattended deploys, or set PA_ALLOW_CONSOLE_MODE=true to allow fallback."
+            missing=1
+          elif [ -z "$PA_SSH_PRIVATE_KEY" ] && [ "$allow_console_mode" = "true" ]; then
+            echo "Console API fallback is explicitly enabled (PA_ALLOW_CONSOLE_MODE=true)"
           fi
 
           if [ -z "$PA_PROJECT_PATH" ]; then
@@ -90,5 +100,5 @@ jobs:
           ssh -i ~/.ssh/pythonanywhere_deploy_key "$PA_USERNAME@ssh.pythonanywhere.com" "$remote_cmd"
 
       - name: Trigger PythonAnywhere sync
-        if: ${{ env.PA_SSH_PRIVATE_KEY == '' }}
+        if: ${{ env.PA_SSH_PRIVATE_KEY == '' && env.PA_ALLOW_CONSOLE_MODE == 'true' }}
         run: python .github/scripts/pythonanywhere_sync.py
