@@ -1,0 +1,33 @@
+name: Sync to PythonAnywhere
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Trigger PythonAnywhere sync
+        env:
+          PA_USERNAME: ${{ secrets.PA_USERNAME }}
+          PA_API_TOKEN: ${{ secrets.PA_API_TOKEN }}
+          PA_PROJECT_PATH: ${{ secrets.PA_PROJECT_PATH }}
+          PA_BRANCH: ${{ secrets.PA_BRANCH }}
+          PA_INSTALL_REQUIREMENTS: ${{ secrets.PA_INSTALL_REQUIREMENTS }}
+          PA_VENV_PYTHON: ${{ secrets.PA_VENV_PYTHON }}
+          PA_POST_SYNC_COMMAND: ${{ secrets.PA_POST_SYNC_COMMAND }}
+        run: python .github/scripts/pythonanywhere_sync.py
