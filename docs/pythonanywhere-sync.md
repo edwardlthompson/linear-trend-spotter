@@ -13,18 +13,20 @@ Set these in **Settings → Secrets and variables → Actions → New repository
 
 - `PA_USERNAME` (your PythonAnywhere username)
 - `PA_API_TOKEN` (PythonAnywhere API token)
-- `PA_PROJECT_PATH` (absolute path of your project on PythonAnywhere, example: `/home/<username>/linear-trend-spotter`)
+- `PA_PROJECT_PATH` (absolute path of your project on PythonAnywhere, example: `/home/edwardlthompson/linear-trend-spotter`)
 
 Optional secrets:
 
 - `PA_BRANCH` (default: `main`)
 - `PA_INSTALL_REQUIREMENTS` (`true` or `false`, default: `false`)
-- `PA_VENV_PYTHON` (example: `/home/<username>/.virtualenvs/venv-name/bin/python`)
+- `PA_VENV_PYTHON` (example: `/home/edwardlthompson/.virtualenvs/venv-name/bin/python`)
 - `PA_POST_SYNC_COMMAND` (any extra command to run after sync)
 - `PA_SSH_PRIVATE_KEY` (recommended for unattended deploys; if set, workflow uses SSH mode and skips console API mode)
 - `PA_ALLOW_CONSOLE_MODE` (`true` to allow console API fallback when `PA_SSH_PRIVATE_KEY` is not set; default behavior is blocked)
 
-If `PA_PROJECT_PATH` is not set, the workflow now falls back to `/home/<PA_USERNAME>/<repo-name>` using `GITHUB_REPOSITORY`.
+For this project, set `PA_USERNAME=edwardlthompson`.
+
+If `PA_PROJECT_PATH` is not set, the workflow now falls back to `/home/<PA_USERNAME>/<repo-name>` using `GITHUB_REPOSITORY` (for your repo: `/home/edwardlthompson/linear-trend-spotter`).
 
 ## How it works
 
@@ -74,6 +76,39 @@ Reference: PythonAnywhere SSH docs explain that passwordless login keys go in `~
 
 - Automatic on push to `main`
 - Manual from **Actions → Sync to PythonAnywhere → Run workflow**
+
+## Troubleshooting: project path not found
+
+If you see:
+
+- `cd: /home/edwardlthompson/linear-trend-spotter: No such file or directory`
+- `fatal: not a git repository`
+
+then your project has not been cloned on PythonAnywhere yet (or is in a different path).
+
+### One-time bootstrap on PythonAnywhere
+
+In a PythonAnywhere Bash console:
+
+```bash
+cd /home/edwardlthompson
+ls -la
+```
+
+If `linear-trend-spotter` is missing, clone it:
+
+```bash
+git clone git@github.com:edwardlthompson/linear-trend-spotter.git /home/edwardlthompson/linear-trend-spotter
+cd /home/edwardlthompson/linear-trend-spotter
+git remote -v
+git fetch origin main
+```
+
+If the clone/fetch fails with permission errors, add the **PythonAnywhere account SSH public key** as a deploy key (read access) in the GitHub repo and retry.
+
+After bootstrap, keep this secret set in GitHub Actions:
+
+- `PA_PROJECT_PATH=/home/edwardlthompson/linear-trend-spotter`
 
 ## Notes
 
