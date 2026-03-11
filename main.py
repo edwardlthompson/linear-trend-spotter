@@ -220,6 +220,9 @@ def run_scanner():
                     settings.telegram['bot_token'],
                     settings.telegram['chat_id']
                 )
+                app_logger.info("✅ Telegram client initialized")
+            else:
+                app_logger.warning("⚠️ Telegram credentials missing - notifications disabled")
         
         # ============================================================
         # STEP 1: Get top configured coins with gains from CoinMarketCap
@@ -556,6 +559,16 @@ def run_scanner():
         app_logger.info("\n🔄 Checking for entries/exits...")
         entered, exited = active_db.get_entered_exited(final_results)
         app_logger.info(f"   New entries: {len(entered)}, Exits: {len(exited)}")
+        app_logger.info(
+            "   Notification toggles: "
+            f"entry={settings.entry_notifications}, "
+            f"exit={settings.exit_notifications}, "
+            f"no_change={settings.no_change_notifications}"
+        )
+        if not telegram:
+            app_logger.info("   Telegram status: disabled (missing TELEGRAM_BOT_TOKEN and/or TELEGRAM_CHAT_ID)")
+        else:
+            app_logger.info("   Telegram status: enabled")
 
         if entered:
             fallback_summary = backtest_summary
@@ -730,6 +743,10 @@ def run_scanner():
             )
             telegram.send_message(summary_message)
             metrics.increment('notifications_sent')
+        elif telegram and not entered and not exited and not settings.no_change_notifications:
+            app_logger.info("ℹ️ No notifications sent: no entries/exits and NO_CHANGE_NOTIFICATIONS=false")
+        elif not telegram and (entered or exited):
+            app_logger.warning("⚠️ Entry/exit events detected but Telegram is disabled")
         
         # Save results
         if final_results:
