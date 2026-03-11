@@ -4,7 +4,7 @@ import os
 import sys
 import json
 import io
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 # Add current directory to path
@@ -215,6 +215,168 @@ def _attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
     coin['volume_recent_24h'] = current_24h_volume
     coin['volume_baseline_24h'] = baseline_avg
 
+
+def _attach_atr_score(coin: dict, loader: BacktestDataLoader) -> None:
+    loaded = loader.load(
+        symbol=str(coin.get('symbol', '')).upper(),
+        timeframe='1d',
+        days=60,
+        gecko_id=coin.get('gecko_id') or coin.get('cg_id'),
+    )
+    if loaded.frame is None or loaded.frame.empty or len(loaded.frame.index) < 20:
+        return
+
+    high = [float(value) for value in loaded.frame['high'].tolist()]
+    low = [float(value) for value in loaded.frame['low'].tolist()]
+    close = [float(value) for value in loaded.frame['close'].tolist()]
+
+    true_ranges = []
+    for index in range(1, len(close)):
+        tr = max(
+            high[index] - low[index],
+            abs(high[index] - close[index - 1]),
+            abs(low[index] - close[index - 1]),
+        )
+        true_ranges.append(tr)
+
+    if len(true_ranges) < 14:
+        return
+
+    atr14 = sum(true_ranges[-14:]) / 14.0
+    last_close = close[-1]
+    if last_close <= 0:
+        return
+
+    atr_pct = (atr14 / last_close) * 100.0
+    atr_score = max(0.0, min(100.0, 100.0 - (atr_pct * 10.0)))
+    coin['atr_pct'] = atr_pct
+    coin['atr_score'] = atr_score
+
+
+def _build_anomaly_messages(
+    total_gain_qualified: int,
+    missing_cg_count: int,
+    no_ticker_count: int,
+    cg_mapped_count: int,
+    processed_ohlcv_count: int,
+) -> list[str]:
+    messages: list[str] = []
+
+    if total_gain_qualified > 0:
+        missing_cg_ratio = missing_cg_count / total_gain_qualified
+        if missing_cg_ratio > settings.anomaly_max_missing_cg_ratio:
+            messages.append(
+                "High CoinGecko mapping miss ratio "
+                f"({missing_cg_count}/{total_gain_qualified}, {missing_cg_ratio:.0%})"
+            )
+
+    if cg_mapped_count > 0:
+        no_ticker_ratio = no_ticker_count / cg_mapped_count
+        if no_ticker_ratio > settings.anomaly_max_no_ticker_ratio:
+            messages.append(
+                "High no-ticker ratio "
+                f"({no_ticker_count}/{cg_mapped_count}, {no_ticker_ratio:.0%})"
+            )
+
+        ohlcv_success_ratio = processed_ohlcv_count / cg_mapped_count
+        if ohlcv_success_ratio < settings.anomaly_min_ohlcv_success_ratio:
+            messages.append(
+                "Low OHLCV success ratio "
+                f"({processed_ohlcv_count}/{cg_mapped_count}, {ohlcv_success_ratio:.0%})"
+            )
+
+    return messages
+
+
+def _load_weekly_digest_state() -> dict:
+    path = settings.weekly_digest_state_file
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+
+def _save_weekly_digest_state(payload: dict) -> None:
+    path = settings.weekly_digest_state_file
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+
+
+def _iso_week_key(moment: datetime) -> str:
+    iso_year, iso_week, _ = moment.isocalendar()
+    return f"{iso_year}-W{iso_week:02d}"
+
+
+def _build_weekly_digest_message(history_db: HistoryDatabase, active_db: ActiveCoinsDatabase) -> str:
+    now_utc = datetime.now(timezone.utc)
+    cutoff = now_utc - timedelta(days=7)
+    cutoff_iso = cutoff.isoformat()
+    cutoff_date = cutoff.date().isoformat()
+
+    scans_cursor = history_db.execute(
+        'SELECT COUNT(DISTINCT scan_date) FROM scan_history WHERE scan_date >= ?',
+        (cutoff_iso,),
+    )
+    scans_count = int((scans_cursor.fetchone() or [0])[0] or 0)
+
+    symbol_cursor = history_db.execute(
+        'SELECT COUNT(DISTINCT coin_symbol) FROM scan_history WHERE scan_date >= ?',
+        (cutoff_iso,),
+    )
+    unique_symbols = int((symbol_cursor.fetchone() or [0])[0] or 0)
+
+    score_cursor = history_db.execute(
+        'SELECT AVG(uniformity_score), MAX(uniformity_score) FROM scan_history WHERE scan_date >= ?',
+        (cutoff_iso,),
+    )
+    score_row = score_cursor.fetchone() or [0, 0]
+    avg_score = float(score_row[0] or 0.0)
+    best_score = float(score_row[1] or 0.0)
+
+    top_cursor = history_db.execute(
+        '''
+        SELECT coin_symbol, COUNT(*) AS appearances
+        FROM scan_history
+        WHERE scan_date >= ?
+        GROUP BY coin_symbol
+        ORDER BY appearances DESC, coin_symbol ASC
+        LIMIT 5
+        ''',
+        (cutoff_iso,),
+    )
+    top_symbols = top_cursor.fetchall()
+
+    active_entries_cursor = active_db.execute(
+        'SELECT COUNT(*) FROM active_coins WHERE entered_date >= ?',
+        (cutoff_date,),
+    )
+    new_entries_week = int((active_entries_cursor.fetchone() or [0])[0] or 0)
+
+    recent_exits = active_db.get_recent_exits(days=7)
+    exit_count = len(recent_exits)
+    active_count = len(active_db.get_active())
+
+    lines = [
+        "📅 <b>Weekly Performance Digest</b>",
+        f"Window: last 7 days (UTC)",
+        f"Scans run: {scans_count}",
+        f"Unique qualified symbols: {unique_symbols}",
+        f"Average uniformity: {avg_score:.1f}",
+        f"Best uniformity: {best_score:.1f}",
+        f"New entries (active this week): {new_entries_week}",
+        f"Exits: {exit_count}",
+        f"Currently active: {active_count}",
+    ]
+
+    if top_symbols:
+        lines.append("Top recurring symbols:")
+        for symbol, appearances in top_symbols:
+            lines.append(f"• {symbol}: {appearances} appearances")
+
+    return "\n".join(lines)
+
 def run_scanner():
     """Main orchestration function"""
     app_logger.info("=" * 60)
@@ -409,6 +571,7 @@ def run_scanner():
                             'slug': info['slug'],
                             'gains': gains,
                             'volume_24h': info['volume_24h'],
+                            'current_price': float(info.get('price', 0) or 0),
                         }
                         gain_qualified.append(coin_info)
                         app_logger.info(f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% Vol:${info['volume_24h']:,.0f}")
@@ -475,6 +638,7 @@ def run_scanner():
         # STEP 6: Get exchange volume data from CoinGecko
         # ============================================================
         app_logger.info(f"\n💱 Fetching exchange volume data for {len(coins_with_cg_ids)} coins...")
+        no_ticker_count = 0
         
         for i, coin in enumerate(coins_with_cg_ids, 1):
             app_logger.info(f"   [{i}/{len(coins_with_cg_ids)}] {coin['symbol']}")
@@ -495,6 +659,7 @@ def run_scanner():
             else:
                 coin['exchange_volumes'] = {ex: "N/A" for ex in settings.target_exchanges}
                 app_logger.info(f"      ⚠️ No ticker data")
+                no_ticker_count += 1
 
         # ============================================================
         # STEP 7: Calculate uniformity scores
@@ -572,6 +737,18 @@ def run_scanner():
         all_processed = cached_coins + [c for c in uncached_coins if 'uniformity_score' in c]
         all_processed_map = {c['symbol']: c for c in all_processed}
 
+        anomaly_messages = _build_anomaly_messages(
+            total_gain_qualified=len(gain_qualified),
+            missing_cg_count=len(coins_without_cg_ids),
+            no_ticker_count=no_ticker_count,
+            cg_mapped_count=len(coins_with_cg_ids),
+            processed_ohlcv_count=len(all_processed),
+        )
+        if anomaly_messages:
+            app_logger.warning("⚠️ Anomaly detector triggered:")
+            for message in anomaly_messages:
+                app_logger.warning(f"   - {message}")
+
         # ============================================================
         # STEP 8: Apply uniformity filter
         # ============================================================
@@ -640,8 +817,14 @@ def run_scanner():
         
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
-        entered, exited = active_db.get_entered_exited(final_results)
-        app_logger.info(f"   New entries: {len(entered)}, Exits: {len(exited)}")
+        entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
+            final_results,
+            cooldown_hours=settings.alert_cooldown_hours,
+        )
+        app_logger.info(
+            f"   New entries: {len(entered)}, Exits: {len(exited)}, "
+            f"Blocked by cooldown: {len(blocked_by_cooldown)}"
+        )
         app_logger.info(
             "   Notification toggles: "
             f"entry={settings.entry_notifications}, "
@@ -677,6 +860,7 @@ def run_scanner():
 
             notification_loader = BacktestDataLoader(cache=cache, max_cache_age_hours=settings.cache_price_hours)
             for coin in entered:
+                _attach_atr_score(coin, notification_loader)
                 _attach_signal_age(coin, notification_loader)
                 _attach_volume_acceleration(coin, notification_loader)
 
@@ -746,6 +930,13 @@ def run_scanner():
                 continue
 
             coin['exit_reason'] = "No longer met qualification criteria"
+
+        for coin in exited:
+            active_db.register_exit(
+                coin['symbol'],
+                reason=str(coin.get('exit_reason', 'No longer qualified')),
+                cooldown_hours=settings.alert_cooldown_hours,
+            )
 
         try:
             analytics = update_exit_reason_analytics(settings.exit_analytics_file, exited)
@@ -817,6 +1008,33 @@ def run_scanner():
                 message = MessageFormatter.format_exit(coin)
                 telegram.send_message(message)
                 metrics.increment('notifications_sent')
+
+        if telegram and settings.anomaly_alerts_enabled and anomaly_messages:
+            anomaly_text = "⚠️ <b>Scanner Anomaly Detector</b>\n" + "\n".join(f"• {m}" for m in anomaly_messages)
+            telegram.send_message(anomaly_text)
+            metrics.increment('notifications_sent')
+
+        if telegram and settings.weekly_digest_enabled:
+            now_utc = datetime.now(timezone.utc)
+            state = _load_weekly_digest_state()
+            current_week_key = _iso_week_key(now_utc)
+            already_sent = str(state.get('last_sent_week', '')) == current_week_key
+            is_due_slot = (
+                now_utc.weekday() == settings.weekly_digest_weekday_utc
+                and now_utc.hour >= settings.weekly_digest_hour_utc
+            )
+            if is_due_slot and not already_sent:
+                digest_message = _build_weekly_digest_message(history_db, active_db)
+                digest_message_id = telegram.send_message(digest_message)
+                if digest_message_id:
+                    _save_weekly_digest_state(
+                        {
+                            'last_sent_week': current_week_key,
+                            'last_sent_at': now_utc.isoformat(),
+                            'last_message_id': digest_message_id,
+                        }
+                    )
+                    metrics.increment('notifications_sent')
 
         if telegram and not entered and not exited and settings.no_change_notifications:
             app_logger.info("\n📱 Sending no-change scan summary notification...")

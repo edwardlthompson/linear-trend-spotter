@@ -62,6 +62,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
   - Coin name/symbol with CMC link
   - 7d and 30d gains
   - Uniformity score
+  - ATR score (volatility quality line under uniformity)
   - Rank movement vs previous scan
   - Signal age for the top-ranked strategy
   - Volume acceleration vs recent daily baseline
@@ -79,6 +80,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 Notification enhancement details:
 
 - **Rank movement:** compares current rank to prior scan and shows direction (`↑`, `↓`, `→`) and step change.
+- **ATR score:** computed from daily ATR14 as normalized volatility quality (`0–100`) and shown immediately below uniformity.
 - **Signal age:** computes how many candles ago the latest buy signal fired for the top strategy row used in the alert.
 - **Volume acceleration:** compares most recent 24h volume (from cached/fetched hourly OHLCV) versus recent daily baseline and reports percentage delta.
 
@@ -92,6 +94,7 @@ Example entry notification excerpt:
   30d: +48.7%
 
 📈 Uniformity Score: 71/100
+📏 ATR Score: 76/100 (ATR14: 2.40%)
 
 🏁 Rank: #3 ↑ from #8 (5)
 ⏱️ Best Strategy Signal: RSI • 2 candles ago on 4h (~8h)
@@ -113,6 +116,25 @@ Example entry notification excerpt:
   - `30d <= 7d`
   - Missing CMC/CoinGecko data
   - Uniformity score below threshold
+- Includes **alert lifecycle P&L summary** from active-state tracking:
+  - realized/unrealized lifecycle P&L at exit
+  - max run-up since entry
+  - max drawdown since entry
+  - hold duration in days
+
+### Cooldown re-entry policy
+
+- Exited symbols enter a cooldown window (`ALERT_COOLDOWN_HOURS`, default `24`)
+- Symbols still in cooldown are blocked from immediate re-entry alerts
+- Blocked re-entries are logged in scanner runtime output for visibility
+
+### Weekly digest + anomaly detector
+
+- **Weekly digest:** optional Telegram digest with 7-day operational stats, recurring symbols, entry/exit activity, and score summary
+- **Anomaly detector:** optional runtime anomaly alerting for:
+  - excessive CoinGecko mapping miss ratio
+  - excessive no-ticker ratio
+  - low OHLCV success ratio
 
 ---
 
@@ -184,6 +206,15 @@ Available parameters (defaults from `config/settings.py`):
 | `NOTIFICATION_INCLUDE_QUALITY_PANEL` | `true` | Legacy compatibility flag (quality panel text is no longer rendered in entry notifications) |
 | `EXIT_ANALYTICS_FILE` | `exit_reason_analytics.json` | Cumulative exit-reason analytics artifact |
 | `USE_14D_FILTER` | `false` | Reserved feature flag |
+| `ALERT_COOLDOWN_HOURS` | `24` | Re-entry cooldown window after exit |
+| `ANOMALY_ALERTS_ENABLED` | `true` | Enable anomaly detector notifications |
+| `ANOMALY_MAX_MISSING_CG_RATIO` | `0.35` | Alert threshold for high CoinGecko mapping misses |
+| `ANOMALY_MIN_OHLCV_SUCCESS_RATIO` | `0.60` | Alert threshold for low OHLCV processing success |
+| `ANOMALY_MAX_NO_TICKER_RATIO` | `0.50` | Alert threshold for high no-ticker responses |
+| `WEEKLY_DIGEST_ENABLED` | `true` | Enable weekly Telegram digest |
+| `WEEKLY_DIGEST_WEEKDAY_UTC` | `0` | UTC weekday for digest send (`0=Monday`) |
+| `WEEKLY_DIGEST_HOUR_UTC` | `12` | UTC hour for digest send |
+| `WEEKLY_DIGEST_STATE_FILE` | `weekly_digest_state.json` | State file preventing duplicate weekly sends |
 
 ---
 

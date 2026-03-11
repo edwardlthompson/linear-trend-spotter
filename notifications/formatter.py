@@ -77,7 +77,17 @@ class MessageFormatter:
         caption += f"   30d: +{gain_30d:.1f}%\n\n"
         
         # Uniformity score
-        caption += f"📈 Uniformity Score: {score:.0f}/100\n\n"
+        caption += f"📈 Uniformity Score: {score:.0f}/100\n"
+
+        atr_score = coin.get('atr_score')
+        atr_pct = coin.get('atr_pct')
+        if isinstance(atr_score, (int, float)):
+            if isinstance(atr_pct, (int, float)):
+                caption += f"📏 ATR Score: {float(atr_score):.0f}/100 (ATR14: {float(atr_pct):.2f}%)\n"
+            else:
+                caption += f"📏 ATR Score: {float(atr_score):.0f}/100\n"
+
+        caption += "\n"
 
         current_rank = coin.get('current_rank')
         previous_rank = coin.get('previous_rank')
@@ -149,5 +159,23 @@ class MessageFormatter:
         message += f"🔗 {cmc_url}\n"
         message += f"has left the qualified list\n"
         message += f"Reason: {reason}"
+
+        lifecycle_pnl_pct = coin.get('lifecycle_pnl_pct')
+        max_runup_pct = coin.get('max_runup_pct')
+        max_drawdown_pct = coin.get('max_drawdown_pct')
+        held_days = coin.get('held_days')
+
+        lifecycle_parts = []
+        if isinstance(lifecycle_pnl_pct, (int, float)):
+            lifecycle_parts.append(f"P&L {float(lifecycle_pnl_pct):+.2f}%")
+        if isinstance(max_runup_pct, (int, float)):
+            lifecycle_parts.append(f"Max↑ {float(max_runup_pct):+.2f}%")
+        if isinstance(max_drawdown_pct, (int, float)):
+            lifecycle_parts.append(f"Max↓ {float(max_drawdown_pct):+.2f}%")
+        if isinstance(held_days, int):
+            lifecycle_parts.append(f"Held {held_days}d")
+
+        if lifecycle_parts:
+            message += "\nLifecycle: " + " | ".join(lifecycle_parts)
         
         return message

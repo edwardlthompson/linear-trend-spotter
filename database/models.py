@@ -1,6 +1,6 @@
 """Database models and schema"""
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
@@ -176,7 +176,21 @@ class ActiveCoinsDatabase(Database):
                     kraken_volume   TEXT,
                     mexc_volume     TEXT,
                     slug            TEXT,
-                    cmc_url         TEXT
+                    cmc_url         TEXT,
+                    entry_price     REAL,
+                    peak_price      REAL,
+                    trough_price    REAL,
+                    last_price      REAL,
+                    lifecycle_updated_at TEXT
+                )
+            ''')
+
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS cooldown_exits (
+                    coin_symbol         TEXT NOT NULL PRIMARY KEY,
+                    last_exit_ts        TEXT NOT NULL,
+                    cooldown_until_ts   TEXT NOT NULL,
+                    exit_reason         TEXT
                 )
             ''')
             
@@ -221,6 +235,19 @@ class ActiveCoinsDatabase(Database):
                 # Drop old and rename new
                 cursor.execute('DROP TABLE active_coins')
                 cursor.execute('ALTER TABLE active_coins_new RENAME TO active_coins')
+
+            cursor.execute("PRAGMA table_info(active_coins)")
+            active_columns = {row[1] for row in cursor.fetchall()}
+            if 'entry_price' not in active_columns:
+                cursor.execute('ALTER TABLE active_coins ADD COLUMN entry_price REAL')
+            if 'peak_price' not in active_columns:
+                cursor.execute('ALTER TABLE active_coins ADD COLUMN peak_price REAL')
+            if 'trough_price' not in active_columns:
+                cursor.execute('ALTER TABLE active_coins ADD COLUMN trough_price REAL')
+            if 'last_price' not in active_columns:
+                cursor.execute('ALTER TABLE active_coins ADD COLUMN last_price REAL')
+            if 'lifecycle_updated_at' not in active_columns:
+                cursor.execute('ALTER TABLE active_coins ADD COLUMN lifecycle_updated_at TEXT')
             
             conn.commit()
     
@@ -244,7 +271,12 @@ class ActiveCoinsDatabase(Database):
                 'kraken_volume': row[10],
                 'mexc_volume': row[11],
                 'slug': row[12],
-                'cmc_url': row[13]
+                'cmc_url': row[13],
+                'entry_price': row[14] if len(row) > 14 else None,
+                'peak_price': row[15] if len(row) > 15 else None,
+                'trough_price': row[16] if len(row) > 16 else None,
+                'last_price': row[17] if len(row) > 17 else None,
+                'lifecycle_updated_at': row[18] if len(row) > 18 else None,
             }
         return active
     
@@ -254,12 +286,15 @@ class ActiveCoinsDatabase(Database):
         today = datetime.now().strftime('%Y-%m-%d')
         
         gecko_id = coin.get('gecko_id') or coin.get('cg_id')
+        current_price = float(coin.get('current_price', 0) or 0)
+        lifecycle_price = current_price if current_price > 0 else None
         
         self.execute('''
             INSERT OR REPLACE INTO active_coins 
             (coin_symbol, coin_name, gecko_id, entered_date, last_seen_date, last_scan_date,
-             gain_7d, gain_30d, uniformity_score, coinbase_volume, kraken_volume, mexc_volume, slug, cmc_url)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             gain_7d, gain_30d, uniformity_score, coinbase_volume, kraken_volume, mexc_volume, slug, cmc_url,
+             entry_price, peak_price, trough_price, last_price, lifecycle_updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             coin['symbol'], 
             coin['name'], 
@@ -274,7 +309,12 @@ class ActiveCoinsDatabase(Database):
             str(coin.get('exchange_volumes', {}).get('kraken', 'N/A')),
             str(coin.get('exchange_volumes', {}).get('mexc', 'N/A')),
             coin.get('slug', coin['symbol'].lower()),
-            f"https://coinmarketcap.com/currencies/{coin.get('slug', coin['symbol'].lower())}/"
+            f"https://coinmarketcap.com/currencies/{coin.get('slug', coin['symbol'].lower())}/",
+            lifecycle_price,
+            lifecycle_price,
+            lifecycle_price,
+            lifecycle_price,
+            now,
         ))
     
     def remove_coin(self, symbol: str):
@@ -286,6 +326,7 @@ class ActiveCoinsDatabase(Database):
         now = datetime.now().isoformat()
         
         gecko_id = coin.get('gecko_id') or coin.get('cg_id')
+        current_price = float(coin.get('current_price', 0) or 0)
         
         self.execute('''
             UPDATE active_coins 
@@ -294,6 +335,16 @@ class ActiveCoinsDatabase(Database):
                 gain_7d = ?, gain_30d = ?, uniformity_score = ?,
                 coinbase_volume = ?, kraken_volume = ?, mexc_volume = ?,
                 slug = ?, cmc_url = ?
+                , last_price = CASE WHEN ? > 0 THEN ? ELSE last_price END
+                , peak_price = CASE
+                    WHEN ? > 0 AND (peak_price IS NULL OR peak_price <= 0 OR ? > peak_price) THEN ?
+                    ELSE peak_price
+                END
+                , trough_price = CASE
+                    WHEN ? > 0 AND (trough_price IS NULL OR trough_price <= 0 OR ? < trough_price) THEN ?
+                    ELSE trough_price
+                END
+                , lifecycle_updated_at = ?
             WHERE coin_symbol = ?
         ''', (
             now, now,
@@ -306,16 +357,71 @@ class ActiveCoinsDatabase(Database):
             str(coin.get('exchange_volumes', {}).get('mexc', 'N/A')),
             coin.get('slug', coin['symbol'].lower()),
             f"https://coinmarketcap.com/currencies/{coin.get('slug', coin['symbol'].lower())}/",
+            current_price,
+            current_price,
+            current_price,
+            current_price,
+            current_price,
+            current_price,
+            current_price,
+            current_price,
+            now,
             coin['symbol']
         ))
+
+    def register_exit(self, symbol: str, reason: str = '', cooldown_hours: int = 0):
+        """Persist last exit and cooldown state for a symbol."""
+        now = datetime.now()
+        cooldown_until = now + timedelta(hours=max(0, int(cooldown_hours)))
+        self.execute('''
+            INSERT OR REPLACE INTO cooldown_exits (coin_symbol, last_exit_ts, cooldown_until_ts, exit_reason)
+            VALUES (?, ?, ?, ?)
+        ''', (
+            symbol,
+            now.isoformat(),
+            cooldown_until.isoformat(),
+            str(reason or '').strip(),
+        ))
+
+    def get_recent_exits(self, days: int = 7) -> list[dict[str, Any]]:
+        """Return exits within a time window for digest/reporting."""
+        cutoff = datetime.now() - timedelta(days=max(1, int(days)))
+        cursor = self.execute('''
+            SELECT coin_symbol, last_exit_ts, exit_reason
+            FROM cooldown_exits
+            WHERE last_exit_ts >= ?
+            ORDER BY last_exit_ts DESC
+        ''', (cutoff.isoformat(),))
+        return [
+            {
+                'symbol': row[0],
+                'last_exit_ts': row[1],
+                'exit_reason': row[2] or '',
+            }
+            for row in cursor.fetchall()
+        ]
+
+    def _get_cooldown_until(self, symbol: str) -> Optional[datetime]:
+        cursor = self.execute(
+            'SELECT cooldown_until_ts FROM cooldown_exits WHERE coin_symbol = ?',
+            (symbol,),
+        )
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return None
+        try:
+            return datetime.fromisoformat(str(row[0]))
+        except Exception:
+            return None
     
-    def get_entered_exited(self, current_coins: List[Dict[str, Any]]) -> tuple:
+    def get_entered_exited(self, current_coins: List[Dict[str, Any]], cooldown_hours: int = 0) -> tuple:
         """
         Compare current coins with active coins to find entries and exits.
-        Returns (entered, exited) tuples.
+        Returns (entered, exited, blocked_by_cooldown) tuples.
         Keyed by symbol only per spec §8.1.
         """
         active = self.get_active()
+        now = datetime.now()
         
         # Create set of current coin symbols (not name_symbol pairs)
         current_symbols = {c['symbol'] for c in current_coins}
@@ -323,7 +429,15 @@ class ActiveCoinsDatabase(Database):
         
         # Find entered (in current but not in active)
         entered = []
+        blocked_by_cooldown = []
         for symbol in current_symbols - set(active.keys()):
+            cooldown_until = self._get_cooldown_until(symbol)
+            if cooldown_until and cooldown_until > now:
+                blocked_by_cooldown.append({
+                    'symbol': symbol,
+                    'cooldown_until': cooldown_until.isoformat(),
+                })
+                continue
             coin = current_dict[symbol]
             entered.append(coin)
             self.add_coin(coin)
@@ -332,15 +446,41 @@ class ActiveCoinsDatabase(Database):
         exited = []
         for symbol in set(active.keys()) - current_symbols:
             coin_info = active[symbol]
+            entry_price = float(coin_info.get('entry_price') or 0)
+            peak_price = float(coin_info.get('peak_price') or 0)
+            trough_price = float(coin_info.get('trough_price') or 0)
+            last_price = float(coin_info.get('last_price') or 0)
+
+            lifecycle = {}
+            if entry_price > 0 and last_price > 0:
+                lifecycle['lifecycle_pnl_pct'] = ((last_price - entry_price) / entry_price) * 100.0
+            if entry_price > 0 and peak_price > 0:
+                lifecycle['max_runup_pct'] = ((peak_price - entry_price) / entry_price) * 100.0
+            if entry_price > 0 and trough_price > 0:
+                lifecycle['max_drawdown_pct'] = ((trough_price - entry_price) / entry_price) * 100.0
+            entered_date_raw = str(coin_info.get('entered_date') or '')
+            if entered_date_raw:
+                try:
+                    entered_dt = datetime.fromisoformat(entered_date_raw)
+                except Exception:
+                    try:
+                        entered_dt = datetime.strptime(entered_date_raw, '%Y-%m-%d')
+                    except Exception:
+                        entered_dt = None
+                if entered_dt:
+                    lifecycle['held_days'] = max(0, (now - entered_dt).days)
+
             exited.append({
                 'symbol': coin_info['symbol'],
                 'name': coin_info['name'],
-                'slug': coin_info['slug']
+                'slug': coin_info['slug'],
+                **lifecycle,
             })
             self.remove_coin(symbol)
+            self.register_exit(symbol, reason='No longer qualified', cooldown_hours=cooldown_hours)
         
         # Update remaining active coins
         for symbol in current_symbols & set(active.keys()):
             self.update_coin(current_dict[symbol])
         
-        return entered, exited
+        return entered, exited, blocked_by_cooldown

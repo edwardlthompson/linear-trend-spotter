@@ -76,7 +76,16 @@ class Settings:
             'ARTIFACT_ARCHIVE_DIR': '.archive/auto',
             'NOTIFICATION_INCLUDE_QUALITY_PANEL': True,
             'EXIT_ANALYTICS_FILE': 'exit_reason_analytics.json',
-            'USE_14D_FILTER': False
+            'USE_14D_FILTER': False,
+            'ALERT_COOLDOWN_HOURS': 24,
+            'ANOMALY_ALERTS_ENABLED': True,
+            'ANOMALY_MAX_MISSING_CG_RATIO': 0.35,
+            'ANOMALY_MIN_OHLCV_SUCCESS_RATIO': 0.60,
+            'ANOMALY_MAX_NO_TICKER_RATIO': 0.50,
+            'WEEKLY_DIGEST_ENABLED': True,
+            'WEEKLY_DIGEST_WEEKDAY_UTC': 0,
+            'WEEKLY_DIGEST_HOUR_UTC': 12,
+            'WEEKLY_DIGEST_STATE_FILE': 'weekly_digest_state.json',
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -133,6 +142,8 @@ class Settings:
             'ARTIFACT_HYGIENE_ENABLED',
             'NOTIFICATION_INCLUDE_QUALITY_PANEL',
             'USE_14D_FILTER',
+            'ANOMALY_ALERTS_ENABLED',
+            'WEEKLY_DIGEST_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -155,8 +166,18 @@ class Settings:
             ('BACKTEST_TRAILING_STOP_STEP', 1, 20),
             ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
             ('ARTIFACT_RETENTION_DAYS', 1, 3650),
+            ('ALERT_COOLDOWN_HOURS', 0, 720),
+            ('WEEKLY_DIGEST_WEEKDAY_UTC', 0, 6),
+            ('WEEKLY_DIGEST_HOUR_UTC', 0, 23),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
+
+        for number_key, lower, upper in [
+            ('ANOMALY_MAX_MISSING_CG_RATIO', 0.0, 1.0),
+            ('ANOMALY_MIN_OHLCV_SUCCESS_RATIO', 0.0, 1.0),
+            ('ANOMALY_MAX_NO_TICKER_RATIO', 0.0, 1.0),
+        ]:
+            require_number(number_key, min_value=lower, max_value=upper)
 
         stop_min = int(normalized.get('BACKTEST_TRAILING_STOP_MIN', 0))
         stop_max = int(normalized.get('BACKTEST_TRAILING_STOP_MAX', 20))
@@ -203,7 +224,7 @@ class Settings:
         else:
             normalized['BACKTEST_INDICATORS'] = [str(item).strip() for item in indicators]
 
-        for path_key in ['BACKTEST_CHECKPOINT_FILE', 'BACKTEST_TELEMETRY_FILE', 'ARTIFACT_ARCHIVE_DIR', 'EXIT_ANALYTICS_FILE']:
+        for path_key in ['BACKTEST_CHECKPOINT_FILE', 'BACKTEST_TELEMETRY_FILE', 'ARTIFACT_ARCHIVE_DIR', 'EXIT_ANALYTICS_FILE', 'WEEKLY_DIGEST_STATE_FILE']:
             value = normalized.get(path_key)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{path_key} must be a non-empty string path")
@@ -343,7 +364,7 @@ class Settings:
 
     @property
     def backtest_parallel_workers(self) -> int:
-        return self._config.get('BACKTEST_PARALLEL_WORKERS', 16)
+        return self._config.get('BACKTEST_PARALLEL_WORKERS', 4)
 
     @property
     def backtest_max_coins_per_run(self) -> int:
@@ -373,7 +394,7 @@ class Settings:
 
     @property
     def backtest_trailing_stop_step(self) -> int:
-        return int(self._config.get('BACKTEST_TRAILING_STOP_STEP', 2))
+        return int(self._config.get('BACKTEST_TRAILING_STOP_STEP', 1))
 
     @property
     def backtest_resume_enabled(self) -> bool:
@@ -413,6 +434,43 @@ class Settings:
     @property
     def exit_analytics_file(self) -> Path:
         raw_path = str(self._config.get('EXIT_ANALYTICS_FILE', 'exit_reason_analytics.json')).strip()
+        return self.DATA_DIR / raw_path
+
+    @property
+    def alert_cooldown_hours(self) -> int:
+        return int(self._config.get('ALERT_COOLDOWN_HOURS', 24))
+
+    @property
+    def anomaly_alerts_enabled(self) -> bool:
+        return bool(self._config.get('ANOMALY_ALERTS_ENABLED', True))
+
+    @property
+    def anomaly_max_missing_cg_ratio(self) -> float:
+        return float(self._config.get('ANOMALY_MAX_MISSING_CG_RATIO', 0.35))
+
+    @property
+    def anomaly_min_ohlcv_success_ratio(self) -> float:
+        return float(self._config.get('ANOMALY_MIN_OHLCV_SUCCESS_RATIO', 0.60))
+
+    @property
+    def anomaly_max_no_ticker_ratio(self) -> float:
+        return float(self._config.get('ANOMALY_MAX_NO_TICKER_RATIO', 0.50))
+
+    @property
+    def weekly_digest_enabled(self) -> bool:
+        return bool(self._config.get('WEEKLY_DIGEST_ENABLED', True))
+
+    @property
+    def weekly_digest_weekday_utc(self) -> int:
+        return int(self._config.get('WEEKLY_DIGEST_WEEKDAY_UTC', 0))
+
+    @property
+    def weekly_digest_hour_utc(self) -> int:
+        return int(self._config.get('WEEKLY_DIGEST_HOUR_UTC', 12))
+
+    @property
+    def weekly_digest_state_file(self) -> Path:
+        raw_path = str(self._config.get('WEEKLY_DIGEST_STATE_FILE', 'weekly_digest_state.json')).strip()
         return self.DATA_DIR / raw_path
 
     @property
