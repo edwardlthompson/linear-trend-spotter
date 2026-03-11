@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from .engine import run_backtest
@@ -35,6 +36,14 @@ def trailing_stop_values(min_stop: int = 0, max_stop: int = 20, step: int = 1) -
     return list(range(min_stop, max_stop + 1, step))
 
 
+def _signal_fingerprint(buy_signals: pd.Series, sell_signals: pd.Series) -> tuple[int, bytes, bytes]:
+    buy_array = buy_signals.to_numpy(dtype=bool)
+    sell_array = sell_signals.to_numpy(dtype=bool)
+    buy_bits = np.packbits(buy_array.astype(np.uint8)).tobytes()
+    sell_bits = np.packbits(sell_array.astype(np.uint8)).tobytes()
+    return len(buy_array), buy_bits, sell_bits
+
+
 def optimize_indicator(
     frame: pd.DataFrame,
     indicator: str,
@@ -55,12 +64,23 @@ def optimize_indicator(
     evaluated = []
     skipped_combos = 0
     total_runs = 0
+    signal_cache: dict[tuple[int, bytes, bytes], dict | None] = {}
 
     for params in param_combos:
         try:
             buy_signals, sell_signals = generate_indicator_signals(indicator, frame, params)
         except Exception:
             skipped_combos += 1
+            continue
+
+        cache_key = _signal_fingerprint(buy_signals, sell_signals)
+        cached_template = signal_cache.get(cache_key)
+        if cached_template is not None:
+            best_for_combo = dict(cached_template)
+            best_for_combo["params"] = params
+            evaluated.append(best_for_combo)
+            continue
+        if cache_key in signal_cache and signal_cache[cache_key] is None:
             continue
 
         best_for_combo = None
@@ -97,7 +117,10 @@ def optimize_indicator(
                 best_for_combo = row
 
         if best_for_combo is not None:
+            signal_cache[cache_key] = dict(best_for_combo)
             evaluated.append(best_for_combo)
+        else:
+            signal_cache[cache_key] = None
 
     best = select_best_result(evaluated)
 

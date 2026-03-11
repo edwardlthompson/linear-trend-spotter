@@ -36,8 +36,13 @@ def run_backtest(
         else pd.Series(False, index=frame.index)
     )
 
-    first_timestamp = frame.index[0]
-    first_close = float(frame.iloc[0]["close"])
+    index = frame.index
+    close_values = frame["close"].astype(float).to_numpy()
+    high_values = frame["high"].astype(float).to_numpy()
+    low_values = frame["low"].astype(float).to_numpy()
+
+    first_timestamp = index[0]
+    first_close = float(close_values[0])
 
     entry_notional = float(config.starting_capital)
     entry_fee = entry_notional * config.side_fee_rate
@@ -51,15 +56,19 @@ def run_backtest(
 
     trades: list[Trade] = []
 
-    previous_buy_signal = bool(aligned_buy.iloc[0]) if len(aligned_buy) > 0 else False
+    buy_values = aligned_buy.to_numpy(dtype=bool)
+    sell_values = aligned_sell.to_numpy(dtype=bool)
 
-    for index_position, (timestamp, row) in enumerate(frame.iterrows()):
-        close_price = float(row["close"])
-        high_price = float(row["high"])
-        low_price = float(row["low"])
+    previous_buy_signal = bool(buy_values[0]) if len(buy_values) > 0 else False
 
-        buy_signal = bool(aligned_buy.loc[timestamp])
-        sell_signal = bool(aligned_sell.loc[timestamp])
+    for index_position in range(len(index)):
+        timestamp = index[index_position]
+        close_price = float(close_values[index_position])
+        high_price = float(high_values[index_position])
+        low_price = float(low_values[index_position])
+
+        buy_signal = bool(buy_values[index_position])
+        sell_signal = bool(sell_values[index_position])
 
         new_buy_edge = buy_signal and not previous_buy_signal
 
@@ -121,7 +130,7 @@ def run_backtest(
         previous_buy_signal = buy_signal
 
     if position_qty > 0:
-        final_close = float(frame.iloc[-1]["close"])
+        final_close = float(close_values[-1])
         exit_notional = position_qty * final_close
         exit_fee = exit_notional * config.side_fee_rate
         cash = exit_notional - exit_fee
@@ -134,7 +143,7 @@ def run_backtest(
                 entry_price=entry_price,
                 entry_fee=entry_fee,
                 quantity=position_qty,
-                exit_time=str(frame.index[-1]),
+                exit_time=str(index[-1]),
                 exit_price=final_close,
                 exit_fee=exit_fee,
                 pnl_dollars=(position_qty * final_close - exit_fee) - invested_notional,
