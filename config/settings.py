@@ -63,6 +63,10 @@ class Settings:
             'BACKTEST_PARALLEL_WORKERS': 16,
             'BACKTEST_MAX_COINS_PER_RUN': 0,
             'BACKTEST_TIMEFRAMES': ['1h', '4h', '1d'],
+            'BACKTEST_INDICATORS': [],
+            'BACKTEST_TRAILING_STOP_MIN': 0,
+            'BACKTEST_TRAILING_STOP_MAX': 20,
+            'BACKTEST_TRAILING_STOP_STEP': 2,
             'BACKTEST_RESUME_ENABLED': True,
             'BACKTEST_CHECKPOINT_FILE': 'backtest_checkpoint.json',
             'BACKTEST_TELEMETRY_FILE': 'backtest_telemetry.jsonl',
@@ -146,10 +150,18 @@ class Settings:
             ('BACKTEST_MAX_PARAM_COMBOS', 1, 5000),
             ('BACKTEST_PARALLEL_WORKERS', 1, 32),
             ('BACKTEST_MAX_COINS_PER_RUN', 0, 10000),
+            ('BACKTEST_TRAILING_STOP_MIN', 0, 100),
+            ('BACKTEST_TRAILING_STOP_MAX', 0, 100),
+            ('BACKTEST_TRAILING_STOP_STEP', 1, 20),
             ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
             ('ARTIFACT_RETENTION_DAYS', 1, 3650),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
+
+        stop_min = int(normalized.get('BACKTEST_TRAILING_STOP_MIN', 0))
+        stop_max = int(normalized.get('BACKTEST_TRAILING_STOP_MAX', 20))
+        if stop_max < stop_min:
+            errors.append('BACKTEST_TRAILING_STOP_MAX must be >= BACKTEST_TRAILING_STOP_MIN')
 
         require_number('BACKTEST_STARTING_CAPITAL', min_value=1.0)
         require_number('BACKTEST_FEE_BPS_ROUND_TRIP', min_value=0.0, max_value=1000.0)
@@ -182,6 +194,14 @@ class Settings:
                 errors.append('BACKTEST_TIMEFRAMES supports only: 1h, 4h, 1d')
             else:
                 normalized['BACKTEST_TIMEFRAMES'] = normalized_tfs
+
+        indicators = normalized.get('BACKTEST_INDICATORS', [])
+        if not isinstance(indicators, list):
+            errors.append('BACKTEST_INDICATORS must be a list')
+        elif any(not isinstance(item, str) or not item.strip() for item in indicators):
+            errors.append('BACKTEST_INDICATORS must contain non-empty strings only')
+        else:
+            normalized['BACKTEST_INDICATORS'] = [str(item).strip() for item in indicators]
 
         for path_key in ['BACKTEST_CHECKPOINT_FILE', 'BACKTEST_TELEMETRY_FILE', 'ARTIFACT_ARCHIVE_DIR', 'EXIT_ANALYTICS_FILE']:
             value = normalized.get(path_key)
@@ -335,6 +355,25 @@ class Settings:
         if isinstance(values, list) and values:
             return [str(item).lower() for item in values]
         return ['1h', '4h', '1d']
+
+    @property
+    def backtest_indicators(self) -> list:
+        values = self._config.get('BACKTEST_INDICATORS', [])
+        if isinstance(values, list):
+            return [str(item).strip() for item in values if str(item).strip()]
+        return []
+
+    @property
+    def backtest_trailing_stop_min(self) -> int:
+        return int(self._config.get('BACKTEST_TRAILING_STOP_MIN', 0))
+
+    @property
+    def backtest_trailing_stop_max(self) -> int:
+        return int(self._config.get('BACKTEST_TRAILING_STOP_MAX', 20))
+
+    @property
+    def backtest_trailing_stop_step(self) -> int:
+        return int(self._config.get('BACKTEST_TRAILING_STOP_STEP', 2))
 
     @property
     def backtest_resume_enabled(self) -> bool:

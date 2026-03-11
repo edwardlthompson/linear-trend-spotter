@@ -13,6 +13,7 @@ cd "$PROJECT_DIR"
 
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Render worker started" | tee -a "$LOG_FILE"
 echo "PROJECT_DIR=$PROJECT_DIR DATA_DIR=$DATA_DIR INTERVAL=${SCAN_INTERVAL_SECONDS}s" | tee -a "$LOG_FILE"
+echo "RENDER_GIT_BRANCH=${RENDER_GIT_BRANCH:-unknown} RENDER_GIT_COMMIT=${RENDER_GIT_COMMIT:-unknown}" | tee -a "$LOG_FILE"
 
 while true; do
   started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"

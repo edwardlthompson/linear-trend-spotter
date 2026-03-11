@@ -128,11 +128,15 @@ def _optimize_coin_task(
     symbol: str,
     gecko_id: str | None,
     timeframes: list[str],
+    indicators: list[str],
     db_path: str,
     cache_age_hours: int,
     max_param_combos: int,
     starting_capital: float,
     fee_bps_round_trip: float,
+    trailing_stop_min: int,
+    trailing_stop_max: int,
+    trailing_stop_step: int,
 ) -> dict[str, Any]:
     cache = PriceCache(Path(db_path))
     loader = BacktestDataLoader(cache=cache, max_cache_age_hours=cache_age_hours)
@@ -177,7 +181,7 @@ def _optimize_coin_task(
                 }
             )
 
-            for indicator in SIGNAL_REGISTRY.keys():
+            for indicator in indicators:
                 try:
                     summary = optimize_indicator(
                         frame=loaded.frame,
@@ -186,6 +190,9 @@ def _optimize_coin_task(
                         max_param_combos=max_param_combos,
                         starting_capital=starting_capital,
                         fee_bps_round_trip=fee_bps_round_trip,
+                        trailing_stop_min=trailing_stop_min,
+                        trailing_stop_max=trailing_stop_max,
+                        trailing_stop_step=trailing_stop_step,
                     )
                 except Exception as exc:
                     skipped.append(
@@ -297,6 +304,14 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
     telemetry_path = settings.backtest_telemetry_file
 
     timeframes = settings.backtest_timeframes
+    configured_indicators = settings.backtest_indicators
+    indicators = [name for name in configured_indicators if name in SIGNAL_REGISTRY] if configured_indicators else list(SIGNAL_REGISTRY.keys())
+    if not indicators:
+        indicators = list(SIGNAL_REGISTRY.keys())
+    stop_min = int(settings.backtest_trailing_stop_min)
+    stop_max = int(settings.backtest_trailing_stop_max)
+    stop_step = int(settings.backtest_trailing_stop_step)
+    stop_count = len(range(stop_min, stop_max + 1, stop_step))
     max_failure_samples = int(settings.backtest_failure_samples_limit)
 
     summary: dict[str, Any] = {
@@ -329,6 +344,10 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
             considered=len(final_results),
             worker_cap=settings.backtest_parallel_workers,
             timeframes=timeframes,
+            indicators=indicators,
+            trailing_stop_min=stop_min,
+            trailing_stop_max=stop_max,
+            trailing_stop_step=stop_step,
         ),
     )
 
@@ -409,13 +428,14 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
     worker_count = max(1, min(settings.backtest_parallel_workers, len(pending_coins)))
 
     expected_runs_per_coin = (
-        len(timeframes) * (1 + (len(SIGNAL_REGISTRY) * int(settings.backtest_max_param_combos) * 21))
+        len(timeframes) * (1 + (len(indicators) * int(settings.backtest_max_param_combos) * stop_count))
     )
     print(
         "[BACKTEST] "
         f"starting run | eligible={len(eligible_symbols)} pending={len(pending_coins)} "
-        f"workers={worker_count} timeframes={timeframes} indicators={len(SIGNAL_REGISTRY)} "
+        f"workers={worker_count} timeframes={timeframes} indicators={len(indicators)} "
         f"max_param_combos={int(settings.backtest_max_param_combos)} "
+        f"trailing_stops={stop_count} ({stop_min}-{stop_max} step {stop_step}) "
         f"est_max_runs_per_coin={expected_runs_per_coin}",
         flush=True,
     )
@@ -461,11 +481,15 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     symbol,
                     coin.get("gecko_id"),
                     timeframes,
+                    indicators,
                     str(settings.db_paths["scanner"]),
                     int(settings.cache_price_hours),
                     int(settings.backtest_max_param_combos),
                     float(settings.backtest_starting_capital),
                     float(settings.backtest_fee_bps_round_trip),
+                    stop_min,
+                    stop_max,
+                    stop_step,
                 )
                 summary["coins_processed"] += 1
                 summary["results"].extend(result.get("rows", []))
@@ -568,11 +592,15 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     coin["symbol"],
                     coin.get("gecko_id"),
                     timeframes,
+                    indicators,
                     str(settings.db_paths["scanner"]),
                     int(settings.cache_price_hours),
                     int(settings.backtest_max_param_combos),
                     float(settings.backtest_starting_capital),
                     float(settings.backtest_fee_bps_round_trip),
+                    stop_min,
+                    stop_max,
+                    stop_step,
                 ): coin["symbol"]
                 for coin in pending_coins
             }

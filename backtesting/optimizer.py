@@ -42,12 +42,15 @@ def optimize_indicator(
     max_param_combos: int = 100,
     starting_capital: float = 1000.0,
     fee_bps_round_trip: float = 52.0,
+    trailing_stop_min: int = 0,
+    trailing_stop_max: int = 20,
+    trailing_stop_step: int = 1,
 ) -> OptimizationSummary:
     if max_param_combos <= 0:
         raise ValueError("max_param_combos must be > 0")
 
     param_combos = generate_parameter_combinations(indicator, max_combos=max_param_combos)
-    stop_values = trailing_stop_values(0, 20, 1)
+    stop_values = trailing_stop_values(trailing_stop_min, trailing_stop_max, trailing_stop_step)
 
     evaluated = []
     skipped_combos = 0
