@@ -52,35 +52,6 @@ class MessageFormatter:
             return compact[:53] + "..."
         return compact
 
-    
-    @staticmethod
-    def _format_quality_panel(coin: Dict) -> str:
-        quality = coin.get('quality_panel') or {}
-        if not isinstance(quality, dict) or not quality:
-            return ""
-
-        lines = ["\n📎 Data Quality:"]
-
-        data_source = quality.get('price_source')
-        if data_source:
-            lines.append(f"   Source: {data_source}")
-
-        candles = quality.get('candles_1h_lookback')
-        if isinstance(candles, int) and candles > 0:
-            lines.append(f"   1h candles: {candles}")
-
-        coverage = quality.get('backtest_coverage')
-        if coverage:
-            lines.append(f"   Backtest: {coverage}")
-
-        confidence = quality.get('confidence')
-        if confidence:
-            lines.append(f"   Confidence: {confidence}")
-
-        if len(lines) == 1:
-            return ""
-        return "\n".join(lines)
-
     @staticmethod
     def format_entry(coin: Dict) -> str:
         """
@@ -108,6 +79,34 @@ class MessageFormatter:
         # Uniformity score
         caption += f"📈 Uniformity Score: {score:.0f}/100\n\n"
 
+        current_rank = coin.get('current_rank')
+        previous_rank = coin.get('previous_rank')
+        rank_status = coin.get('rank_status')
+        rank_delta = coin.get('rank_delta')
+        if isinstance(current_rank, int):
+            if isinstance(previous_rank, int) and rank_status in {'up', 'down', 'flat'}:
+                arrow = '↑' if rank_status == 'up' else '↓' if rank_status == 'down' else '→'
+                change_text = '' if rank_delta in (None, 0) else f" ({abs(int(rank_delta))})"
+                caption += f"🏁 Rank: #{current_rank} {arrow} from #{previous_rank}{change_text}\n"
+            else:
+                caption += f"🏁 Rank: #{current_rank} (new)\n"
+
+        signal_age_label = coin.get('signal_age_label')
+        signal_indicator = coin.get('signal_age_indicator')
+        if signal_age_label and signal_indicator:
+            caption += f"⏱️ Best Strategy Signal: {signal_indicator} • {signal_age_label}\n"
+
+        volume_acceleration_pct = coin.get('volume_acceleration_pct')
+        volume_window_days = coin.get('volume_acceleration_window_days')
+        if isinstance(volume_acceleration_pct, (int, float)) and isinstance(volume_window_days, int):
+            caption += f"🚀 Volume Acceleration: {float(volume_acceleration_pct):+.0f}% vs prior {volume_window_days}d avg\n"
+
+        if any(
+            value is not None
+            for value in [current_rank, signal_age_label, volume_acceleration_pct]
+        ):
+            caption += "\n"
+
         # Total CMC 24h volume
         total_volume_24h = coin.get('volume_24h', 0)
         if isinstance(total_volume_24h, (int, float)) and total_volume_24h > 0:
@@ -132,12 +131,6 @@ class MessageFormatter:
                 caption += f"{exchange_emoji} {exchange.title()}: ${volume:,.0f}\n"
             else:
                 caption += f"{exchange_emoji} {exchange.title()}: {volume}\n"
-
-        quality_block = MessageFormatter._format_quality_panel(coin)
-        if quality_block:
-            caption += quality_block
-
-        caption += "\n🧪 Backtest ranked strategies are included in the combined chart image."
         
         return caption
     

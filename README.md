@@ -62,7 +62,9 @@ Qualification determines which coins enter the **backtesting stage** and therefo
   - Coin name/symbol with CMC link
   - 7d and 30d gains
   - Uniformity score
-  - Data quality confidence score
+  - Rank movement vs previous scan
+  - Signal age for the top-ranked strategy
+  - Volume acceleration vs recent daily baseline
   - **Total 24h volume (CMC)**
   - Exchange-level volumes (Coinbase/Kraken/MEXC)
 - Sends a **single combined image** (one ping) containing:
@@ -74,22 +76,11 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 - If Chart-IMG fails, chart generation falls back to cached `ohlcv_cache` 1h data
 - If no chart can be built, message gracefully degrades to text-only
 
-#### Confidence score (in notification text)
+Notification enhancement details:
 
-The confidence score is a heuristic quality signal (not a prediction probability). It is designed to summarize data reliability + strategy support for the current alert.
-
-- Formula (clamped to 0–100):
-  - `0.55 × uniformity_score + source_bonus + candle_bonus + edge_bonus`
-- `source_bonus` rewards stronger data-source path:
-  - CoinGecko cache/api (higher), price cache (mid), Polygon fallback (lower), unknown (lowest)
-- `candle_bonus` rewards deeper hourly history coverage:
-  - highest bonus near full 30d hourly coverage, lower bonus for thinner history
-- `edge_bonus` rewards strategy edge versus B&H:
-  - higher bonus when top strategy materially outperforms buy-and-hold
-- Label bands:
-  - `High` for score `>= 80`
-  - `Medium` for score `>= 60` and `< 80`
-  - `Low` for score `< 60`
+- **Rank movement:** compares current rank to prior scan and shows direction (`↑`, `↓`, `→`) and step change.
+- **Signal age:** computes how many candles ago the latest buy signal fired for the top strategy row used in the alert.
+- **Volume acceleration:** compares most recent 24h volume (from cached/fetched hourly OHLCV) versus recent daily baseline and reports percentage delta.
 
 ### Exit notifications
 
@@ -158,7 +149,7 @@ Available parameters (defaults from `config/settings.py`):
 | `BACKTEST_STARTING_CAPITAL` | `1000` | Starting capital per simulated strategy run |
 | `BACKTEST_FEE_BPS_ROUND_TRIP` | `52` | Round-trip taker fee in bps |
 | `BACKTEST_MAX_PARAM_COMBOS` | `100` | Max param combos per indicator/timeframe |
-| `BACKTEST_PARALLEL_WORKERS` | `16` | Process workers for per-coin backtesting |
+| `BACKTEST_PARALLEL_WORKERS` | `4` | Process workers for per-coin backtesting |
 | `BACKTEST_MAX_COINS_PER_RUN` | `0` | Safety cap for eligible coins per scanner run (`0` = unlimited) |
 | `BACKTEST_TIMEFRAMES` | `['1h','4h','1d']` | Timeframes to evaluate for each coin |
 | `BACKTEST_RESUME_ENABLED` | `true` | Resume interrupted backtests using checkpoint state |
@@ -168,7 +159,7 @@ Available parameters (defaults from `config/settings.py`):
 | `ARTIFACT_HYGIENE_ENABLED` | `true` | Enable startup archival of old generated artifacts |
 | `ARTIFACT_RETENTION_DAYS` | `7` | Age threshold (days) before archiving matched artifacts |
 | `ARTIFACT_ARCHIVE_DIR` | `.archive/auto` | Archive target directory for hygiene moves |
-| `NOTIFICATION_INCLUDE_QUALITY_PANEL` | `true` | Include data-quality panel in entry caption/image |
+| `NOTIFICATION_INCLUDE_QUALITY_PANEL` | `true` | Legacy compatibility flag (quality panel text is no longer rendered in entry notifications) |
 | `EXIT_ANALYTICS_FILE` | `exit_reason_analytics.json` | Cumulative exit-reason analytics artifact |
 | `USE_14D_FILTER` | `false` | Reserved feature flag |
 

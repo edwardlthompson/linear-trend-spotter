@@ -24,8 +24,10 @@ from processors.uniformity_filter import UniformityFilter
 from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
 from notifications.image_renderer import build_fallback_chart_image, build_combined_notification_image
+from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
+from backtesting.signals import generate_indicator_signals
 from utils.metrics import metrics, timed_block
 from utils.runtime_hygiene import run_artifact_hygiene, update_exit_reason_analytics
 from utils.logger import app_logger
@@ -80,63 +82,138 @@ def aggregate_daily_bars_from_hourly(hourly_rows):
     return daily_bars
 
 
-def _build_quality_panel(coin: dict) -> dict:
-    score = float(coin.get('uniformity_score', 0.0) or 0.0)
-    source = str(coin.get('ohlcv_source', 'unknown'))
-    candles = int(coin.get('quality_candles', 0) or 0)
+def _attach_rank_movement(final_results: list[dict], previous_rank_map: dict[str, int]) -> None:
+    for rank, coin in enumerate(final_results, start=1):
+        symbol = str(coin.get('symbol', '')).upper()
+        previous_rank = previous_rank_map.get(symbol)
+        coin['current_rank'] = rank
+        coin['previous_rank'] = previous_rank
+        if previous_rank is None:
+            coin['rank_status'] = 'new'
+            coin['rank_delta'] = None
+        else:
+            delta = previous_rank - rank
+            coin['rank_delta'] = delta
+            if delta > 0:
+                coin['rank_status'] = 'up'
+            elif delta < 0:
+                coin['rank_status'] = 'down'
+            else:
+                coin['rank_status'] = 'flat'
 
-    source_bonus_map = {
-        'coingecko_cache': 20,
-        'coingecko_api': 18,
-        'price_cache': 14,
-        'polygon_cache': 12,
-        'polygon_api': 10,
-    }
-    source_bonus = source_bonus_map.get(source, 6)
 
-    if candles >= 720:
-        candle_bonus = 20
-    elif candles >= 500:
-        candle_bonus = 15
-    elif candles >= 300:
-        candle_bonus = 10
-    elif candles > 0:
-        candle_bonus = 6
+def _format_signal_age_label(bars_ago: int, timeframe: str) -> str:
+    normalized = str(timeframe or '1h').lower()
+    hours_per_bar = {
+        '1h': 1,
+        '4h': 4,
+        '1d': 24,
+        'daily': 24,
+    }.get(normalized, 1)
+
+    if bars_ago <= 0:
+        return f"current candle ({normalized})"
+
+    approx_hours = bars_ago * hours_per_bar
+    if approx_hours < 24:
+        approx_label = f"~{approx_hours}h"
     else:
-        candle_bonus = 0
+        approx_days = approx_hours / 24
+        approx_label = f"~{approx_days:.1f}d" if approx_days % 1 else f"~{int(approx_days)}d"
 
-    strategies = coin.get('backtest_top_strategies', []) or []
-    buy_hold = coin.get('backtest_buy_hold') or {}
-    best_net = None
-    if strategies:
-        try:
-            best_net = max(float(row.get('net_pct', float('-inf'))) for row in strategies)
-        except Exception:
-            best_net = None
+    candle_label = 'candle' if bars_ago == 1 else 'candles'
+    return f"{bars_ago} {candle_label} ago on {normalized} ({approx_label})"
+
+
+def _attach_signal_age(coin: dict, loader: BacktestDataLoader) -> None:
+    strategies = coin.get('backtest_top_strategies') or []
+    if not strategies:
+        return
+
+    best_strategy = strategies[0]
+    indicator = str(best_strategy.get('indicator', '')).strip()
+    timeframe = str(best_strategy.get('timeframe', '1h')).strip().lower()
+    params = best_strategy.get('params') or {}
+
+    if not indicator or indicator == 'B&H':
+        return
+
+    loaded = loader.load(
+        symbol=str(coin.get('symbol', '')).upper(),
+        timeframe=timeframe,
+        days=30,
+        gecko_id=coin.get('gecko_id') or coin.get('cg_id'),
+    )
+    if loaded.frame is None or loaded.frame.empty:
+        return
 
     try:
-        bh_net = float(buy_hold.get('net_pct')) if buy_hold else None
-    except Exception:
-        bh_net = None
+        buy_signals, sell_signals = generate_indicator_signals(indicator=indicator, frame=loaded.frame, params=params)
+    except Exception as signal_error:
+        app_logger.warning(f"⚠️ Signal age skipped for {coin.get('symbol', '?')}: {signal_error}")
+        return
 
-    edge_bonus = 0
-    if best_net is not None and bh_net is not None:
-        if best_net - bh_net >= 10:
-            edge_bonus = 18
-        elif best_net - bh_net >= 0:
-            edge_bonus = 10
-        else:
-            edge_bonus = 2
+    recent_buy_index = buy_signals[buy_signals].index
+    if len(recent_buy_index) == 0:
+        return
 
-    confidence_score = int(round(min(100.0, max(0.0, score * 0.55 + source_bonus + candle_bonus + edge_bonus))))
-    confidence = 'High' if confidence_score >= 80 else 'Medium' if confidence_score >= 60 else 'Low'
+    last_buy_ts = recent_buy_index[-1]
+    location = loaded.frame.index.get_indexer([last_buy_ts])
+    if len(location) == 0 or int(location[0]) < 0:
+        return
 
-    return {
-        'price_source': source,
-        'candles_1h_lookback': candles,
-        'backtest_coverage': f"{len(strategies)}/5 strategies" if strategies else 'No strategy rows',
-        'confidence': f"{confidence} ({confidence_score}/100)",
-    }
+    bars_ago = max(0, len(loaded.frame.index) - 1 - int(location[0]))
+    last_sell_index = sell_signals[sell_signals].index
+    signal_is_active = True
+    if len(last_sell_index) > 0:
+        signal_is_active = bool(last_sell_index[-1] < last_buy_ts)
+
+    coin['signal_age_bars'] = bars_ago
+    coin['signal_age_timeframe'] = timeframe
+    coin['signal_age_label'] = _format_signal_age_label(bars_ago, timeframe)
+    coin['signal_age_indicator'] = indicator
+    coin['signal_age_active'] = signal_is_active
+
+
+def _attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
+    loaded = loader.load(
+        symbol=str(coin.get('symbol', '')).upper(),
+        timeframe='1h',
+        days=10,
+        gecko_id=coin.get('gecko_id') or coin.get('cg_id'),
+    )
+    if loaded.frame is None or loaded.frame.empty:
+        return
+
+    volume = loaded.frame['volume'].astype(float)
+    if len(volume) < 48:
+        return
+
+    current_window = volume.iloc[-24:] if len(volume) >= 24 else volume
+    previous_volume = volume.iloc[:-24]
+    prior_window_count = min(7, len(previous_volume) // 24)
+    if prior_window_count <= 0:
+        return
+
+    baseline_hours = previous_volume.iloc[-(prior_window_count * 24):]
+    baseline_daily_totals = [
+        float(baseline_hours.iloc[start:start + 24].sum())
+        for start in range(0, len(baseline_hours), 24)
+        if len(baseline_hours.iloc[start:start + 24]) == 24
+    ]
+    if not baseline_daily_totals:
+        return
+
+    current_24h_volume = float(current_window.sum())
+    baseline_avg = float(sum(baseline_daily_totals) / len(baseline_daily_totals))
+    if baseline_avg <= 0:
+        return
+
+    acceleration_pct = ((current_24h_volume - baseline_avg) / baseline_avg) * 100.0
+    coin['volume_acceleration_pct'] = acceleration_pct
+    coin['volume_acceleration_window_days'] = len(baseline_daily_totals)
+    coin['volume_recent_24h'] = current_24h_volume
+    coin['volume_baseline_24h'] = baseline_avg
 
 def run_scanner():
     """Main orchestration function"""
@@ -514,9 +591,15 @@ def run_scanner():
         # ============================================================
         # STEP 9: Sort and process final results
         # ============================================================
-        final_results = sorted(uniformity_passed, 
-                              key=lambda x: x['uniformity_score'], 
-                              reverse=True)
+        final_results = sorted(
+            uniformity_passed,
+            key=lambda x: (
+                -float(x.get('uniformity_score', 0.0) or 0.0),
+                -float((x.get('gains') or {}).get('30d', 0.0) or 0.0),
+                str(x.get('symbol', '')).upper(),
+            ),
+        )
+        _attach_rank_movement(final_results, history_db.get_latest_rank_map())
 
         # ============================================================
         # STEP 9.1: Optional backtesting run (feature-flagged)
@@ -591,6 +674,11 @@ def run_scanner():
                     details = notification_rows_for_symbol(fallback_summary, symbol, top_n=5)
                     coin['backtest_top_strategies'] = details.get('top_strategies', [])
                     coin['backtest_buy_hold'] = details.get('buy_hold')
+
+            notification_loader = BacktestDataLoader(cache=cache, max_cache_age_hours=settings.cache_price_hours)
+            for coin in entered:
+                _attach_signal_age(coin, notification_loader)
+                _attach_volume_acceleration(coin, notification_loader)
 
         # Attach precise exit reasons based on first failed pipeline stage
         for coin in exited:
@@ -676,10 +764,6 @@ def run_scanner():
         if telegram and entered and settings.entry_notifications:
             with timed_block('notifications'):
                 app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
-
-                if settings.notification_include_quality_panel:
-                    for coin in entered:
-                        coin['quality_panel'] = _build_quality_panel(coin)
                 
                 for coin in entered:
                     app_logger.info(f"   🟢 {coin['symbol']}")

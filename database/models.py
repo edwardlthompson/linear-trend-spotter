@@ -132,6 +132,27 @@ class HistoryDatabase(Database):
                 f"https://coinmarketcap.com/currencies/{coin['slug']}/"
             ))
 
+    def get_latest_rank_map(self) -> Dict[str, int]:
+        """Return symbol->rank map for the most recent saved scan."""
+        cursor = self.execute('SELECT MAX(scan_date) FROM scan_history')
+        row = cursor.fetchone()
+        latest_scan_date = row[0] if row else None
+        if not latest_scan_date:
+            return {}
+
+        cursor = self.execute('''
+            SELECT coin_symbol
+            FROM scan_history
+            WHERE scan_date = ?
+            ORDER BY uniformity_score DESC, gain_30d DESC, coin_symbol ASC
+        ''', (latest_scan_date,))
+
+        return {
+            str(symbol_row[0]).upper(): index
+            for index, symbol_row in enumerate(cursor.fetchall(), start=1)
+            if symbol_row and symbol_row[0]
+        }
+
 class ActiveCoinsDatabase(Database):
     """Active coins tracking database"""
     
