@@ -82,6 +82,28 @@ Notification enhancement details:
 - **Signal age:** computes how many candles ago the latest buy signal fired for the top strategy row used in the alert.
 - **Volume acceleration:** compares most recent 24h volume (from cached/fetched hourly OHLCV) versus recent daily baseline and reports percentage delta.
 
+Example entry notification excerpt:
+
+```text
+🟢 DOGE (Dogecoin)
+
+📊 Gains:
+  7d: +12.4%
+  30d: +48.7%
+
+📈 Uniformity Score: 71/100
+
+🏁 Rank: #3 ↑ from #8 (5)
+⏱️ Best Strategy Signal: RSI • 2 candles ago on 4h (~8h)
+🚀 Volume Acceleration: +37% vs prior 7d avg
+
+💵 Total 24h Volume (CMC): $1,234,567,890
+💰 Exchange Volumes:
+🏛️ Coinbase: $210,000,000
+🐙 Kraken: $97,000,000
+🔥 MEXC: $84,000,000
+```
+
 ### Exit notifications
 
 - Sent once when a previously active coin leaves qualification
