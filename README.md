@@ -122,6 +122,18 @@ Example entry notification excerpt:
   - max drawdown since entry
   - hold duration in days
 
+### Per-scan active ranking summary
+
+- Sent on **every scan** when Telegram is enabled (not only no-change cycles)
+- Includes all currently active qualified coins, ordered by current rank
+- Each row includes:
+  - rank and movement arrow (`↑`, `↓`, `→`, `🆕`)
+  - percentage gain since first announcement (entry baseline)
+  - percentage gain since the prior hourly update (previous active-state price baseline)
+- Long lists are chunked into multiple Telegram messages to stay within message-size limits
+- Runtime includes an explicit marker log line:
+  - `📌 ACTIVE_RANKING_SUMMARY_SENT messages=<sent>/<total> active_coins=<count>`
+
 ### Cooldown re-entry policy
 
 - Exited symbols enter a cooldown window (`ALERT_COOLDOWN_HOURS`, default `24`)
@@ -177,6 +189,7 @@ Available parameters (defaults from `config/settings.py`):
 | `TOP_COINS_LIMIT` | `2500` | General list limit control |
 | `ENTRY_NOTIFICATIONS` | `true` | Enable entry alerts |
 | `EXIT_NOTIFICATIONS` | `true` | Enable exit alerts |
+| `NO_CHANGE_NOTIFICATIONS` | `false` | Legacy no-change ping toggle (per-scan active ranking summary sends when Telegram is enabled) |
 | `RETRY_MAX_ATTEMPTS` | `3` | Generic retry attempts |
 | `RETRY_DELAY` | `2` | Base retry delay |
 | `RETRY_BACKOFF` | `2` | Retry backoff factor |

@@ -102,6 +102,51 @@ def _attach_rank_movement(final_results: list[dict], previous_rank_map: dict[str
                 coin['rank_status'] = 'flat'
 
 
+def _pct_change(current_value: float, baseline_value: float) -> float | None:
+    try:
+        current = float(current_value)
+        baseline = float(baseline_value)
+    except Exception:
+        return None
+    if baseline <= 0:
+        return None
+    return ((current - baseline) / baseline) * 100.0
+
+
+def _build_active_ranking_rows(
+    final_results: list[dict],
+    active_before_update: dict[str, dict],
+    active_after_update: dict[str, dict],
+) -> list[dict]:
+    rows: list[dict] = []
+    active_symbols = set(active_after_update.keys())
+
+    for coin in final_results:
+        symbol = str(coin.get('symbol', '')).upper()
+        if not symbol or symbol not in active_symbols:
+            continue
+
+        current_price = float(coin.get('current_price', 0.0) or 0.0)
+        before_state = active_before_update.get(symbol, {})
+        after_state = active_after_update.get(symbol, {})
+
+        gain_since_entry_pct = _pct_change(current_price, float(after_state.get('entry_price', 0.0) or 0.0))
+        gain_since_last_update_pct = _pct_change(current_price, float(before_state.get('last_price', 0.0) or 0.0))
+
+        rows.append(
+            {
+                'symbol': symbol,
+                'current_rank': coin.get('current_rank'),
+                'rank_status': coin.get('rank_status'),
+                'rank_delta': coin.get('rank_delta'),
+                'gain_since_entry_pct': gain_since_entry_pct,
+                'gain_since_last_update_pct': gain_since_last_update_pct,
+            }
+        )
+
+    return rows
+
+
 def _format_signal_age_label(bars_ago: int, timeframe: str) -> str:
     normalized = str(timeframe or '1h').lower()
     hours_per_bar = {
@@ -817,6 +862,7 @@ def run_scanner():
         
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
+        active_before_update = active_db.get_active()
         entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
             final_results,
             cooldown_hours=settings.alert_cooldown_hours,
@@ -1036,18 +1082,33 @@ def run_scanner():
                     )
                     metrics.increment('notifications_sent')
 
-        if telegram and not entered and not exited and settings.no_change_notifications:
-            app_logger.info("\n📱 Sending no-change scan summary notification...")
-            summary_message = (
-                "ℹ️ <b>Scan complete</b>\n"
-                f"No entries or exits this cycle.\n"
-                f"Qualified coins: {len(final_results)}"
+        if telegram:
+            app_logger.info("\n📱 Sending active coin ranking summary notification...")
+            active_after_update = active_db.get_active()
+            active_ranking_rows = _build_active_ranking_rows(
+                final_results,
+                active_before_update,
+                active_after_update,
             )
-            telegram.send_message(summary_message)
-            metrics.increment('notifications_sent')
-        elif telegram and not entered and not exited and not settings.no_change_notifications:
-            app_logger.info("ℹ️ No notifications sent: no entries/exits and NO_CHANGE_NOTIFICATIONS=false")
-        elif not telegram and (entered or exited):
+            ranking_messages = MessageFormatter.format_active_rankings_summary(
+                active_rows=active_ranking_rows,
+                entries_count=len(entered),
+                exits_count=len(exited),
+                blocked_count=len(blocked_by_cooldown),
+            )
+            sent_summary_count = 0
+            for summary_message in ranking_messages:
+                message_id = telegram.send_message(summary_message)
+                if message_id:
+                    sent_summary_count += 1
+                metrics.increment('notifications_sent')
+            app_logger.info(
+                "📌 ACTIVE_RANKING_SUMMARY_SENT "
+                f"messages={sent_summary_count}/{len(ranking_messages)} "
+                f"active_coins={len(active_ranking_rows)}"
+            )
+
+        if not telegram and (entered or exited):
             app_logger.warning("⚠️ Entry/exit events detected but Telegram is disabled")
         
         # Save results

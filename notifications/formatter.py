@@ -10,6 +10,24 @@ class MessageFormatter:
     """Format notification messages per spec §10.1-10.2"""
 
     @staticmethod
+    def _format_rank_change(status: str, delta: int | None) -> str:
+        if status == 'up':
+            amount = max(1, abs(int(delta or 0)))
+            return f"↑{amount}"
+        if status == 'down':
+            amount = max(1, abs(int(delta or 0)))
+            return f"↓{amount}"
+        if status == 'flat':
+            return "→"
+        return "🆕"
+
+    @staticmethod
+    def _format_pct(value: float | None) -> str:
+        if isinstance(value, (int, float)):
+            return f"{float(value):+.2f}%"
+        return "n/a"
+
+    @staticmethod
     def _format_key_settings(params: Dict) -> str:
         if not params:
             return "none"
@@ -179,3 +197,48 @@ class MessageFormatter:
             message += "\nLifecycle: " + " | ".join(lifecycle_parts)
         
         return message
+
+    @staticmethod
+    def format_active_rankings_summary(
+        active_rows: List[Dict],
+        entries_count: int,
+        exits_count: int,
+        blocked_count: int,
+        max_chars: int = 3800,
+    ) -> List[str]:
+        active_count = len(active_rows)
+        header = (
+            "📋 <b>Active Coins (This Scan)</b>\n"
+            f"Entries: {entries_count} | Exits: {exits_count} | Cooldown blocked: {blocked_count} | Active: {active_count}"
+        )
+
+        if not active_rows:
+            return [header + "\n\nNo active coins this scan."]
+
+        lines = []
+        for row in active_rows:
+            rank = row.get('current_rank')
+            rank_label = f"#{int(rank)}" if isinstance(rank, int) else "#?"
+            movement = MessageFormatter._format_rank_change(str(row.get('rank_status', 'new')), row.get('rank_delta'))
+            since_entry = MessageFormatter._format_pct(row.get('gain_since_entry_pct'))
+            since_last_update = MessageFormatter._format_pct(row.get('gain_since_last_update_pct'))
+            symbol = str(row.get('symbol', '')).upper()
+            lines.append(
+                f"{rank_label} {movement} <b>{symbol}</b> | Since alert: {since_entry} | 1h: {since_last_update}"
+            )
+
+        messages: List[str] = []
+        current_message = header + "\n\n"
+
+        for line in lines:
+            candidate = current_message + line + "\n"
+            if len(candidate) > max_chars and current_message.strip():
+                messages.append(current_message.rstrip())
+                current_message = "📋 <b>Active Coins (cont.)</b>\n\n" + line + "\n"
+            else:
+                current_message = candidate
+
+        if current_message.strip():
+            messages.append(current_message.rstrip())
+
+        return messages
