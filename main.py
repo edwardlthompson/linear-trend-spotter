@@ -172,6 +172,46 @@ def _resolve_cmc_data(
     return None, None, 'missing'
 
 
+def _resolve_top_coin_data(
+    symbol: str,
+    *,
+    top_coins_provider: str,
+    cmc_by_symbol: dict[str, dict],
+    cmc_by_normalized_symbol: dict[str, list[tuple[str, dict]]],
+    cmc_symbol_aliases: dict[str, str],
+    coingecko_id_aliases: dict[str, str],
+    gecko: CoinGeckoClient,
+) -> tuple[dict | None, str | None, str]:
+    resolved_data, resolved_symbol, resolution_type = _resolve_cmc_data(
+        symbol,
+        cmc_by_symbol,
+        cmc_by_normalized_symbol,
+        cmc_symbol_aliases,
+    )
+    if resolved_data or top_coins_provider != 'coingecko':
+        return resolved_data, resolved_symbol, resolution_type
+
+    symbol_upper = str(symbol or '').upper()
+    alias_gecko_id = coingecko_id_aliases.get(symbol_upper)
+    if not alias_gecko_id:
+        return None, None, 'missing'
+
+    alias_snapshot = gecko.get_coin_market_snapshot(alias_gecko_id)
+    if not alias_snapshot:
+        return None, None, 'missing'
+
+    alias_info = dict(alias_snapshot.get('info') or {})
+    alias_info['symbol'] = symbol_upper
+    alias_info.setdefault('source_url', f"https://www.coingecko.com/en/coins/{alias_gecko_id}")
+    resolved_data = {
+        'data': alias_snapshot.get('data', {}),
+        'gains': alias_snapshot.get('gains', {}),
+        'info': alias_info,
+    }
+    cmc_by_symbol[symbol_upper] = resolved_data
+    return resolved_data, alias_gecko_id, 'coingecko_id_alias'
+
+
 def _build_active_ranking_rows(
     final_results: list[dict],
     active_before_update: dict[str, dict],
@@ -710,7 +750,7 @@ def run_scanner():
         app_logger.info(f"   ✓ Scanning ALL {len(all_symbols)} coins from exchange listings")
 
         # ============================================================
-        # STEP 3: Match with CMC data and apply volume/gain filters
+        # STEP 3: Match with top-coin provider data and apply volume/gain filters
         # ============================================================
         app_logger.info(f"\n💰 FILTER 1: Applying volume and gain filters ({top_coins_provider.upper()})...")
         
@@ -722,27 +762,15 @@ def run_scanner():
                 app_logger.info(f"   ⏭️ {symbol}: Skipped (stablecoin)")
                 continue
                 
-            cmc_data, resolved_cmc_symbol, resolution_type = _resolve_cmc_data(
+            cmc_data, resolved_cmc_symbol, resolution_type = _resolve_top_coin_data(
                 symbol,
-                cmc_by_symbol,
-                cmc_by_normalized_symbol,
-                cmc_symbol_aliases,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
             )
-            if not cmc_data and top_coins_provider == 'coingecko':
-                alias_gecko_id = coingecko_id_aliases.get(symbol)
-                if alias_gecko_id:
-                    alias_snapshot = gecko.get_coin_market_snapshot(alias_gecko_id)
-                    if alias_snapshot:
-                        alias_info = alias_snapshot.get('info') or {}
-                        alias_info['symbol'] = symbol
-                        cmc_data = {
-                            'data': alias_snapshot.get('data', {}),
-                            'gains': alias_snapshot.get('gains', {}),
-                            'info': alias_info,
-                        }
-                        cmc_by_symbol[symbol] = cmc_data
-                        resolution_type = 'coingecko_id_alias'
-                        resolved_cmc_symbol = alias_gecko_id
 
             if cmc_data:
                 if resolution_type != 'direct':
@@ -1126,15 +1154,18 @@ def run_scanner():
                 coin['exit_reason'] = "No longer listed on target exchanges"
                 continue
 
-            cmc_data, _, _ = _resolve_cmc_data(
+            cmc_data, _, _ = _resolve_top_coin_data(
                 symbol,
-                cmc_by_symbol,
-                cmc_by_normalized_symbol,
-                cmc_symbol_aliases,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
             )
             if not cmc_data:
                 if top_coins_provider == 'coingecko':
-                    coin['exit_reason'] = "Missing from current CoinGecko top-coin snapshot"
+                    coin['exit_reason'] = "Missing from current CoinGecko top-coin provider snapshot"
                 else:
                     coin['exit_reason'] = "Missing from current CoinMarketCap snapshot"
                 continue

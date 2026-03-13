@@ -89,6 +89,10 @@ class TelegramClient:
     
     def send_exit_notification(self, coin: Dict) -> Optional[int]:
         """Send exit notification without timestamp"""
-        cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
-        message = f"🔴 <a href='{cmc_url}'>{coin['symbol']} ({coin['name']})</a> has left the qualified list"
+        source_url = str(
+            coin.get('source_url')
+            or coin.get('cmc_url')
+            or MessageFormatter._build_coingecko_url(coin)
+        ).strip()
+        message = f"🔴 <a href='{source_url}'>{coin['symbol']} ({coin['name']})</a> has left the qualified list"
         return self.send_message(message)

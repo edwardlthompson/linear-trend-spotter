@@ -100,7 +100,7 @@ def compute_data_reliability(coin: dict[str, Any]) -> dict[str, Any]:
 
     if float(coin.get("current_price", 0.0) or 0.0) > 0:
         score += 10.0
-    if coin.get("cmc_url") or coin.get("slug"):
+    if coin.get("source_url") or coin.get("cmc_url") or coin.get("slug"):
         score += 5.0
 
     score = _clamp(score)

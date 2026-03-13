@@ -1,9 +1,11 @@
 # Commit Summary — 2026-03-13 — CMC symbol alias fallback
 
 ## Scope
+
 - Fix false negatives where exchange symbols differ from CoinMarketCap symbols (example: `CRYPGPT` vs `CGPT`).
 
 ## What changed
+
 - Added CMC symbol resolution fallback in scanner flow:
   - direct symbol match,
   - configured alias match,
@@ -17,10 +19,12 @@
 - Updated `config.json.example` and README config table.
 
 ## Why this deviates from prior logic
+
 - Previous logic required exact `symbol == CMC symbol`, which dropped valid candidates early and created misleading "perfect qualifications" expectations.
 - New logic intentionally deviates to prefer deterministic alias resolution before rejection, improving correctness without broad fuzzy matching.
 
 ## Validation
+
 - Static diagnostics: no errors in updated files.
 - Smoke test confirmed:
   - `CRYPGPT` resolves to `CGPT` via configured alias.

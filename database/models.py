@@ -4,6 +4,26 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+
+def _build_source_url(coin: Dict[str, Any]) -> str:
+    source_url = str(coin.get('source_url') or coin.get('cmc_url') or '').strip()
+    if source_url:
+        return source_url
+
+    gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip()
+    if gecko_id:
+        return f"https://www.coingecko.com/en/coins/{gecko_id}"
+
+    slug = str(coin.get('slug') or '').strip().lower()
+    if slug:
+        return f"https://coinmarketcap.com/currencies/{slug}/"
+
+    symbol = str(coin.get('symbol') or coin.get('coin_symbol') or '').strip()
+    if symbol:
+        return f"https://www.coingecko.com/en/search?query={symbol}"
+
+    return ''
+
 class Database:
     """Base database class"""
     
@@ -129,7 +149,7 @@ class HistoryDatabase(Database):
                 str(coin.get('exchange_volumes', {}).get('coinbase', 'N/A')),
                 str(coin.get('exchange_volumes', {}).get('kraken', 'N/A')),
                 str(coin.get('exchange_volumes', {}).get('mexc', 'N/A')),
-                f"https://coinmarketcap.com/currencies/{coin['slug']}/"
+                _build_source_url(coin)
             ))
 
     def get_latest_rank_map(self) -> Dict[str, int]:
@@ -272,6 +292,7 @@ class ActiveCoinsDatabase(Database):
                 'mexc_volume': row[11],
                 'slug': row[12],
                 'cmc_url': row[13],
+                'source_url': row[13],
                 'entry_price': row[14] if len(row) > 14 else None,
                 'peak_price': row[15] if len(row) > 15 else None,
                 'trough_price': row[16] if len(row) > 16 else None,
@@ -309,7 +330,7 @@ class ActiveCoinsDatabase(Database):
             str(coin.get('exchange_volumes', {}).get('kraken', 'N/A')),
             str(coin.get('exchange_volumes', {}).get('mexc', 'N/A')),
             coin.get('slug', coin['symbol'].lower()),
-            f"https://coinmarketcap.com/currencies/{coin.get('slug', coin['symbol'].lower())}/",
+            _build_source_url(coin),
             lifecycle_price,
             lifecycle_price,
             lifecycle_price,
@@ -356,7 +377,7 @@ class ActiveCoinsDatabase(Database):
             str(coin.get('exchange_volumes', {}).get('kraken', 'N/A')),
             str(coin.get('exchange_volumes', {}).get('mexc', 'N/A')),
             coin.get('slug', coin['symbol'].lower()),
-            f"https://coinmarketcap.com/currencies/{coin.get('slug', coin['symbol'].lower())}/",
+            _build_source_url(coin),
             current_price,
             current_price,
             current_price,

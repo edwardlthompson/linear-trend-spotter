@@ -18,7 +18,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 
 Linear Trend Spotter scans all symbols listed across target exchanges (default: Coinbase, Kraken, MEXC), then applies a strict multi-step qualification pipeline:
 
-1. CoinMarketCap snapshot pull (up to 2500 coins; controlled by `TOP_COINS_LIMIT`)
+1. Top-coin provider snapshot pull (`TOP_COINS_PROVIDER`, default `coingecko`, up to `TOP_COINS_LIMIT` coins)
 2. Exchange listing universe build (all symbols in `exchange_listings`)
 3. Gain/volume filter
 4. CoinGecko ID mapping
@@ -38,7 +38,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 
 ### Filter 1: Volume + gains
 
-- 24h CMC volume must be `>= MIN_VOLUME_M` (default `1,000,000`)
+- 24h provider volume must be `>= MIN_VOLUME_M` (default `1,000,000`)
 - 7d gain must be `> 7%`
 - 30d gain must be `> 30%`
 - 30d gain must be strictly higher than 7d gain (`30d > 7d`)
@@ -61,7 +61,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 
 - Sent once when a coin newly enters qualified state.
 - Includes:
-  - Coin name/symbol with CMC link
+  - Coin name/symbol with provider-aware source link
   - 7d and 30d gains
   - uniformity score
   - ATR score
@@ -73,7 +73,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
   - signal age for the top-ranked strategy
   - backtest confidence for the top-ranked strategy
   - volume acceleration vs recent daily baseline
-  - total 24h CMC volume
+  - total 24h provider volume
   - exchange-level volumes (Coinbase/Kraken/MEXC)
 - Sends a single combined image when a chart is available:
   - price chart (top)
@@ -118,7 +118,7 @@ Example entry notification excerpt:
   - 24h volume below threshold
   - 7d / 30d threshold violation
   - `30d <= 7d`
-  - missing CMC / CoinGecko data
+  - missing top-coin provider or CoinGecko data
   - uniformity score below threshold
 - Includes alert lifecycle P&L summary from active-state tracking:
   - realized/unrealized lifecycle P&L at exit
@@ -230,7 +230,12 @@ Available parameters (defaults from `config/settings.py`):
 | `EXIT_NOTIFICATIONS` | `true` | Enable exit alerts |
 | `NO_CHANGE_NOTIFICATIONS` | `false` | Legacy no-change ping toggle |
 | `ALERT_COOLDOWN_HOURS` | `6` | Re-entry cooldown window after exit |
-| `CMC_SYMBOL_ALIASES` | `{"CRYPGPT":"CGPT"}` | Exchange-symbol to CMC-symbol fallback map used when direct CMC symbol lookup fails |
+| `CMC_SYMBOL_ALIASES` | `{"CRYPGPT":"CGPT"}` | Exchange-symbol to CMC-symbol fallback map used only when `TOP_COINS_PROVIDER` is `cmc` |
+
+Notes:
+
+- Runtime now treats the historical `cmc_url` database field as a generic source-link storage column for backward compatibility. Under CoinGecko-provider scans it stores the CoinGecko source URL instead of forcing a CoinMarketCap link.
+- CoinGecko ID alias fallback is reused in both Filter 1 qualification and exit-reason attribution so symbols like `CRYPGPT` do not resolve one way on entry and another way on exit.
 | `EXCHANGE_QUALITY_MIN_SCORE` | `25` | Minimum exchange-quality score to pass final qualification |
 | `EARLY_WARNING_ENABLED` | `true` | Enable pre-exit warning alerts |
 | `WATCHLIST_ENABLED` | `true` | Enable near-qualifier watchlist generation |
