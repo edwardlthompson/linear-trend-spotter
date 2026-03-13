@@ -999,22 +999,19 @@ def run_scanner():
         uniformity_passed = []
         
         for coin in all_processed:
-            exchange_quality_score = float(coin.get('exchange_quality_score', 0.0) or 0.0)
             if (
                 'uniformity_score' in coin
                 and coin['uniformity_score'] >= settings.uniformity_min_score
                 and coin['total_gain'] > 0
-                and exchange_quality_score >= settings.exchange_quality_min_score
             ):
                 uniformity_passed.append(coin)
                 app_logger.info(
-                    f"   ✓ {coin['symbol']}: Score {coin['uniformity_score']:.1f}, ExchangeQ {exchange_quality_score:.1f}"
+                    f"   ✓ {coin['symbol']}: Score {coin['uniformity_score']:.1f}"
                 )
             else:
                 app_logger.info(
-                    f"   ❌ {coin['symbol']}: Failed final filter "
-                    f"(uniformity={float(coin.get('uniformity_score', 0.0) or 0.0):.1f}, "
-                    f"exchangeQ={exchange_quality_score:.1f})"
+                    f"   ❌ {coin['symbol']}: Failed uniformity filter "
+                    f"(score={float(coin.get('uniformity_score', 0.0) or 0.0):.1f})"
                 )
 
         uniformity_passed_symbols = {c['symbol'] for c in uniformity_passed}
@@ -1246,8 +1243,12 @@ def run_scanner():
             exchange_quality_min_score=settings.exchange_quality_min_score,
             score_buffer=settings.watchlist_score_buffer,
         ) if settings.watchlist_enabled else []
+        active_symbols_set = {str(s).upper() for s in active_after_update.keys()}
         early_warning_rows = build_exit_warnings(
-            active_rows=final_results,
+            active_rows=[
+                coin for coin in final_results
+                if str(coin.get('symbol', '')).upper() in active_symbols_set
+            ],
             min_volume=settings.min_volume,
             uniformity_min_score=settings.uniformity_min_score,
         ) if settings.early_warning_enabled else []
