@@ -26,6 +26,7 @@ scan.lock
 *.pid
 scan_stats.json
 metrics.json
+backtest_telemetry.jsonl
 
 # Local development files
 ## Allow vscode
