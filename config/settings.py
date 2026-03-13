@@ -49,6 +49,9 @@ class Settings:
             'RETRY_BACKOFF': 2,
             'COINGECKO_CALLS_PER_MINUTE': 30,
             'CMC_CALLS_PER_MINUTE': 333,
+            'CMC_SYMBOL_ALIASES': {
+                'CRYPGPT': 'CGPT',
+            },
             'CACHE_GECKO_ID_DAYS': 30,
             'CACHE_EXCHANGE_HOURS': 24,
             'CACHE_PRICE_HOURS': 6,
@@ -194,6 +197,18 @@ class Settings:
         ]:
             require_number(number_key, min_value=lower, max_value=upper)
 
+        cmc_symbol_aliases = normalized.get('CMC_SYMBOL_ALIASES', {})
+        if not isinstance(cmc_symbol_aliases, dict):
+            errors.append('CMC_SYMBOL_ALIASES must be an object mapping exchange symbol -> CMC symbol')
+        else:
+            normalized_aliases: dict[str, str] = {}
+            for raw_key, raw_value in cmc_symbol_aliases.items():
+                if not isinstance(raw_key, str) or not raw_key.strip() or not isinstance(raw_value, str) or not raw_value.strip():
+                    errors.append('CMC_SYMBOL_ALIASES must contain non-empty string keys and values only')
+                    break
+                normalized_aliases[raw_key.strip().upper()] = raw_value.strip().upper()
+            normalized['CMC_SYMBOL_ALIASES'] = normalized_aliases
+
         stop_min = int(normalized.get('BACKTEST_TRAILING_STOP_MIN', 0))
         stop_max = int(normalized.get('BACKTEST_TRAILING_STOP_MAX', 20))
         if stop_max < stop_min:
@@ -331,6 +346,11 @@ class Settings:
     @property
     def cmc_calls_per_minute(self) -> int:
         return self._config.get('CMC_CALLS_PER_MINUTE', 333)
+
+    @property
+    def cmc_symbol_aliases(self) -> Dict[str, str]:
+        value = self._config.get('CMC_SYMBOL_ALIASES', {})
+        return value if isinstance(value, dict) else {}
     
     @property
     def cache_gecko_id_days(self) -> int:

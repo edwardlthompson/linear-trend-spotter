@@ -123,6 +123,55 @@ def _pct_change(current_value: float, baseline_value: float) -> float | None:
     return ((current - baseline) / baseline) * 100.0
 
 
+def _normalize_symbol(raw_symbol: str) -> str:
+    return ''.join(ch for ch in str(raw_symbol or '').upper() if ch.isalnum())
+
+
+def _build_cmc_normalized_lookup(cmc_by_symbol: dict[str, dict]) -> dict[str, list[tuple[str, dict]]]:
+    lookup: dict[str, list[tuple[str, dict]]] = {}
+    for symbol, payload in cmc_by_symbol.items():
+        normalized = _normalize_symbol(symbol)
+        if not normalized:
+            continue
+        lookup.setdefault(normalized, []).append((symbol, payload))
+    return lookup
+
+
+def _resolve_cmc_data(
+    symbol: str,
+    cmc_by_symbol: dict[str, dict],
+    cmc_by_normalized_symbol: dict[str, list[tuple[str, dict]]],
+    symbol_aliases: dict[str, str],
+) -> tuple[dict | None, str | None, str]:
+    symbol_upper = str(symbol or '').upper()
+    if not symbol_upper:
+        return None, None, 'missing'
+
+    direct = cmc_by_symbol.get(symbol_upper)
+    if direct:
+        return direct, symbol_upper, 'direct'
+
+    alias_target = symbol_aliases.get(symbol_upper)
+    if alias_target:
+        alias_direct = cmc_by_symbol.get(alias_target)
+        if alias_direct:
+            return alias_direct, alias_target, 'configured_alias'
+
+        alias_normalized = _normalize_symbol(alias_target)
+        alias_candidates = cmc_by_normalized_symbol.get(alias_normalized, [])
+        if len(alias_candidates) == 1:
+            matched_symbol, matched_payload = alias_candidates[0]
+            return matched_payload, matched_symbol, 'configured_alias_normalized'
+
+    normalized_symbol = _normalize_symbol(symbol_upper)
+    normalized_candidates = cmc_by_normalized_symbol.get(normalized_symbol, [])
+    if len(normalized_candidates) == 1:
+        matched_symbol, matched_payload = normalized_candidates[0]
+        return matched_payload, matched_symbol, 'normalized'
+
+    return None, None, 'missing'
+
+
 def _build_active_ranking_rows(
     final_results: list[dict],
     active_before_update: dict[str, dict],
@@ -549,8 +598,13 @@ def run_scanner():
                     'gains': cmc.extract_gains(coin),
                     'info': cmc.extract_coin_data(coin)
                 }
+
+        cmc_by_normalized_symbol = _build_cmc_normalized_lookup(cmc_by_symbol)
+        cmc_symbol_aliases = settings.cmc_symbol_aliases
         
         app_logger.info(f"📊 Built lookup for {len(cmc_by_symbol)} symbols")
+        if cmc_symbol_aliases:
+            app_logger.info(f"📎 CMC symbol aliases configured: {len(cmc_symbol_aliases)}")
 
         # ============================================================
         # STEP 2: Get ALL symbols from exchange listings (no limit!)
@@ -612,8 +666,17 @@ def run_scanner():
                 app_logger.info(f"   ⏭️ {symbol}: Skipped (stablecoin)")
                 continue
                 
-            if symbol in cmc_by_symbol:
-                cmc_data = cmc_by_symbol[symbol]
+            cmc_data, resolved_cmc_symbol, resolution_type = _resolve_cmc_data(
+                symbol,
+                cmc_by_symbol,
+                cmc_by_normalized_symbol,
+                cmc_symbol_aliases,
+            )
+            if cmc_data:
+                if resolution_type != 'direct':
+                    app_logger.info(
+                        f"   ↪️ {symbol}: Matched CMC symbol {resolved_cmc_symbol} via {resolution_type}"
+                    )
                 gains = cmc_data['gains']
                 info = cmc_data['info']
                 
@@ -626,6 +689,7 @@ def run_scanner():
                     if gains['7d'] > 7 and gains['30d'] > 30 and gains['30d'] > gains['7d']:
                         coin_info = {
                             'symbol': symbol,
+                            'cmc_symbol': resolved_cmc_symbol,
                             'name': info['name'],
                             'slug': info['slug'],
                             'gains': gains,
@@ -675,6 +739,12 @@ def run_scanner():
         
         for coin in gain_qualified:
             cg_id = cg_mapper.get_coin_id(coin['symbol'])
+            if not cg_id and coin.get('cmc_symbol'):
+                cg_id = cg_mapper.get_coin_id(str(coin['cmc_symbol']))
+                if cg_id:
+                    app_logger.info(
+                        f"   ↪️ {coin['symbol']}: CoinGecko ID resolved via CMC symbol {coin['cmc_symbol']}"
+                    )
             if cg_id:
                 coin['cg_id'] = cg_id
                 coin['gecko_id'] = cg_id
@@ -976,7 +1046,12 @@ def run_scanner():
                 coin['exit_reason'] = "No longer listed on target exchanges"
                 continue
 
-            cmc_data = cmc_by_symbol.get(symbol)
+            cmc_data, _, _ = _resolve_cmc_data(
+                symbol,
+                cmc_by_symbol,
+                cmc_by_normalized_symbol,
+                cmc_symbol_aliases,
+            )
             if not cmc_data:
                 coin['exit_reason'] = "Missing from current CoinMarketCap snapshot"
                 continue
