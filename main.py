@@ -23,11 +23,21 @@ from api.tradingview_mapper import TradingViewMapper
 from processors.uniformity_filter import UniformityFilter
 from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
-from notifications.image_renderer import build_fallback_chart_image, build_combined_notification_image
+from notifications.image_renderer import build_fallback_chart_image, build_combined_notification_image, build_hourly_summary_image
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
 from backtesting.signals import generate_indicator_signals
+from utils.insights import (
+    build_exit_warnings,
+    build_watchlist,
+    compute_data_reliability,
+    compute_exchange_quality,
+    compute_health_score,
+    compute_reentry_quality,
+    detect_regime,
+    update_scanner_insights,
+)
 from utils.metrics import metrics, timed_block
 from utils.runtime_hygiene import run_artifact_hygiene, update_exit_reason_analytics
 from utils.logger import app_logger
@@ -139,6 +149,7 @@ def _build_active_ranking_rows(
                 'current_rank': coin.get('current_rank'),
                 'rank_status': coin.get('rank_status'),
                 'rank_delta': coin.get('rank_delta'),
+                'health_score': coin.get('health_score'),
                 'gain_since_entry_pct': gain_since_entry_pct,
                 'gain_since_last_update_pct': gain_since_last_update_pct,
             }
@@ -706,6 +717,8 @@ def run_scanner():
                 app_logger.info(f"      ⚠️ No ticker data")
                 no_ticker_count += 1
 
+            compute_exchange_quality(coin)
+
         # ============================================================
         # STEP 7: Calculate uniformity scores
         # ============================================================
@@ -781,6 +794,9 @@ def run_scanner():
         # Combine all processed coins
         all_processed = cached_coins + [c for c in uncached_coins if 'uniformity_score' in c]
         all_processed_map = {c['symbol']: c for c in all_processed}
+        for coin in all_processed:
+            compute_exchange_quality(coin)
+            compute_data_reliability(coin)
 
         anomaly_messages = _build_anomaly_messages(
             total_gain_qualified=len(gain_qualified),
@@ -802,11 +818,23 @@ def run_scanner():
         uniformity_passed = []
         
         for coin in all_processed:
-            if 'uniformity_score' in coin and coin['uniformity_score'] >= settings.uniformity_min_score and coin['total_gain'] > 0:
+            exchange_quality_score = float(coin.get('exchange_quality_score', 0.0) or 0.0)
+            if (
+                'uniformity_score' in coin
+                and coin['uniformity_score'] >= settings.uniformity_min_score
+                and coin['total_gain'] > 0
+                and exchange_quality_score >= settings.exchange_quality_min_score
+            ):
                 uniformity_passed.append(coin)
-                app_logger.info(f"   ✓ {coin['symbol']}: Score {coin['uniformity_score']:.1f}")
+                app_logger.info(
+                    f"   ✓ {coin['symbol']}: Score {coin['uniformity_score']:.1f}, ExchangeQ {exchange_quality_score:.1f}"
+                )
             else:
-                app_logger.info(f"   ❌ {coin['symbol']}: Failed uniformity")
+                app_logger.info(
+                    f"   ❌ {coin['symbol']}: Failed final filter "
+                    f"(uniformity={float(coin.get('uniformity_score', 0.0) or 0.0):.1f}, "
+                    f"exchangeQ={exchange_quality_score:.1f})"
+                )
 
         uniformity_passed_symbols = {c['symbol'] for c in uniformity_passed}
 
@@ -822,6 +850,9 @@ def run_scanner():
             ),
         )
         _attach_rank_movement(final_results, history_db.get_latest_rank_map())
+        regime = detect_regime(all_cmc_coins, gain_qualified, final_results)
+        for coin in final_results:
+            coin['market_regime'] = regime.get('regime')
 
         # ============================================================
         # STEP 9.1: Optional backtesting run (feature-flagged)
@@ -859,6 +890,26 @@ def run_scanner():
                 details = notification_rows_for_symbol(backtest_summary, symbol, top_n=5)
                 coin['backtest_top_strategies'] = details.get('top_strategies', [])
                 coin['backtest_buy_hold'] = details.get('buy_hold')
+
+        recent_exits_30d = active_db.get_recent_exits(days=30)
+        notification_loader = BacktestDataLoader(cache=cache, max_cache_age_hours=settings.cache_price_hours)
+        for coin in final_results:
+            coin.update(compute_reentry_quality(str(coin.get('symbol', '')), recent_exits_30d))
+            _attach_atr_score(coin, notification_loader)
+            _attach_signal_age(coin, notification_loader)
+            _attach_volume_acceleration(coin, notification_loader)
+            compute_health_score(coin)
+
+        final_results = sorted(
+            final_results,
+            key=lambda x: (
+                -float(x.get('health_score', 0.0) or 0.0),
+                -float(x.get('uniformity_score', 0.0) or 0.0),
+                -float((x.get('gains') or {}).get('30d', 0.0) or 0.0),
+                str(x.get('symbol', '')).upper(),
+            ),
+        )
+        _attach_rank_movement(final_results, history_db.get_latest_rank_map())
         
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
@@ -904,11 +955,11 @@ def run_scanner():
                     coin['backtest_top_strategies'] = details.get('top_strategies', [])
                     coin['backtest_buy_hold'] = details.get('buy_hold')
 
-            notification_loader = BacktestDataLoader(cache=cache, max_cache_age_hours=settings.cache_price_hours)
             for coin in entered:
-                _attach_atr_score(coin, notification_loader)
-                _attach_signal_age(coin, notification_loader)
-                _attach_volume_acceleration(coin, notification_loader)
+                for enriched_coin in final_results:
+                    if str(enriched_coin.get('symbol', '')).upper() == str(coin.get('symbol', '')).upper():
+                        coin.update(enriched_coin)
+                        break
 
         # Attach precise exit reasons based on first failed pipeline stage
         for coin in exited:
@@ -994,6 +1045,43 @@ def run_scanner():
                 )
         except Exception as analytics_error:
             app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
+
+        active_after_update = active_db.get_active()
+        watchlist_rows = build_watchlist(
+            all_processed=all_processed,
+            final_symbols={str(coin.get('symbol', '')).upper() for coin in final_results},
+            uniformity_min_score=settings.uniformity_min_score,
+            exchange_quality_min_score=settings.exchange_quality_min_score,
+            score_buffer=settings.watchlist_score_buffer,
+        ) if settings.watchlist_enabled else []
+        early_warning_rows = build_exit_warnings(
+            active_rows=final_results,
+            min_volume=settings.min_volume,
+            uniformity_min_score=settings.uniformity_min_score,
+        ) if settings.early_warning_enabled else []
+        insights_payload = update_scanner_insights(
+            settings.scanner_insights_file,
+            final_results=final_results,
+            all_processed=all_processed,
+            gain_qualified=gain_qualified,
+            all_cmc_coins=all_cmc_coins,
+            entered=entered,
+            exited=exited,
+            active_before_update=active_before_update,
+            active_after_update=active_after_update,
+            blocked_by_cooldown=blocked_by_cooldown,
+            regime=regime,
+            watchlist=watchlist_rows,
+            early_warnings=early_warning_rows,
+            current_metrics_summary=metrics.get_summary(),
+            portfolio_starting_capital=settings.portfolio_sim_starting_capital,
+        )
+        drift_summary = insights_payload.get('benchmark_drift', {}) or {}
+        app_logger.info(
+            "🧭 Insights updated: "
+            f"regime={regime.get('regime')}, watchlist={len(watchlist_rows)}, "
+            f"warnings={len(early_warning_rows)}, drift={drift_summary.get('status', 'stable')}"
+        )
         
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
@@ -1082,19 +1170,53 @@ def run_scanner():
                     )
                     metrics.increment('notifications_sent')
 
+        if telegram and early_warning_rows:
+            warning_text = MessageFormatter.format_early_warnings(early_warning_rows)
+            if warning_text:
+                telegram.send_message(warning_text)
+                metrics.increment('notifications_sent')
+
+        if telegram and watchlist_rows:
+            watchlist_text = MessageFormatter.format_watchlist_summary(watchlist_rows)
+            telegram.send_message(watchlist_text)
+            metrics.increment('notifications_sent')
+
+        if telegram and drift_summary.get('status') == 'drift':
+            telegram.send_message(MessageFormatter.format_drift_summary(drift_summary))
+            metrics.increment('notifications_sent')
+
         if telegram:
             app_logger.info("\n📱 Sending active coin ranking summary notification...")
-            active_after_update = active_db.get_active()
             active_ranking_rows = _build_active_ranking_rows(
                 final_results,
                 active_before_update,
                 active_after_update,
             )
+            if settings.hourly_summary_image_enabled:
+                summary_image = build_hourly_summary_image(
+                    active_rows=active_ranking_rows,
+                    watchlist_rows=watchlist_rows,
+                    regime=regime,
+                    drift=drift_summary,
+                )
+                if summary_image:
+                    telegram.send_photo(
+                        io.BytesIO(summary_image),
+                        caption=MessageFormatter.format_summary_caption(
+                            regime=regime,
+                            drift=drift_summary,
+                            active_count=len(active_ranking_rows),
+                            watchlist_count=len(watchlist_rows),
+                        ),
+                    )
+                    metrics.increment('notifications_sent')
             ranking_messages = MessageFormatter.format_active_rankings_summary(
                 active_rows=active_ranking_rows,
                 entries_count=len(entered),
                 exits_count=len(exited),
                 blocked_count=len(blocked_by_cooldown),
+                regime=str(regime.get('regime') or ''),
+                drift_status=str(drift_summary.get('status') or 'stable'),
             )
             sent_summary_count = 0
             for summary_message in ranking_messages:

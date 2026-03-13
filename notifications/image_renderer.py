@@ -267,3 +267,92 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
     plt.close(fig)
     output.seek(0)
     return output.read()
+
+
+def build_hourly_summary_image(
+    active_rows: List[Dict],
+    watchlist_rows: List[Dict],
+    regime: Optional[Dict] = None,
+    drift: Optional[Dict] = None,
+) -> Optional[bytes]:
+    """Render a compact hourly dashboard image for Telegram summary sends."""
+    try:
+        top_active = list(active_rows[:12])
+        top_watchlist = list(watchlist_rows[:6])
+
+        fig = plt.figure(figsize=(12, 9), dpi=160)
+        gs = fig.add_gridspec(3, 1, height_ratios=[0.9, 2.2, 1.5], hspace=0.18)
+
+        ax_header = fig.add_subplot(gs[0])
+        ax_header.axis("off")
+        regime_name = str((regime or {}).get("regime", "unknown"))
+        drift_status = str((drift or {}).get("status", "stable"))
+        avg_30d = float((regime or {}).get("avg_gain_30d", 0.0) or 0.0)
+        ax_header.text(0.01, 0.72, "Hourly Scanner Dashboard", fontsize=16, fontweight="bold")
+        ax_header.text(
+            0.01,
+            0.34,
+            f"Regime: {regime_name} | Avg 30d gain: {avg_30d:+.1f}% | Drift: {drift_status} | Active: {len(active_rows)} | Watchlist: {len(watchlist_rows)}",
+            fontsize=10,
+        )
+        if (drift or {}).get("notes"):
+            ax_header.text(0.01, 0.08, "Drift notes: " + "; ".join((drift or {}).get("notes", [])[:3]), fontsize=9)
+
+        ax_active = fig.add_subplot(gs[1])
+        ax_active.axis("off")
+        ax_active.set_title("Active Rankings", fontsize=12, fontweight="bold", pad=8)
+        if top_active:
+            active_table = []
+            for row in top_active:
+                active_table.append([
+                    f"#{row.get('current_rank', '?')}",
+                    MessageFormatter._format_rank_change(str(row.get('rank_status', 'new')), row.get('rank_delta')),
+                    str(row.get('symbol', '')).upper(),
+                    MessageFormatter._format_score(row.get('health_score')),
+                    MessageFormatter._format_pct(row.get('gain_since_entry_pct')),
+                    MessageFormatter._format_pct(row.get('gain_since_last_update_pct')),
+                ])
+            table = ax_active.table(
+                cellText=active_table,
+                colLabels=["Rank", "Δ", "Symbol", "Health", "Since alert", "1h"],
+                colWidths=[0.08, 0.08, 0.18, 0.14, 0.18, 0.14],
+                loc="center",
+                cellLoc="left",
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(9)
+            table.scale(1, 1.4)
+        else:
+            ax_active.text(0.5, 0.5, "No active rows", ha="center", va="center")
+
+        ax_watch = fig.add_subplot(gs[2])
+        ax_watch.axis("off")
+        ax_watch.set_title("Watchlist + Early Signals", fontsize=12, fontweight="bold", pad=8)
+        if top_watchlist:
+            watch_table = []
+            for row in top_watchlist:
+                watch_table.append([
+                    str(row.get('symbol', '')).upper(),
+                    f"{float(row.get('watchlist_score', 0.0)):.0f}",
+                    "; ".join((row.get('reasons') or [])[:2]),
+                ])
+            table = ax_watch.table(
+                cellText=watch_table,
+                colLabels=["Symbol", "Watch", "Reason"],
+                colWidths=[0.14, 0.1, 0.64],
+                loc="center",
+                cellLoc="left",
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(9)
+            table.scale(1, 1.35)
+        else:
+            ax_watch.text(0.5, 0.5, "No watchlist candidates", ha="center", va="center")
+
+        output = io.BytesIO()
+        fig.savefig(output, format="png", bbox_inches="tight")
+        plt.close(fig)
+        output.seek(0)
+        return output.read()
+    except Exception:
+        return None

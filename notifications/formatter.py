@@ -28,6 +28,12 @@ class MessageFormatter:
         return "n/a"
 
     @staticmethod
+    def _format_score(value: float | None) -> str:
+        if isinstance(value, (int, float)):
+            return f"{float(value):.0f}/100"
+        return "n/a"
+
+    @staticmethod
     def _format_key_settings(params: Dict) -> str:
         if not params:
             return "none"
@@ -105,6 +111,27 @@ class MessageFormatter:
             else:
                 caption += f"📏 ATR Score: {float(atr_score):.0f}/100\n"
 
+        health_score = coin.get('health_score')
+        if isinstance(health_score, (int, float)):
+            caption += f"🩺 Health Score: {float(health_score):.0f}/100"
+            if coin.get('health_label'):
+                caption += f" ({coin.get('health_label')})"
+            caption += "\n"
+
+        exchange_quality_score = coin.get('exchange_quality_score')
+        if isinstance(exchange_quality_score, (int, float)):
+            caption += f"🏦 Exchange Quality: {float(exchange_quality_score):.0f}/100"
+            if coin.get('exchange_quality_label'):
+                caption += f" ({coin.get('exchange_quality_label')})"
+            caption += "\n"
+
+        data_reliability_score = coin.get('data_reliability_score')
+        if isinstance(data_reliability_score, (int, float)):
+            caption += f"🧪 Data Reliability: {float(data_reliability_score):.0f}/100"
+            if coin.get('data_reliability_label'):
+                caption += f" ({coin.get('data_reliability_label')})"
+            caption += "\n"
+
         caption += "\n"
 
         current_rank = coin.get('current_rank')
@@ -124,6 +151,27 @@ class MessageFormatter:
         if signal_age_label and signal_indicator:
             caption += f"⏱️ Best Strategy Signal: {signal_indicator} • {signal_age_label}\n"
 
+        top_strategies = coin.get('backtest_top_strategies') or []
+        if top_strategies:
+            confidence_score = top_strategies[0].get('confidence_score')
+            weighted_net_score = top_strategies[0].get('weighted_net_score')
+            if isinstance(confidence_score, (int, float)):
+                caption += f"🧠 Backtest Confidence: {float(confidence_score):.0f}/100"
+                if isinstance(weighted_net_score, (int, float)):
+                    caption += f" (weighted net: {float(weighted_net_score):+.2f})"
+                caption += "\n"
+
+        reentry_quality_score = coin.get('reentry_quality_score')
+        if isinstance(reentry_quality_score, (int, float)):
+            caption += f"🔁 Re-entry Quality: {float(reentry_quality_score):.0f}/100"
+            if coin.get('reentry_quality_label'):
+                caption += f" ({coin.get('reentry_quality_label')})"
+            caption += "\n"
+
+        regime = coin.get('market_regime')
+        if regime:
+            caption += f"🌦️ Regime: {regime}\n"
+
         volume_acceleration_pct = coin.get('volume_acceleration_pct')
         volume_window_days = coin.get('volume_acceleration_window_days')
         if isinstance(volume_acceleration_pct, (int, float)) and isinstance(volume_window_days, int):
@@ -131,7 +179,7 @@ class MessageFormatter:
 
         if any(
             value is not None
-            for value in [current_rank, signal_age_label, volume_acceleration_pct]
+            for value in [current_rank, signal_age_label, volume_acceleration_pct, health_score]
         ):
             caption += "\n"
 
@@ -204,6 +252,8 @@ class MessageFormatter:
         entries_count: int,
         exits_count: int,
         blocked_count: int,
+        regime: str | None = None,
+        drift_status: str | None = None,
         max_chars: int = 3800,
     ) -> List[str]:
         active_count = len(active_rows)
@@ -211,6 +261,10 @@ class MessageFormatter:
             "📋 <b>Active Coins (This Scan)</b>\n"
             f"Entries: {entries_count} | Exits: {exits_count} | Cooldown blocked: {blocked_count} | Active: {active_count}"
         )
+        if regime:
+            header += f"\nRegime: {regime}"
+        if drift_status:
+            header += f" | Drift: {drift_status}"
 
         if not active_rows:
             return [header + "\n\nNo active coins this scan."]
@@ -222,9 +276,10 @@ class MessageFormatter:
             movement = MessageFormatter._format_rank_change(str(row.get('rank_status', 'new')), row.get('rank_delta'))
             since_entry = MessageFormatter._format_pct(row.get('gain_since_entry_pct'))
             since_last_update = MessageFormatter._format_pct(row.get('gain_since_last_update_pct'))
+            health = MessageFormatter._format_score(row.get('health_score'))
             symbol = str(row.get('symbol', '')).upper()
             lines.append(
-                f"{rank_label} {movement} <b>{symbol}</b> | Since alert: {since_entry} | 1h: {since_last_update}"
+                f"{rank_label} {movement} <b>{symbol}</b> | H: {health} | Since alert: {since_entry} | 1h: {since_last_update}"
             )
 
         messages: List[str] = []
@@ -242,3 +297,48 @@ class MessageFormatter:
             messages.append(current_message.rstrip())
 
         return messages
+
+    @staticmethod
+    def format_watchlist_summary(watchlist_rows: List[Dict]) -> str:
+        if not watchlist_rows:
+            return "👀 <b>Watchlist</b>\nNo near-qualifiers this scan."
+
+        lines = ["👀 <b>Watchlist Near-Qualifiers</b>"]
+        for row in watchlist_rows[:8]:
+            reasons = ", ".join(row.get('reasons', [])[:2])
+            lines.append(
+                f"• <b>{row.get('symbol')}</b> | score {float(row.get('watchlist_score', 0.0)):.0f} | {reasons}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_early_warnings(warnings: List[Dict]) -> str:
+        if not warnings:
+            return ""
+        lines = ["⚠️ <b>Exit Early-Warning Alerts</b>"]
+        for row in warnings[:8]:
+            reason_text = ", ".join(row.get('reasons', [])[:3])
+            rank_text = f"#{row.get('current_rank')}" if row.get('current_rank') else "#?"
+            lines.append(
+                f"• <b>{row.get('symbol')}</b> {rank_text} | health {float(row.get('health_score', 0.0)):.0f}/100 | {reason_text}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def format_drift_summary(drift: Dict) -> str:
+        status = str(drift.get('status', 'stable'))
+        notes = drift.get('notes', []) or []
+        if status == 'stable':
+            return "📏 <b>Benchmark Drift</b>\nStatus: stable"
+        return "📏 <b>Benchmark Drift</b>\nStatus: drift\n" + "\n".join(f"• {note}" for note in notes)
+
+    @staticmethod
+    def format_summary_caption(regime: Dict | None, drift: Dict | None, active_count: int, watchlist_count: int) -> str:
+        regime_label = str((regime or {}).get('regime', 'unknown'))
+        drift_label = str((drift or {}).get('status', 'stable'))
+        return (
+            "🖼️ <b>Hourly Scanner Dashboard</b>\n"
+            f"Regime: {regime_label}\n"
+            f"Benchmark drift: {drift_label}\n"
+            f"Active: {active_count} | Watchlist: {watchlist_count}"
+        )

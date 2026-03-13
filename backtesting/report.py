@@ -20,6 +20,34 @@ REQUIRED_COLUMNS = [
 ]
 
 
+def _confidence_score(item: dict[str, Any]) -> float:
+    indicator = str(item.get("indicator", ""))
+    if indicator == "B&H":
+        return 50.0
+
+    trades = float(item.get("trades", 0) or 0.0)
+    try:
+        win_pct = float(item.get("win_pct", 0.0) or 0.0)
+    except Exception:
+        win_pct = 0.0
+    total_runs = float(item.get("total_runs", 0) or 0.0)
+    stops_tested = float(item.get("stops_tested", 0) or 0.0)
+
+    trade_component = min(trades / 12.0, 1.0) * 45.0
+    win_component = min(max((win_pct - 50.0) / 25.0, 0.0), 1.0) * 25.0
+    run_component = min(total_runs / 40.0, 1.0) * 20.0
+    stop_component = min(stops_tested / 8.0, 1.0) * 10.0
+    return max(0.0, min(100.0, trade_component + win_component + run_component + stop_component))
+
+
+def _weighted_rank_value(item: dict[str, Any]) -> float:
+    net_pct = float(item.get("net_pct", float("-inf")))
+    confidence = _confidence_score(item)
+    item["confidence_score"] = round(confidence, 2)
+    item["weighted_net_score"] = round(net_pct * (0.35 + (confidence / 100.0)), 4)
+    return float(item["weighted_net_score"])
+
+
 def _ensure_finite(value: float, name: str) -> None:
     if value is None or not math.isfinite(float(value)):
         raise ValueError(f"Invalid numeric value for {name}: {value}")
@@ -140,12 +168,17 @@ def notification_rows_for_symbol(summary: dict[str, Any], symbol: str, top_n: in
         return {"top_strategies": [], "buy_hold": None}
 
     strategy_rows = [row for row in result_rows if str(row.get("indicator", "")) != "B&H"]
-    strategy_rows_sorted = sorted(strategy_rows, key=lambda item: float(item.get("net_pct", float("-inf"))), reverse=True)
+    strategy_rows_sorted = sorted(
+        strategy_rows,
+        key=lambda item: (_weighted_rank_value(item), float(item.get("net_pct", float("-inf")))),
+        reverse=True,
+    )
 
     buy_hold_rows = [row for row in result_rows if str(row.get("indicator", "")) == "B&H"]
     buy_hold_best = None
     if buy_hold_rows:
         buy_hold_best = sorted(buy_hold_rows, key=lambda item: float(item.get("net_pct", float("-inf"))), reverse=True)[0]
+        _weighted_rank_value(buy_hold_best)
 
     return {
         "top_strategies": strategy_rows_sorted[:max(0, top_n)],
