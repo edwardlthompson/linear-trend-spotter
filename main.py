@@ -131,10 +131,12 @@ def _build_active_ranking_rows(
     rows: list[dict] = []
     active_symbols = set(active_after_update.keys())
 
+    active_rank = 0
     for coin in final_results:
         symbol = str(coin.get('symbol', '')).upper()
         if not symbol or symbol not in active_symbols:
             continue
+        active_rank += 1
 
         current_price = float(coin.get('current_price', 0.0) or 0.0)
         before_state = active_before_update.get(symbol, {})
@@ -146,6 +148,7 @@ def _build_active_ranking_rows(
         rows.append(
             {
                 'symbol': symbol,
+                'active_rank': active_rank,
                 'current_rank': coin.get('current_rank'),
                 'rank_status': coin.get('rank_status'),
                 'rank_delta': coin.get('rank_delta'),
@@ -1170,21 +1173,6 @@ def run_scanner():
                     )
                     metrics.increment('notifications_sent')
 
-        if telegram and early_warning_rows:
-            warning_text = MessageFormatter.format_early_warnings(early_warning_rows)
-            if warning_text:
-                telegram.send_message(warning_text)
-                metrics.increment('notifications_sent')
-
-        if telegram and watchlist_rows:
-            watchlist_text = MessageFormatter.format_watchlist_summary(watchlist_rows)
-            telegram.send_message(watchlist_text)
-            metrics.increment('notifications_sent')
-
-        if telegram and drift_summary.get('status') == 'drift':
-            telegram.send_message(MessageFormatter.format_drift_summary(drift_summary))
-            metrics.increment('notifications_sent')
-
         if telegram:
             app_logger.info("\n📱 Sending active coin ranking summary notification...")
             active_ranking_rows = _build_active_ranking_rows(
@@ -1210,23 +1198,23 @@ def run_scanner():
                         ),
                     )
                     metrics.increment('notifications_sent')
-            ranking_messages = MessageFormatter.format_active_rankings_summary(
+            combined_report = MessageFormatter.format_hourly_combined_report(
                 active_rows=active_ranking_rows,
                 entries_count=len(entered),
                 exits_count=len(exited),
                 blocked_count=len(blocked_by_cooldown),
+                watchlist_rows=watchlist_rows,
+                warnings=early_warning_rows,
                 regime=str(regime.get('regime') or ''),
                 drift_status=str(drift_summary.get('status') or 'stable'),
+                drift_notes=drift_summary.get('notes', []) or [],
             )
-            sent_summary_count = 0
-            for summary_message in ranking_messages:
-                message_id = telegram.send_message(summary_message)
-                if message_id:
-                    sent_summary_count += 1
-                metrics.increment('notifications_sent')
+            message_id = telegram.send_message(combined_report)
+            sent_summary_count = 1 if message_id else 0
+            metrics.increment('notifications_sent')
             app_logger.info(
                 "📌 ACTIVE_RANKING_SUMMARY_SENT "
-                f"messages={sent_summary_count}/{len(ranking_messages)} "
+                f"messages={sent_summary_count}/1 "
                 f"active_coins={len(active_ranking_rows)}"
             )
 

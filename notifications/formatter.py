@@ -271,8 +271,8 @@ class MessageFormatter:
 
         lines = []
         for row in active_rows:
-            rank = row.get('current_rank')
-            rank_label = f"#{int(rank)}" if isinstance(rank, int) else "#?"
+            active_rank = row.get('active_rank')
+            rank_label = f"A#{int(active_rank)}" if isinstance(active_rank, int) else "A#?"
             movement = MessageFormatter._format_rank_change(str(row.get('rank_status', 'new')), row.get('rank_delta'))
             since_entry = MessageFormatter._format_pct(row.get('gain_since_entry_pct'))
             since_last_update = MessageFormatter._format_pct(row.get('gain_since_last_update_pct'))
@@ -297,6 +297,74 @@ class MessageFormatter:
             messages.append(current_message.rstrip())
 
         return messages
+
+    @staticmethod
+    def format_hourly_combined_report(
+        active_rows: List[Dict],
+        entries_count: int,
+        exits_count: int,
+        blocked_count: int,
+        watchlist_rows: List[Dict],
+        warnings: List[Dict],
+        regime: str | None,
+        drift_status: str | None,
+        drift_notes: List[str] | None = None,
+        max_chars: int = 3800,
+    ) -> str:
+        lines: List[str] = []
+        lines.append("📋 <b>Hourly Scanner Report</b>")
+        lines.append(
+            f"Entries: {entries_count} | Exits: {exits_count} | Cooldown blocked: {blocked_count} | Active: {len(active_rows)}"
+        )
+        if regime:
+            lines.append(f"Regime: {regime}")
+        if drift_status:
+            lines.append(f"Benchmark drift: {drift_status}")
+        if drift_notes:
+            for note in drift_notes[:2]:
+                lines.append(f"• Drift note: {note}")
+
+        lines.append("")
+        lines.append("🏁 <b>Active Rankings</b>")
+        if active_rows:
+            for row in active_rows[:15]:
+                active_rank = row.get('active_rank')
+                active_label = f"A#{int(active_rank)}" if isinstance(active_rank, int) else "A#?"
+                movement = MessageFormatter._format_rank_change(str(row.get('rank_status', 'new')), row.get('rank_delta'))
+                health = MessageFormatter._format_score(row.get('health_score'))
+                since_entry = MessageFormatter._format_pct(row.get('gain_since_entry_pct'))
+                since_last = MessageFormatter._format_pct(row.get('gain_since_last_update_pct'))
+                symbol = str(row.get('symbol', '')).upper()
+                lines.append(
+                    f"• {active_label} {movement} <b>{symbol}</b> | H {health} | Alert {since_entry} | 1h {since_last}"
+                )
+        else:
+            lines.append("• No active coins this scan.")
+
+        lines.append("")
+        lines.append("⚠️ <b>Early Warnings</b>")
+        if warnings:
+            for row in warnings[:6]:
+                reasons = ", ".join((row.get('reasons') or [])[:2])
+                lines.append(
+                    f"• <b>{row.get('symbol')}</b> | health {float(row.get('health_score', 0.0)):.0f}/100 | {reasons}"
+                )
+        else:
+            lines.append("• None")
+
+        lines.append("")
+        lines.append("👀 <b>Watchlist</b>")
+        if watchlist_rows:
+            for row in watchlist_rows[:6]:
+                reasons = ", ".join((row.get('reasons') or [])[:2])
+                lines.append(f"• <b>{row.get('symbol')}</b> | score {float(row.get('watchlist_score', 0.0)):.0f} | {reasons}")
+        else:
+            lines.append("• None")
+
+        text = "\n".join(lines)
+        if len(text) <= max_chars:
+            return text
+        return text[: max_chars - 20].rstrip() + "\n…truncated"
 
     @staticmethod
     def format_watchlist_summary(watchlist_rows: List[Dict]) -> str:
