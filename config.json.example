@@ -13,6 +13,9 @@
     "RETRY_BACKOFF": 2,
     "COINGECKO_CALLS_PER_MINUTE": 30,
     "CMC_CALLS_PER_MINUTE": 333,
+    "COINGECKO_ID_ALIASES": {
+        "CRYPGPT": "crypgpt"
+    },
     "CMC_SYMBOL_ALIASES": {
         "CRYPGPT": "CGPT"
     },

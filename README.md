@@ -224,6 +224,7 @@ Available parameters (defaults from `config/settings.py`):
 | `MIN_VOLUME_M` | `1000000` | Minimum 24h volume gate from selected top-coin provider |
 | `TOP_COINS_PROVIDER` | `coingecko` | Top-coin universe source for Filter 1 (`coingecko` or `cmc`) |
 | `TOP_COINS_LIMIT` | `4000` | Number of top-ranked coins pulled into Filter 1 |
+| `COINGECKO_ID_ALIASES` | `{"CRYPGPT":"crypgpt"}` | Exchange symbol -> CoinGecko coin id fallback for tokens not present in `/coins/markets` paging |
 | `UNIFORMITY_MIN_SCORE` | `55` | Uniformity filter cutoff |
 | `ENTRY_NOTIFICATIONS` | `true` | Enable entry alerts |
 | `EXIT_NOTIFICATIONS` | `true` | Enable exit alerts |

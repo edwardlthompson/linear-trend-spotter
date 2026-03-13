@@ -209,6 +209,54 @@ class CoinGeckoClient:
         except Exception as e:
             self.logger.error(f"Error fetching top coins from CoinGecko: {e}")
             return None
+
+    def get_coin_market_snapshot(self, coin_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch a single CoinGecko coin snapshot with market data for filter checks."""
+        normalized_id = str(coin_id or '').strip().lower()
+        if not normalized_id:
+            return None
+
+        data = self._make_request(
+            f"{self.base_url}/coins/{normalized_id}",
+            {
+                'localization': 'false',
+                'tickers': 'false',
+                'market_data': 'true',
+                'community_data': 'false',
+                'developer_data': 'false',
+                'sparkline': 'false',
+            },
+            max_retries=2,
+            max_backoff_seconds=20,
+        )
+        if not isinstance(data, dict):
+            return None
+
+        market_data = data.get('market_data') or {}
+        total_volume = market_data.get('total_volume') or {}
+        current_price = market_data.get('current_price') or {}
+
+        symbol = str(data.get('symbol', '')).upper()
+        gains = {
+            '7d': float(market_data.get('price_change_percentage_7d', 0) or 0),
+            '30d': float(market_data.get('price_change_percentage_30d', 0) or 0),
+            '60d': 0.0,
+            '90d': 0.0,
+        }
+        info = {
+            'symbol': symbol,
+            'name': str(data.get('name', '')).strip(),
+            'slug': normalized_id,
+            'rank': int(data.get('market_cap_rank') or 999999),
+            'price': float(current_price.get('usd', 0) or 0),
+            'volume_24h': float(total_volume.get('usd', 0) or 0),
+            'source_url': f"https://www.coingecko.com/en/coins/{normalized_id}",
+        }
+        return {
+            'data': data,
+            'gains': gains,
+            'info': info,
+        }
     
     def get_market_chart(self, coin_id: str, days: int = 30, interval: str = 'daily') -> Optional[List]:
         """Get market chart data for uniformity calculation."""

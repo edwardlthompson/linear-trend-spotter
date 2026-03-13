@@ -653,11 +653,14 @@ def run_scanner():
                 }
 
         cmc_by_normalized_symbol = _build_cmc_normalized_lookup(cmc_by_symbol)
-        cmc_symbol_aliases = settings.cmc_symbol_aliases
+        cmc_symbol_aliases = settings.cmc_symbol_aliases if top_coins_provider != 'coingecko' else {}
+        coingecko_id_aliases = settings.coingecko_id_aliases if top_coins_provider == 'coingecko' else {}
         
         app_logger.info(f"📊 Built lookup for {len(cmc_by_symbol)} symbols")
         if cmc_symbol_aliases:
             app_logger.info(f"📎 CMC symbol aliases configured: {len(cmc_symbol_aliases)}")
+        if coingecko_id_aliases:
+            app_logger.info(f"📎 CoinGecko ID aliases configured: {len(coingecko_id_aliases)}")
 
         # ============================================================
         # STEP 2: Get ALL symbols from exchange listings (no limit!)
@@ -725,11 +728,32 @@ def run_scanner():
                 cmc_by_normalized_symbol,
                 cmc_symbol_aliases,
             )
+            if not cmc_data and top_coins_provider == 'coingecko':
+                alias_gecko_id = coingecko_id_aliases.get(symbol)
+                if alias_gecko_id:
+                    alias_snapshot = gecko.get_coin_market_snapshot(alias_gecko_id)
+                    if alias_snapshot:
+                        alias_info = alias_snapshot.get('info') or {}
+                        alias_info['symbol'] = symbol
+                        cmc_data = {
+                            'data': alias_snapshot.get('data', {}),
+                            'gains': alias_snapshot.get('gains', {}),
+                            'info': alias_info,
+                        }
+                        cmc_by_symbol[symbol] = cmc_data
+                        resolution_type = 'coingecko_id_alias'
+                        resolved_cmc_symbol = alias_gecko_id
+
             if cmc_data:
                 if resolution_type != 'direct':
-                    app_logger.info(
-                        f"   ↪️ {symbol}: Matched CMC symbol {resolved_cmc_symbol} via {resolution_type}"
-                    )
+                    if top_coins_provider == 'coingecko' and resolution_type == 'coingecko_id_alias':
+                        app_logger.info(
+                            f"   ↪️ {symbol}: Matched CoinGecko id {resolved_cmc_symbol} via {resolution_type}"
+                        )
+                    else:
+                        app_logger.info(
+                            f"   ↪️ {symbol}: Matched CMC symbol {resolved_cmc_symbol} via {resolution_type}"
+                        )
                 gains = cmc_data['gains']
                 info = cmc_data['info']
                 

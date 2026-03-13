@@ -53,6 +53,9 @@ class Settings:
             'CMC_SYMBOL_ALIASES': {
                 'CRYPGPT': 'CGPT',
             },
+            'COINGECKO_ID_ALIASES': {
+                'CRYPGPT': 'crypgpt',
+            },
             'CACHE_GECKO_ID_DAYS': 30,
             'CACHE_EXCHANGE_HOURS': 24,
             'CACHE_PRICE_HOURS': 6,
@@ -216,6 +219,18 @@ class Settings:
                 normalized_aliases[raw_key.strip().upper()] = raw_value.strip().upper()
             normalized['CMC_SYMBOL_ALIASES'] = normalized_aliases
 
+        coingecko_id_aliases = normalized.get('COINGECKO_ID_ALIASES', {})
+        if not isinstance(coingecko_id_aliases, dict):
+            errors.append('COINGECKO_ID_ALIASES must be an object mapping exchange symbol -> CoinGecko coin id')
+        else:
+            normalized_id_aliases: dict[str, str] = {}
+            for raw_key, raw_value in coingecko_id_aliases.items():
+                if not isinstance(raw_key, str) or not raw_key.strip() or not isinstance(raw_value, str) or not raw_value.strip():
+                    errors.append('COINGECKO_ID_ALIASES must contain non-empty string keys and values only')
+                    break
+                normalized_id_aliases[raw_key.strip().upper()] = raw_value.strip().lower()
+            normalized['COINGECKO_ID_ALIASES'] = normalized_id_aliases
+
         stop_min = int(normalized.get('BACKTEST_TRAILING_STOP_MIN', 0))
         stop_max = int(normalized.get('BACKTEST_TRAILING_STOP_MAX', 20))
         if stop_max < stop_min:
@@ -361,6 +376,11 @@ class Settings:
     @property
     def cmc_symbol_aliases(self) -> Dict[str, str]:
         value = self._config.get('CMC_SYMBOL_ALIASES', {})
+        return value if isinstance(value, dict) else {}
+
+    @property
+    def coingecko_id_aliases(self) -> Dict[str, str]:
+        value = self._config.get('COINGECKO_ID_ALIASES', {})
         return value if isinstance(value, dict) else {}
     
     @property
