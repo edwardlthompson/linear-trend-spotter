@@ -28,10 +28,10 @@ class OptimizationSummary:
     best_result: dict | None
 
 
-def trailing_stop_values(min_stop: int = 0, max_stop: int = 20, step: int = 1) -> list[int]:
+def trailing_stop_values(min_stop: int = 1, max_stop: int = 20, step: int = 1) -> list[int]:
     if step <= 0:
         raise ValueError("step must be > 0")
-    if min_stop < 0 or max_stop < min_stop:
+    if min_stop < 1 or max_stop < min_stop:
         raise ValueError("invalid stop range")
     return list(range(min_stop, max_stop + 1, step))
 
@@ -51,7 +51,7 @@ def optimize_indicator(
     max_param_combos: int = 100,
     starting_capital: float = 1000.0,
     fee_bps_round_trip: float = 52.0,
-    trailing_stop_min: int = 0,
+    trailing_stop_min: int = 1,
     trailing_stop_max: int = 20,
     trailing_stop_step: int = 1,
 ) -> OptimizationSummary:

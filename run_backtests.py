@@ -117,6 +117,8 @@ def main() -> int:
     invalid = [item for item in requested_timeframes if item not in allowed_timeframes]
     if invalid:
         raise ValueError(f"Unsupported timeframe(s): {invalid}")
+    if float(args.trailing_stop) < 1.0:
+        raise ValueError("--trailing-stop must be >= 1.0")
 
     config = BacktestConfig(
         starting_capital=settings.backtest_starting_capital,

@@ -46,15 +46,15 @@ def main() -> int:
                 )
                 return 1
 
-            if summary.stops_tested != 21:
-                print(f"FAIL {indicator}: stop sweep expected 21 got {summary.stops_tested}")
+            if summary.stops_tested != 20:
+                print(f"FAIL {indicator}: stop sweep expected 20 got {summary.stops_tested}")
                 return 1
 
             if summary.best_result is None:
                 print(f"FAIL {indicator}: best_result missing")
                 return 1
 
-            if not (0.0 <= summary.best_result["trailing_stop_pct"] <= 20.0):
+            if not (1.0 <= summary.best_result["trailing_stop_pct"] <= 20.0):
                 print(f"FAIL {indicator}: invalid trailing_stop_pct in best result")
                 return 1
 

@@ -71,7 +71,7 @@ class Settings:
             'BACKTEST_MAX_COINS_PER_RUN': 0,
             'BACKTEST_TIMEFRAMES': ['1h', '4h', '1d'],
             'BACKTEST_INDICATORS': [],
-            'BACKTEST_TRAILING_STOP_MIN': 0,
+            'BACKTEST_TRAILING_STOP_MIN': 1,
             'BACKTEST_TRAILING_STOP_MAX': 20,
             'BACKTEST_TRAILING_STOP_STEP': 1,
             'BACKTEST_RESUME_ENABLED': True,
@@ -186,7 +186,7 @@ class Settings:
             ('BACKTEST_MAX_PARAM_COMBOS', 1, 5000),
             ('BACKTEST_PARALLEL_WORKERS', 1, 32),
             ('BACKTEST_MAX_COINS_PER_RUN', 0, 10000),
-            ('BACKTEST_TRAILING_STOP_MIN', 0, 100),
+            ('BACKTEST_TRAILING_STOP_MIN', 1, 100),
             ('BACKTEST_TRAILING_STOP_MAX', 0, 100),
             ('BACKTEST_TRAILING_STOP_STEP', 1, 20),
             ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
@@ -231,7 +231,7 @@ class Settings:
                 normalized_id_aliases[raw_key.strip().upper()] = raw_value.strip().lower()
             normalized['COINGECKO_ID_ALIASES'] = normalized_id_aliases
 
-        stop_min = int(normalized.get('BACKTEST_TRAILING_STOP_MIN', 0))
+        stop_min = int(normalized.get('BACKTEST_TRAILING_STOP_MIN', 1))
         stop_max = int(normalized.get('BACKTEST_TRAILING_STOP_MAX', 20))
         if stop_max < stop_min:
             errors.append('BACKTEST_TRAILING_STOP_MAX must be >= BACKTEST_TRAILING_STOP_MIN')
@@ -452,7 +452,7 @@ class Settings:
 
     @property
     def backtest_trailing_stop_min(self) -> int:
-        return int(self._config.get('BACKTEST_TRAILING_STOP_MIN', 0))
+        return int(self._config.get('BACKTEST_TRAILING_STOP_MIN', 1))
 
     @property
     def backtest_trailing_stop_max(self) -> int:
