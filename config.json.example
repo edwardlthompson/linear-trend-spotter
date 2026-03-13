@@ -34,5 +34,6 @@
     "ARTIFACT_RETENTION_DAYS": 7,
     "ARTIFACT_ARCHIVE_DIR": ".archive/auto",
     "NOTIFICATION_INCLUDE_QUALITY_PANEL": true,
+    "ALERT_COOLDOWN_HOURS": 6,
     "EXIT_ANALYTICS_FILE": "exit_reason_analytics.json"
 }

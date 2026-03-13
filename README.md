@@ -160,7 +160,7 @@ Example entry notification excerpt:
 
 ### Cooldown re-entry policy
 
-- Exited symbols enter a cooldown window (`ALERT_COOLDOWN_HOURS`, default `24`).
+- Exited symbols enter a cooldown window (`ALERT_COOLDOWN_HOURS`, default `6`).
 - Symbols still in cooldown are blocked from immediate re-entry alerts.
 - Blocked re-entries are logged in scanner runtime output for visibility.
 
@@ -224,7 +224,7 @@ Available parameters (defaults from `config/settings.py`):
 | `ENTRY_NOTIFICATIONS` | `true` | Enable entry alerts |
 | `EXIT_NOTIFICATIONS` | `true` | Enable exit alerts |
 | `NO_CHANGE_NOTIFICATIONS` | `false` | Legacy no-change ping toggle |
-| `ALERT_COOLDOWN_HOURS` | `24` | Re-entry cooldown window after exit |
+| `ALERT_COOLDOWN_HOURS` | `6` | Re-entry cooldown window after exit |
 | `EXCHANGE_QUALITY_MIN_SCORE` | `25` | Minimum exchange-quality score to pass final qualification |
 | `EARLY_WARNING_ENABLED` | `true` | Enable pre-exit warning alerts |
 | `WATCHLIST_ENABLED` | `true` | Enable near-qualifier watchlist generation |

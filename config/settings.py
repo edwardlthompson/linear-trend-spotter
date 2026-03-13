@@ -77,7 +77,7 @@ class Settings:
             'NOTIFICATION_INCLUDE_QUALITY_PANEL': True,
             'EXIT_ANALYTICS_FILE': 'exit_reason_analytics.json',
             'USE_14D_FILTER': False,
-            'ALERT_COOLDOWN_HOURS': 24,
+            'ALERT_COOLDOWN_HOURS': 6,
             'EXCHANGE_QUALITY_MIN_SCORE': 25,
             'ANOMALY_ALERTS_ENABLED': True,
             'ANOMALY_MAX_MISSING_CG_RATIO': 0.35,
@@ -453,7 +453,7 @@ class Settings:
 
     @property
     def alert_cooldown_hours(self) -> int:
-        return int(self._config.get('ALERT_COOLDOWN_HOURS', 24))
+        return int(self._config.get('ALERT_COOLDOWN_HOURS', 6))
 
     @property
     def exchange_quality_min_score(self) -> int:
