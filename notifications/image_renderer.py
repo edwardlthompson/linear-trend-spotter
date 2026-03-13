@@ -110,6 +110,8 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
 
     headers = ["Indicator", "TF", "Key Settings", "Stop Loss %", "Final $", "Net %", "Trades", "Win %"]
     fig, axis = plt.subplots(figsize=(12, 4.9), dpi=160)
+    fig.patch.set_facecolor("#0f172a")
+    axis.set_facecolor("#0f172a")
     axis.axis("off")
     symbol = str(coin.get("symbol", "?")).upper()
     axis.set_title(
@@ -117,6 +119,7 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
         fontsize=12,
         fontweight="bold",
         pad=10,
+        color="#e2e8f0",
     )
 
     table = axis.table(
@@ -131,23 +134,30 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
     table.set_fontsize(8)
     table.scale(1, 1.45)
 
-    for (row_index, _), cell in table.get_celld().items():
-        cell.set_edgecolor("#4c4c4c")
+    for (row_index, col_index), cell in table.get_celld().items():
+        cell.set_edgecolor("#334155")
         cell.set_linewidth(0.8)
         if row_index == 0:
-            cell.set_facecolor("#e8eef7")
-            cell.set_text_props(weight="bold", color="#111111")
+            cell.set_facecolor("#1e3a8a")
+            cell.set_text_props(weight="bold", color="#f8fafc")
             continue
 
         row_values = table_body[row_index - 1]
         is_blank_separator = all(value == "" for value in row_values)
         if is_blank_separator:
-            cell.set_facecolor("#ffffff")
-            cell.set_edgecolor("#ffffff")
+            cell.set_facecolor("#0f172a")
+            cell.set_edgecolor("#0f172a")
             continue
 
         is_buy_hold = row_values[0] == "B&H"
-        cell.set_facecolor("#f7f7f7" if is_buy_hold else "#ffffff")
+        cell.set_facecolor("#111827" if is_buy_hold else "#0b1220")
+        cell.get_text().set_color("#e2e8f0")
+        if col_index == 5:
+            net_text = str(row_values[5])
+            if net_text.startswith('+'):
+                cell.get_text().set_color("#22c55e")
+            elif net_text.startswith('-'):
+                cell.get_text().set_color("#f87171")
 
     output = io.BytesIO()
     fig.savefig(output, format="png", bbox_inches="tight")
@@ -210,17 +220,26 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
             append_row(row)
 
     fig = plt.figure(figsize=(12, 9), dpi=160)
+    fig.patch.set_facecolor("#0f172a")
     gs = fig.add_gridspec(2, 1, height_ratios=[2.6, 2.0], hspace=0.08)
 
     ax_chart = fig.add_subplot(gs[0])
+    ax_chart.set_facecolor("#0f172a")
     ax_chart.imshow(image)
     ax_chart.axis("off")
     symbol = str(coin.get("symbol", "?")).upper()
-    ax_chart.set_title(f"{symbol}/USD • Price Chart", fontsize=12, fontweight="bold", pad=8)
+    ax_chart.set_title(f"{symbol}/USD • Price Chart", fontsize=12, fontweight="bold", pad=8, color="#e2e8f0")
 
     ax_table = fig.add_subplot(gs[1])
+    ax_table.set_facecolor("#0f172a")
     ax_table.axis("off")
-    ax_table.set_title(f"{symbol}/USD • Backtest Ranked Strategies", fontsize=12, fontweight="bold", pad=8)
+    ax_table.set_title(
+        f"{symbol}/USD • Backtest Ranked Strategies",
+        fontsize=12,
+        fontweight="bold",
+        pad=8,
+        color="#e2e8f0",
+    )
 
     if table_body:
         headers = ["Indicator", "TF", "Key Settings", "Stop Loss %", "Final $", "Net %", "Trades", "Win %"]
@@ -235,23 +254,30 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
         table.set_fontsize(8)
         table.scale(1, 1.5)
 
-        for (row_index, _), cell in table.get_celld().items():
-            cell.set_edgecolor("#4c4c4c")
+        for (row_index, col_index), cell in table.get_celld().items():
+            cell.set_edgecolor("#334155")
             cell.set_linewidth(0.8)
             if row_index == 0:
-                cell.set_facecolor("#e8eef7")
-                cell.set_text_props(weight="bold", color="#111111")
+                cell.set_facecolor("#1e3a8a")
+                cell.set_text_props(weight="bold", color="#f8fafc")
                 continue
 
             row_values = table_body[row_index - 1]
             is_blank_separator = all(value == "" for value in row_values)
             if is_blank_separator:
-                cell.set_facecolor("#ffffff")
-                cell.set_edgecolor("#ffffff")
+                cell.set_facecolor("#0f172a")
+                cell.set_edgecolor("#0f172a")
                 continue
 
             is_buy_hold = row_values[0] == "B&H"
-            cell.set_facecolor("#f7f7f7" if is_buy_hold else "#ffffff")
+            cell.set_facecolor("#111827" if is_buy_hold else "#0b1220")
+            cell.get_text().set_color("#e2e8f0")
+            if col_index == 5:
+                net_text = str(row_values[5])
+                if net_text.startswith('+'):
+                    cell.get_text().set_color("#22c55e")
+                elif net_text.startswith('-'):
+                    cell.get_text().set_color("#f87171")
     else:
         ax_table.text(
             0.5,
@@ -260,6 +286,7 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
             ha="center",
             va="center",
             fontsize=10,
+            color="#cbd5e1",
         )
 
     output = io.BytesIO()

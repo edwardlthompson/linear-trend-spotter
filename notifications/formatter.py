@@ -10,6 +10,22 @@ class MessageFormatter:
     """Format notification messages per spec §10.1-10.2"""
 
     @staticmethod
+    def _build_coingecko_url(coin: Dict) -> str:
+        gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip()
+        if gecko_id:
+            return f"https://www.coingecko.com/en/coins/{gecko_id}"
+
+        slug = str(coin.get('slug', '') or '').strip().lower()
+        if slug:
+            return f"https://www.coingecko.com/en/coins/{slug}"
+
+        symbol = str(coin.get('symbol', '') or '').strip()
+        if symbol:
+            return f"https://www.coingecko.com/en/search?query={symbol}"
+
+        return "https://www.coingecko.com/"
+
+    @staticmethod
     def _format_rank_change(status: str, delta: int | None) -> str:
         if status == 'up':
             amount = max(1, abs(int(delta or 0)))
@@ -224,11 +240,11 @@ class MessageFormatter:
         """
         symbol = coin['symbol']
         name = coin['name']
-        cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
+        gecko_url = MessageFormatter._build_coingecko_url(coin)
         reason = coin.get('exit_reason', 'No longer met qualification criteria')
         
         message = f"🔴 {symbol} ({name})\n"
-        message += f"🔗 {cmc_url}\n"
+        message += f"🔗 {gecko_url}\n"
         message += f"has left the qualified list\n"
         message += f"Reason: {reason}"
 
