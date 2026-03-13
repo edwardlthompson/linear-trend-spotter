@@ -142,7 +142,9 @@ Example entry notification excerpt:
 - Every scan can send a compact hourly summary image showing:
   - regime + benchmark drift state
   - top active rankings with health and gain deltas
+  - early warnings (between active rankings and watchlist)
   - top watchlist near-qualifiers
+- Hourly summary delivery is image-first and single-message (photo + short caption) to avoid duplicated text blocks.
 - Watchlist mode captures near-qualifiers that narrowly miss final inclusion, especially on uniformity or exchange-quality thresholds.
 
 ### Per-scan active ranking summary
@@ -154,7 +156,7 @@ Example entry notification excerpt:
   - health score
   - percentage gain since first announcement (entry baseline)
   - percentage gain since the prior hourly update (previous active-state price baseline)
-- Long lists are chunked into multiple Telegram messages to stay within message-size limits.
+- Active rank uses active-list order (`A#1`, `A#2`, ...), independent of non-active qualified rows.
 - Runtime includes an explicit marker log line:
   - `📌 ACTIVE_RANKING_SUMMARY_SENT messages=<sent>/<total> active_coins=<count>`
 
@@ -219,7 +221,9 @@ Available parameters (defaults from `config/settings.py`):
 
 | Key | Default | Purpose |
 | --- | ---: | --- |
-| `MIN_VOLUME_M` | `1000000` | Minimum 24h CMC volume gate |
+| `MIN_VOLUME_M` | `1000000` | Minimum 24h volume gate from selected top-coin provider |
+| `TOP_COINS_PROVIDER` | `coingecko` | Top-coin universe source for Filter 1 (`coingecko` or `cmc`) |
+| `TOP_COINS_LIMIT` | `4000` | Number of top-ranked coins pulled into Filter 1 |
 | `UNIFORMITY_MIN_SCORE` | `55` | Uniformity filter cutoff |
 | `ENTRY_NOTIFICATIONS` | `true` | Enable entry alerts |
 | `EXIT_NOTIFICATIONS` | `true` | Enable exit alerts |

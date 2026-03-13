@@ -572,31 +572,84 @@ def run_scanner():
                 app_logger.warning("⚠️ Telegram credentials missing - notifications disabled")
         
         # ============================================================
-        # STEP 1: Get top configured coins with gains from CoinMarketCap
+        # STEP 1: Get top configured coins with gains from provider
         # ============================================================
-        app_logger.info("\n📡 Fetching all coins with gains from CoinMarketCap...")
-        
-        all_cmc_coins = cmc.get_all_coins_with_gains(limit=settings.top_coins_limit)
-        
-        if not all_cmc_coins:
-            app_logger.error("❌ Failed to fetch coins from CMC")
-            tv_mapper.close()
-            exchange_db.close()
-            cg_mapper.close()
-            return
-        
+        top_coins_provider = settings.top_coins_provider
+        app_logger.info(
+            f"\n📡 Fetching all coins with gains from {top_coins_provider.upper()} (limit={settings.top_coins_limit})..."
+        )
+
+        all_cmc_coins: list[dict] = []
+        if top_coins_provider == 'coingecko':
+            gecko_rows = gecko.get_top_coins_with_gains(limit=settings.top_coins_limit)
+            if not gecko_rows:
+                app_logger.error("❌ Failed to fetch coins from CoinGecko")
+                tv_mapper.close()
+                exchange_db.close()
+                cg_mapper.close()
+                return
+
+            for index, row in enumerate(gecko_rows, start=1):
+                symbol = str(row.get('symbol', '')).upper()
+                if not symbol:
+                    continue
+                gecko_id = str(row.get('id', '')).strip()
+                gains = {
+                    '7d': float(row.get('price_change_percentage_7d_in_currency', 0) or 0),
+                    '30d': float(row.get('price_change_percentage_30d_in_currency', 0) or 0),
+                    '60d': 0.0,
+                    '90d': 0.0,
+                }
+                info = {
+                    'symbol': symbol,
+                    'name': str(row.get('name', '')).strip(),
+                    'slug': gecko_id,
+                    'rank': int(row.get('market_cap_rank') or index),
+                    'price': float(row.get('current_price', 0) or 0),
+                    'volume_24h': float(row.get('total_volume', 0) or 0),
+                    'source_url': f"https://www.coingecko.com/en/coins/{gecko_id}" if gecko_id else None,
+                }
+                all_cmc_coins.append(
+                    {
+                        'data': row,
+                        'gains': gains,
+                        'info': info,
+                    }
+                )
+        else:
+            cmc_rows = cmc.get_all_coins_with_gains(limit=settings.top_coins_limit)
+            if not cmc_rows:
+                app_logger.error("❌ Failed to fetch coins from CMC")
+                tv_mapper.close()
+                exchange_db.close()
+                cg_mapper.close()
+                return
+
+            for row in cmc_rows:
+                symbol = str(row.get('symbol', '')).upper()
+                if not symbol:
+                    continue
+                all_cmc_coins.append(
+                    {
+                        'data': row,
+                        'gains': cmc.extract_gains(row),
+                        'info': cmc.extract_coin_data(row),
+                    }
+                )
+
         app_logger.info(f"✅ Got {len(all_cmc_coins)} coins with gain data")
         metrics.increment('coins_retrieved', len(all_cmc_coins))
-        
+
         # Build lookup dict for quick access
         cmc_by_symbol = {}
         for coin in all_cmc_coins:
-            symbol = coin.get('symbol', '').upper()
+            info = coin.get('info') or {}
+            symbol = str(info.get('symbol', '')).upper()
             if symbol:
                 cmc_by_symbol[symbol] = {
-                    'data': coin,
-                    'gains': cmc.extract_gains(coin),
-                    'info': cmc.extract_coin_data(coin)
+                    'data': coin.get('data', {}),
+                    'gains': coin.get('gains', {}),
+                    'info': info,
                 }
 
         cmc_by_normalized_symbol = _build_cmc_normalized_lookup(cmc_by_symbol)
@@ -656,7 +709,7 @@ def run_scanner():
         # ============================================================
         # STEP 3: Match with CMC data and apply volume/gain filters
         # ============================================================
-        app_logger.info(f"\n💰 FILTER 1: Applying volume and gain filters...")
+        app_logger.info(f"\n💰 FILTER 1: Applying volume and gain filters ({top_coins_provider.upper()})...")
         
         gain_qualified = []
         
@@ -692,6 +745,7 @@ def run_scanner():
                             'cmc_symbol': resolved_cmc_symbol,
                             'name': info['name'],
                             'slug': info['slug'],
+                            'source_url': info.get('source_url'),
                             'gains': gains,
                             'volume_24h': info['volume_24h'],
                             'current_price': float(info.get('price', 0) or 0),
@@ -703,7 +757,9 @@ def run_scanner():
                 else:
                     app_logger.info(f"   ❌ {symbol}: Volume too low (${info['volume_24h']:,.0f})")
             else:
-                app_logger.info(f"   ❌ {symbol}: Not found in CMC data")
+                app_logger.info(
+                    f"   ❌ {symbol}: Not found in {top_coins_provider.upper()} data"
+                )
         
         app_logger.info(f"\n   ✅ PASSED gain filter: {len(gain_qualified)} coins")
         metrics.increment('gain_filter_passed', len(gain_qualified))
@@ -1053,7 +1109,10 @@ def run_scanner():
                 cmc_symbol_aliases,
             )
             if not cmc_data:
-                coin['exit_reason'] = "Missing from current CoinMarketCap snapshot"
+                if top_coins_provider == 'coingecko':
+                    coin['exit_reason'] = "Missing from current CoinGecko top-coin snapshot"
+                else:
+                    coin['exit_reason'] = "Missing from current CoinMarketCap snapshot"
                 continue
 
             gains = cmc_data['gains']
@@ -1255,15 +1314,17 @@ def run_scanner():
                 active_before_update,
                 active_after_update,
             )
+            sent_summary_count = 0
             if settings.hourly_summary_image_enabled:
                 summary_image = build_hourly_summary_image(
                     active_rows=active_ranking_rows,
+                    warning_rows=early_warning_rows,
                     watchlist_rows=watchlist_rows,
                     regime=regime,
                     drift=drift_summary,
                 )
                 if summary_image:
-                    telegram.send_photo(
+                    summary_msg_id = telegram.send_photo(
                         io.BytesIO(summary_image),
                         caption=MessageFormatter.format_summary_caption(
                             regime=regime,
@@ -1272,21 +1333,20 @@ def run_scanner():
                             watchlist_count=len(watchlist_rows),
                         ),
                     )
+                    if summary_msg_id:
+                        sent_summary_count = 1
+                        metrics.increment('notifications_sent')
+
+            if sent_summary_count == 0:
+                fallback_summary = (
+                    "🖼️ <b>Hourly Scanner Dashboard</b>\n"
+                    f"Entries: {len(entered)} | Exits: {len(exited)} | Cooldown blocked: {len(blocked_by_cooldown)}\n"
+                    f"Active: {len(active_ranking_rows)} | Warnings: {len(early_warning_rows)} | Watchlist: {len(watchlist_rows)}"
+                )
+                fallback_msg_id = telegram.send_message(fallback_summary)
+                if fallback_msg_id:
+                    sent_summary_count = 1
                     metrics.increment('notifications_sent')
-            combined_report = MessageFormatter.format_hourly_combined_report(
-                active_rows=active_ranking_rows,
-                entries_count=len(entered),
-                exits_count=len(exited),
-                blocked_count=len(blocked_by_cooldown),
-                watchlist_rows=watchlist_rows,
-                warnings=early_warning_rows,
-                regime=str(regime.get('regime') or ''),
-                drift_status=str(drift_summary.get('status') or 'stable'),
-                drift_notes=drift_summary.get('notes', []) or [],
-            )
-            message_id = telegram.send_message(combined_report)
-            sent_summary_count = 1 if message_id else 0
-            metrics.increment('notifications_sent')
             app_logger.info(
                 "📌 ACTIVE_RANKING_SUMMARY_SENT "
                 f"messages={sent_summary_count}/1 "

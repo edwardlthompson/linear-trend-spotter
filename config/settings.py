@@ -40,7 +40,8 @@ class Settings:
             'TARGET_EXCHANGES': ['coinbase', 'kraken', 'mexc'],
             'UNIFORMITY_MIN_SCORE': 55,
             'UNIFORMITY_PERIOD': 30,
-            'TOP_COINS_LIMIT': 2500,
+            'TOP_COINS_LIMIT': 4000,
+            'TOP_COINS_PROVIDER': 'coingecko',
             'ENTRY_NOTIFICATIONS': True,
             'EXIT_NOTIFICATIONS': True,
             'NO_CHANGE_NOTIFICATIONS': False,
@@ -142,6 +143,12 @@ class Settings:
         require_int('UNIFORMITY_MIN_SCORE', min_value=0, max_value=100)
         require_int('UNIFORMITY_PERIOD', min_value=7, max_value=120)
         require_int('TOP_COINS_LIMIT', min_value=1, max_value=10000)
+
+        provider = str(normalized.get('TOP_COINS_PROVIDER', 'cmc')).strip().lower()
+        if provider not in {'cmc', 'coingecko'}:
+            errors.append("TOP_COINS_PROVIDER must be one of: cmc, coingecko")
+        else:
+            normalized['TOP_COINS_PROVIDER'] = provider
 
         for bool_key in [
             'ENTRY_NOTIFICATIONS',
@@ -325,7 +332,11 @@ class Settings:
     
     @property
     def top_coins_limit(self) -> int:
-        return self._config.get('TOP_COINS_LIMIT', 2500)
+        return self._config.get('TOP_COINS_LIMIT', 4000)
+
+    @property
+    def top_coins_provider(self) -> str:
+        return str(self._config.get('TOP_COINS_PROVIDER', 'coingecko')).strip().lower()
     
     @property
     def entry_notifications(self) -> bool:

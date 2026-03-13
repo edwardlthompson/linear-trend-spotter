@@ -4,6 +4,7 @@ import time
 import random
 import json
 import requests
+import math
 from typing import Optional, List, Dict, Any
 import threading
 import logging
@@ -139,6 +140,75 @@ class CoinGeckoClient:
             max_retries=1,
             max_backoff_seconds=10
         )
+
+    def get_top_coins_with_gains(self, limit: int = 4000, per_page: int = 250) -> Optional[List[Dict[str, Any]]]:
+        """Fetch top-ranked market coins with 7d/30d gains and 24h volume.
+
+        This method is optimized for scanner universe pre-filtering and intentionally
+        avoids the strict low-throughput limiter used for per-coin endpoints.
+        """
+        try:
+            target = max(1, int(limit))
+            page_size = max(1, min(int(per_page), 250))
+            pages = int(math.ceil(target / page_size))
+            rows: List[Dict[str, Any]] = []
+
+            for page in range(1, pages + 1):
+                params = {
+                    'vs_currency': 'usd',
+                    'order': 'market_cap_desc',
+                    'per_page': page_size,
+                    'page': page,
+                    'sparkline': 'false',
+                    'price_change_percentage': '7d,30d',
+                }
+
+                page_data: Optional[List[Dict[str, Any]]] = None
+                for attempt in range(3):
+                    try:
+                        response = self.session.get(
+                            f"{self.base_url}/coins/markets",
+                            params=params,
+                            timeout=20,
+                        )
+                        if response.status_code == 200:
+                            parsed = response.json()
+                            if isinstance(parsed, list):
+                                page_data = parsed
+                                break
+                            self.logger.error(f"CoinGecko /coins/markets invalid payload on page {page}")
+                            return None
+
+                        if response.status_code == 429:
+                            retry_after = response.headers.get('Retry-After')
+                            wait_time = float(retry_after) if retry_after and retry_after.isdigit() else 1.5 * (attempt + 1)
+                            time.sleep(min(wait_time, 15.0))
+                            continue
+
+                        if response.status_code in (408, 500, 503):
+                            time.sleep(1.0 * (attempt + 1))
+                            continue
+
+                        self.logger.error(f"CoinGecko /coins/markets error {response.status_code}: {response.text[:160]}")
+                        return None
+                    except Exception as request_error:
+                        if attempt >= 2:
+                            self.logger.error(f"CoinGecko /coins/markets request failed on page {page}: {request_error}")
+                            return None
+                        time.sleep(1.0 * (attempt + 1))
+
+                if page_data is None:
+                    return None
+
+                rows.extend(page_data)
+                if len(rows) >= target:
+                    break
+                time.sleep(0.12)
+
+            return rows[:target]
+        except Exception as e:
+            self.logger.error(f"Error fetching top coins from CoinGecko: {e}")
+            return None
     
     def get_market_chart(self, coin_id: str, days: int = 30, interval: str = 'daily') -> Optional[List]:
         """Get market chart data for uniformity calculation."""

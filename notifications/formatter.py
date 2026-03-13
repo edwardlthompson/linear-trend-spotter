@@ -82,8 +82,11 @@ class MessageFormatter:
         Format entry notification per spec §10.1
         Returns HTML-formatted caption for Telegram photo
         """
-        # Build CMC URL
-        cmc_url = f"https://coinmarketcap.com/currencies/{coin['slug']}/"
+        # Build source URL (CoinGecko when configured as source, otherwise CMC fallback)
+        source_url = str(coin.get('source_url', '') or '').strip()
+        if not source_url:
+            slug = str(coin.get('slug', '') or '').strip()
+            source_url = f"https://coinmarketcap.com/currencies/{slug}/" if slug else ""
         
         # Get data
         symbol = coin['symbol']
@@ -93,7 +96,10 @@ class MessageFormatter:
         score = coin.get('uniformity_score', 0)
         
         # Header with HTML link
-        caption = f"🟢 <a href='{cmc_url}'>{symbol} ({name})</a>\n\n"
+        if source_url:
+            caption = f"🟢 <a href='{source_url}'>{symbol} ({name})</a>\n\n"
+        else:
+            caption = f"🟢 {symbol} ({name})\n\n"
         
         # Gains section
         caption += f"📊 Gains:\n"
@@ -186,9 +192,9 @@ class MessageFormatter:
         # Total CMC 24h volume
         total_volume_24h = coin.get('volume_24h', 0)
         if isinstance(total_volume_24h, (int, float)) and total_volume_24h > 0:
-            caption += f"💵 Total 24h Volume (CMC): ${total_volume_24h:,.0f}\n\n"
+            caption += f"💵 Total 24h Volume (Provider): ${total_volume_24h:,.0f}\n\n"
         else:
-            caption += f"💵 Total 24h Volume (CMC): No volume\n\n"
+            caption += f"💵 Total 24h Volume (Provider): No volume\n\n"
         
         # Exchange volumes
         caption += f"💰 Exchange Volumes:\n"

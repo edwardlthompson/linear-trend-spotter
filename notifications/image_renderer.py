@@ -271,6 +271,7 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
 
 def build_hourly_summary_image(
     active_rows: List[Dict],
+    warning_rows: List[Dict],
     watchlist_rows: List[Dict],
     regime: Optional[Dict] = None,
     drift: Optional[Dict] = None,
@@ -278,34 +279,45 @@ def build_hourly_summary_image(
     """Render a compact hourly dashboard image for Telegram summary sends."""
     try:
         top_active = list(active_rows[:12])
+        top_warnings = list(warning_rows[:8])
         top_watchlist = list(watchlist_rows[:6])
 
-        fig = plt.figure(figsize=(12, 9), dpi=160)
-        gs = fig.add_gridspec(3, 1, height_ratios=[0.9, 2.2, 1.5], hspace=0.18)
+        fig = plt.figure(figsize=(12, 11), dpi=170)
+        gs = fig.add_gridspec(4, 1, height_ratios=[0.8, 2.2, 1.7, 1.6], hspace=0.20)
+        fig.patch.set_facecolor("#0f172a")
 
         ax_header = fig.add_subplot(gs[0])
         ax_header.axis("off")
+        ax_header.set_facecolor("#0f172a")
         regime_name = str((regime or {}).get("regime", "unknown"))
         drift_status = str((drift or {}).get("status", "stable"))
         avg_30d = float((regime or {}).get("avg_gain_30d", 0.0) or 0.0)
-        ax_header.text(0.01, 0.72, "Hourly Scanner Dashboard", fontsize=16, fontweight="bold")
+        ax_header.text(0.01, 0.72, "Hourly Scanner Dashboard", fontsize=16, fontweight="bold", color="#e2e8f0")
         ax_header.text(
             0.01,
             0.34,
-            f"Regime: {regime_name} | Avg 30d gain: {avg_30d:+.1f}% | Drift: {drift_status} | Active: {len(active_rows)} | Watchlist: {len(watchlist_rows)}",
+            f"Regime: {regime_name} | Avg 30d gain: {avg_30d:+.1f}% | Drift: {drift_status} | Active: {len(active_rows)} | Warnings: {len(warning_rows)} | Watchlist: {len(watchlist_rows)}",
             fontsize=10,
+            color="#cbd5e1",
         )
         if (drift or {}).get("notes"):
-            ax_header.text(0.01, 0.08, "Drift notes: " + "; ".join((drift or {}).get("notes", [])[:3]), fontsize=9)
+            ax_header.text(
+                0.01,
+                0.08,
+                "Drift notes: " + "; ".join((drift or {}).get("notes", [])[:3]),
+                fontsize=9,
+                color="#94a3b8",
+            )
 
         ax_active = fig.add_subplot(gs[1])
         ax_active.axis("off")
-        ax_active.set_title("Active Rankings", fontsize=12, fontweight="bold", pad=8)
+        ax_active.set_facecolor("#111827")
+        ax_active.set_title("Active Rankings", fontsize=12, fontweight="bold", pad=8, color="#dbeafe")
         if top_active:
             active_table = []
             for row in top_active:
                 active_table.append([
-                    f"#{row.get('current_rank', '?')}",
+                    f"A#{row.get('active_rank', '?')}",
                     MessageFormatter._format_rank_change(str(row.get('rank_status', 'new')), row.get('rank_delta')),
                     str(row.get('symbol', '')).upper(),
                     MessageFormatter._format_score(row.get('health_score')),
@@ -322,12 +334,60 @@ def build_hourly_summary_image(
             table.auto_set_font_size(False)
             table.set_fontsize(9)
             table.scale(1, 1.4)
+            for (row_index, col_index), cell in table.get_celld().items():
+                cell.set_edgecolor("#334155")
+                cell.set_linewidth(0.7)
+                if row_index == 0:
+                    cell.set_facecolor("#1e3a8a")
+                    cell.set_text_props(color="#e2e8f0", weight="bold")
+                    continue
+                cell.set_facecolor("#0b1220")
+                cell.get_text().set_color("#e2e8f0")
+                if col_index in (4, 5):
+                    text = cell.get_text().get_text()
+                    cell.get_text().set_color("#22c55e" if text.startswith('+') else "#f87171" if text.startswith('-') else "#cbd5e1")
         else:
-            ax_active.text(0.5, 0.5, "No active rows", ha="center", va="center")
+            ax_active.text(0.5, 0.5, "No active rows", ha="center", va="center", color="#cbd5e1")
 
-        ax_watch = fig.add_subplot(gs[2])
+        ax_warn = fig.add_subplot(gs[2])
+        ax_warn.axis("off")
+        ax_warn.set_facecolor("#1f2937")
+        ax_warn.set_title("Early Warnings", fontsize=12, fontweight="bold", pad=8, color="#fef3c7")
+        if top_warnings:
+            warning_table = []
+            for row in top_warnings:
+                reasons = "; ".join((row.get('reasons') or [])[:2])
+                warning_table.append([
+                    str(row.get('symbol', '')).upper(),
+                    f"{float(row.get('health_score', 0.0) or 0.0):.0f}/100",
+                    reasons,
+                ])
+            table = ax_warn.table(
+                cellText=warning_table,
+                colLabels=["Symbol", "Health", "Risk signals"],
+                colWidths=[0.16, 0.14, 0.62],
+                loc="center",
+                cellLoc="left",
+            )
+            table.auto_set_font_size(False)
+            table.set_fontsize(9)
+            table.scale(1, 1.35)
+            for (row_index, col_index), cell in table.get_celld().items():
+                cell.set_edgecolor("#475569")
+                cell.set_linewidth(0.7)
+                if row_index == 0:
+                    cell.set_facecolor("#92400e")
+                    cell.set_text_props(color="#fffbeb", weight="bold")
+                    continue
+                cell.set_facecolor("#111827")
+                cell.get_text().set_color("#fef3c7" if col_index == 2 else "#e2e8f0")
+        else:
+            ax_warn.text(0.5, 0.5, "No early warnings", ha="center", va="center", color="#cbd5e1")
+
+        ax_watch = fig.add_subplot(gs[3])
         ax_watch.axis("off")
-        ax_watch.set_title("Watchlist + Early Signals", fontsize=12, fontweight="bold", pad=8)
+        ax_watch.set_facecolor("#111827")
+        ax_watch.set_title("Watchlist", fontsize=12, fontweight="bold", pad=8, color="#bbf7d0")
         if top_watchlist:
             watch_table = []
             for row in top_watchlist:
@@ -346,8 +406,17 @@ def build_hourly_summary_image(
             table.auto_set_font_size(False)
             table.set_fontsize(9)
             table.scale(1, 1.35)
+            for (row_index, col_index), cell in table.get_celld().items():
+                cell.set_edgecolor("#334155")
+                cell.set_linewidth(0.7)
+                if row_index == 0:
+                    cell.set_facecolor("#166534")
+                    cell.set_text_props(color="#f0fdf4", weight="bold")
+                    continue
+                cell.set_facecolor("#0b1220")
+                cell.get_text().set_color("#86efac" if col_index == 2 else "#e2e8f0")
         else:
-            ax_watch.text(0.5, 0.5, "No watchlist candidates", ha="center", va="center")
+            ax_watch.text(0.5, 0.5, "No watchlist candidates", ha="center", va="center", color="#cbd5e1")
 
         output = io.BytesIO()
         fig.savefig(output, format="png", bbox_inches="tight")
