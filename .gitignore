@@ -27,6 +27,12 @@ scan.lock
 scan_stats.json
 metrics.json
 backtest_telemetry.jsonl
+backtest_checkpoint.json
+backtest_results.json
+exit_reason_analytics.json
+scanner_insights.json
+sync-run-logs/*.log
+sync-run-logs/*.exitcode.txt
 
 # Local development files
 ## Allow vscode
