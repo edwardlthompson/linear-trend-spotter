@@ -112,9 +112,6 @@ class ScanScheduler:
             # Save stats
             self._save_stats(elapsed)
 
-            # Force garbage collection to close any lingering connections
-            import gc
-            gc.collect()
 
         except Exception as e:
             self.logger.error(f"❌ Scan failed: {e}", exc_info=True)

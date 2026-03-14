@@ -85,30 +85,36 @@ def optimize_indicator(
 
         best_for_combo = None
         for stop_pct in stop_values:
-            total_runs += 1
-            cfg = BacktestConfig(
-                starting_capital=starting_capital,
-                fee_bps_round_trip=fee_bps_round_trip,
-                trailing_stop_pct=float(stop_pct),
-            )
+            for tp_pct in [0.0, 5.0, 10.0]:
+                for ttp_pct in ([0.0] if tp_pct == 0.0 else [1.0, 2.0]):
+                    total_runs += 1
+                    cfg = BacktestConfig(
+                        starting_capital=starting_capital,
+                        fee_bps_round_trip=fee_bps_round_trip,
+                        trailing_stop_loss_pct=float(stop_pct),
+                        take_profit_pct=float(tp_pct),
+                        trailing_take_profit_pct=float(ttp_pct),
+                    )
 
-            result = run_backtest(
-                frame=frame,
-                buy_signals=buy_signals,
-                sell_signals=sell_signals,
-                config=cfg,
-            )
+                    result = run_backtest(
+                        frame=frame,
+                        buy_signals=buy_signals,
+                        sell_signals=sell_signals,
+                        config=cfg,
+                    )
 
-            row = {
-                "indicator": indicator,
-                "timeframe": timeframe,
-                "params": params,
-                "trailing_stop_pct": float(stop_pct),
-                "final_equity": float(result.final_equity),
-                "net_pct": float(result.net_pct),
-                "trades": int(result.total_trades),
-                "win_pct": float(result.win_pct),
-            }
+                    row = {
+                        "indicator": indicator,
+                        "timeframe": timeframe,
+                        "params": params,
+                        "trailing_stop_loss_pct": float(stop_pct),
+                        "take_profit_pct": float(tp_pct),
+                        "trailing_take_profit_pct": float(ttp_pct),
+                        "final_equity": float(result.final_equity),
+                        "net_pct": float(result.net_pct),
+                        "trades": int(result.total_trades),
+                        "win_pct": float(result.win_pct),
+                    }
 
             if float(row["win_pct"]) <= MIN_STRATEGY_WIN_PCT:
                 continue

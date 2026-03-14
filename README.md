@@ -7,8 +7,9 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 1. **Trend Identification (Primary):** Evaluates the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
 2. **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and ranks opportunities for alerts.
 3. **Actionable Telegram Alerts:** Sends enriched entry/exit notifications and event-driven dashboard summaries (on entry/exit), with watchlist context.
-4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity.
+4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity, enforcing strict OOM memory clipping for low-RAM remote deployments (e.g. Render Basic plans).
 5. **Insights Layer:** Persists rank history, regime state, drift monitoring, outcome analytics, data reliability, and portfolio simulation.
+6. **3Commas Alignment:** Deterministic backtesting engine strictly implements Hard Take Profit (TP), Trailing Take Profit (TTP), and Trailing Stop Loss (TSL) parameters aligned perfectly with 3Commas native intervals.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 

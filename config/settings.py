@@ -424,7 +424,11 @@ class Settings:
 
     @property
     def backtest_parallel_workers(self) -> int:
-        return self._config.get('BACKTEST_PARALLEL_WORKERS', 4)
+        configured = int(self._config.get('BACKTEST_PARALLEL_WORKERS', 4))
+        if os.getenv('RENDER') or os.getenv('RENDER_EXTERNAL_URL'):
+            # Max 2 workers on Render Basic plan (0.5 CPU) to prevent stalling
+            return min(configured, 2)
+        return configured
 
     @property
     def backtest_max_coins_per_run(self) -> int:

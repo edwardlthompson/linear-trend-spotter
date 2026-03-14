@@ -39,20 +39,44 @@ class TelegramClient:
             self.logger.error(f"Telegram request error: {e}")
             return None
     
-    def send_message(self, text: str, parse_mode: str = 'HTML') -> Optional[int]:
+    def send_message(self, text: str, parse_mode: str = 'HTML', reply_markup: dict = None) -> Optional[int]:
         """Send a text message"""
         data = {
             'chat_id': self.chat_id,
             'text': text,
             'parse_mode': parse_mode
         }
+        if reply_markup:
+            data['reply_markup'] = reply_markup
         
         result = self._request('sendMessage', data)
         if result and result.get('ok'):
             return result['result']['message_id']
         return None
     
-    def send_photo(self, photo: io.BytesIO, caption: str = None) -> Optional[int]:
+    def edit_message_text(self, message_id: int, text: str, parse_mode: str = 'HTML', reply_markup: dict = None) -> bool:
+        """Edit an existing message"""
+        data = {
+            'chat_id': self.chat_id,
+            'message_id': message_id,
+            'text': text,
+            'parse_mode': parse_mode
+        }
+        if reply_markup:
+            data['reply_markup'] = reply_markup
+            
+        result = self._request('editMessageText', data)
+        return bool(result and result.get('ok'))
+
+    def answer_callback_query(self, callback_query_id: str, text: str = None) -> bool:
+        """Acknowledge callback query"""
+        data = {'callback_query_id': callback_query_id}
+        if text:
+            data['text'] = text
+        result = self._request('answerCallbackQuery', data)
+        return bool(result and result.get('ok'))
+    
+    def send_photo(self, photo: io.BytesIO, caption: str = None, reply_markup: dict = None) -> Optional[int]:
         """Send a photo with caption"""
         try:
             url = f"{self.base_url}sendPhoto"
@@ -62,6 +86,9 @@ class TelegramClient:
             if caption:
                 data['caption'] = caption
                 data['parse_mode'] = 'HTML'
+                
+            if reply_markup:
+                data['reply_markup'] = json.dumps(reply_markup)
             
             response = self.session.post(url, data=data, files=files, timeout=30)
             result = response.json()
@@ -76,16 +103,36 @@ class TelegramClient:
             self.logger.error(f"Error sending photo: {e}")
             return None
     
+    def _build_context_keyboard(self, coin: Dict) -> dict | None:
+        symbol = str(coin.get('symbol', ''))
+        tv_url = f"https://www.tradingview.com/chart/?symbol={symbol}USD" # Generic URL, could be improved
+        cg_url = str(
+            coin.get('source_url')
+            or coin.get('cmc_url')
+            or MessageFormatter._build_coingecko_url(coin)
+        ).strip()
+        
+        buttons = []
+        if symbol:
+            buttons.append({"text": "📈 View Chart", "url": tv_url})
+        if cg_url:
+            buttons.append({"text": "🔍 Analyze Coin", "url": cg_url})
+            
+        if buttons:
+            return {"inline_keyboard": [buttons]}
+        return None
+
     def send_entry_notification(self, coin: Dict, chart_bytes: bytes = None) -> Optional[int]:
         """Send entry notification with chart and backtest details"""
         caption = MessageFormatter.format_entry(coin)
+        markup = self._build_context_keyboard(coin)
         
         # Send with chart if available
         if chart_bytes:
             img_data = io.BytesIO(chart_bytes)
-            return self.send_photo(img_data, caption=caption)
+            return self.send_photo(img_data, caption=caption, reply_markup=markup)
         else:
-            return self.send_message(caption)
+            return self.send_message(caption, reply_markup=markup)
     
     def send_exit_notification(self, coin: Dict) -> Optional[int]:
         """Send exit notification without timestamp"""
@@ -95,4 +142,5 @@ class TelegramClient:
             or MessageFormatter._build_coingecko_url(coin)
         ).strip()
         message = f"🔴 <a href='{source_url}'>{coin['symbol']} ({coin['name']})</a> has left the qualified list"
-        return self.send_message(message)
+        markup = self._build_context_keyboard(coin)
+        return self.send_message(message, reply_markup=markup)

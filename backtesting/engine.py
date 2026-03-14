@@ -82,13 +82,44 @@ def run_backtest(
                 highest_price = high_price
 
             stop_hit = False
-            stop_price = None
-            if config.trailing_stop_pct > 0:
-                stop_price = highest_price * (1 - config.trailing_stop_pct / 100.0)
-                stop_hit = low_price <= stop_price
+            effective_exit = None
+            exit_reason = None
 
-            if stop_hit or sell_signal:
-                effective_exit = stop_price if stop_hit and stop_price is not None else close_price
+            # 1. Hard Take Profit (if no TTP)
+            if config.take_profit_pct > 0 and config.trailing_take_profit_pct == 0.0:
+                tp_price = entry_price * (1 + config.take_profit_pct / 100.0)
+                if high_price >= tp_price:
+                    stop_hit = True
+                    effective_exit = tp_price
+                    exit_reason = "take_profit"
+
+            # 2. Trailing Take Profit
+            elif config.take_profit_pct > 0 and config.trailing_take_profit_pct > 0:
+                activation_price = entry_price * (1 + config.take_profit_pct / 100.0)
+                if highest_price >= activation_price:
+                    ttp_price = highest_price * (1 - config.trailing_take_profit_pct / 100.0)
+                    if low_price <= ttp_price:
+                        stop_hit = True
+                        effective_exit = ttp_price
+                        exit_reason = "trailing_take_profit"
+
+            # 3. Trailing Stop Loss
+            if not stop_hit and config.trailing_stop_loss_pct > 0:
+                tsl_price = highest_price * (1 - config.trailing_stop_loss_pct / 100.0)
+                if low_price <= tsl_price:
+                    stop_hit = True
+                    effective_exit = tsl_price
+                    exit_reason = "trailing_stop_loss"
+
+            # 4. Sell Signal
+            if not stop_hit and sell_signal:
+                stop_hit = True
+                effective_exit = close_price
+                exit_reason = "sell_signal"
+
+            if stop_hit:
+                if effective_exit is None:
+                    effective_exit = close_price
                 exit_notional = position_qty * effective_exit
                 exit_fee = exit_notional * config.side_fee_rate
                 cash = exit_notional - exit_fee
@@ -106,7 +137,7 @@ def run_backtest(
                         exit_fee=exit_fee,
                         pnl_dollars=(position_qty * effective_exit - exit_fee) - invested_notional,
                         pnl_pct=pnl_pct,
-                        exit_reason="trailing_stop" if stop_hit else "sell_signal",
+                        exit_reason=exit_reason or "unknown",
                     )
                 )
 

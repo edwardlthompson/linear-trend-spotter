@@ -5,6 +5,7 @@ import os
 import random
 import traceback
 import time
+import concurrent.futures
 from dataclasses import dataclass
 from datetime import date, timedelta
 from statistics import median
@@ -298,7 +299,8 @@ def run_snapshot_40(session: requests.Session, symbols: list[str]) -> list[dict[
         ('Polygon', 'https://api.polygon.io/v3/reference/tickers', {'market': 'crypto', 'active': 'true', 'limit': 1000, 'apiKey': os.getenv('POLYGON_API_KEY', '')}, {}),
     ]
 
-    for name, url, params, headers in calls:
+    def fetch(call):
+        name, url, params, headers = call
         provider_name = 'generic'
         if name == 'CoinGecko':
             provider_name = 'coingecko'
@@ -326,7 +328,10 @@ def run_snapshot_40(session: requests.Session, symbols: list[str]) -> list[dict[
             count = len(body.get('data', [])) if isinstance(body, dict) else 0
         else:
             count = len(body.get('results', [])) if isinstance(body, dict) else 0
-        rows.append({'source': name, 'status_code': st, 'latency_ms': round(lat, 2), 'records_returned': count, 'covers_40': count >= 40})
+        return {'source': name, 'status_code': st, 'latency_ms': round(lat, 2), 'records_returned': count, 'covers_40': count >= 40}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        rows = list(executor.map(fetch, calls))
 
     return rows
 
@@ -351,11 +356,15 @@ def main() -> None:
     ]
 
     history = []
-    for sc in scenarios:
-        for provider in ('coingecko', 'polygon'):
-            log_progress(f"history_start provider={provider} scenario={sc.name}")
-            history.append(run_history(session, provider, symbols, maps.get(provider, {}), sc))
-            log_progress(f"history_done provider={provider} scenario={sc.name}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = []
+        for sc in scenarios:
+            for provider in ('coingecko', 'polygon'):
+                log_progress(f"history_start provider={provider} scenario={sc.name}")
+                futures.append(executor.submit(run_history, session, provider, symbols, maps.get(provider, {}), sc))
+        
+        for future in concurrent.futures.as_completed(futures):
+            history.append(future.result())
 
     log_progress('snapshot_start')
     out = {

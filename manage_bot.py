@@ -9,7 +9,7 @@ import sys
 import signal
 import subprocess
 import time
-
+import psutil
 PID_FILE = 'bot.pid'
 LOG_FILE = 'bot_output.log'
 
@@ -28,9 +28,9 @@ def is_running(pid):
     if not pid:
         return False
     try:
-        os.kill(pid, 0)
-        return True
-    except:
+        process = psutil.Process(pid)
+        return process.is_running() and process.status() != psutil.STATUS_ZOMBIE
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return False
 
 def start():

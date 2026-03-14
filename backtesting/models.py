@@ -10,7 +10,9 @@ from typing import Optional
 class BacktestConfig:
     starting_capital: float = 1000.0
     fee_bps_round_trip: float = 52.0
-    trailing_stop_pct: float = 0.0
+    trailing_stop_loss_pct: float = 0.0
+    take_profit_pct: float = 0.0
+    trailing_take_profit_pct: float = 0.0
 
     @property
     def side_fee_rate(self) -> float:

@@ -12,7 +12,9 @@ REQUIRED_COLUMNS = [
     "Indicator",
     "TF",
     "Key Settings",
-    "Stop Loss %",
+    "TSL %",
+    "TP %",
+    "TTP %",
     "Final $",
     "Net %",
     "Trades",
@@ -112,13 +114,17 @@ def rows_from_summary(summary: dict[str, Any]) -> list[dict[str, Any]]:
         final_equity = float(item.get("final_equity", 0.0))
 
         is_buy_hold = indicator == "B&H"
-        trailing_stop = item.get("trailing_stop_pct")
+        trailing_stop = item.get("trailing_stop_loss_pct", item.get("trailing_stop_pct"))
+        take_profit = item.get("take_profit_pct")
+        trailing_take_profit = item.get("trailing_take_profit_pct")
 
         row = {
             "Indicator": indicator,
             "TF": str(item.get("timeframe", "")),
             "Key Settings": _format_settings(item.get("params", {})),
-            "Stop Loss %": "-" if is_buy_hold else _format_pct(float(trailing_stop or 0.0)),
+            "TSL %": "-" if is_buy_hold else _format_pct(float(trailing_stop or 0.0)),
+            "TP %": "-" if is_buy_hold else _format_pct(float(take_profit or 0.0)),
+            "TTP %": "-" if is_buy_hold else _format_pct(float(trailing_take_profit or 0.0)),
             "Final $": _format_money(final_equity),
             "Net %": _format_pct(net_pct),
             "Trades": "-" if is_buy_hold else int(item.get("trades", 0)),
@@ -147,14 +153,18 @@ def top_settings_block(summary: dict[str, Any]) -> str:
 
     raw = best_strategy_row["_raw"]
     params = raw.get("params", {}) or {}
-    stop = raw.get("trailing_stop_pct", 0.0)
+    stop = raw.get("trailing_stop_loss_pct", raw.get("trailing_stop_pct", 0.0))
+    tp = raw.get("take_profit_pct", 0.0)
+    ttp = raw.get("trailing_take_profit_pct", 0.0)
     settings_text = _format_settings(params)
     return (
         "#1 Settings: "
         f"indicator={raw.get('indicator')}, "
         f"tf={raw.get('timeframe')}, "
         f"params=[{settings_text}], "
-        f"trailing_stop={float(stop):.0f}%, "
+        f"TSL={float(stop or 0.0):.0f}%, "
+        f"TP={float(tp or 0.0):.0f}%, "
+        f"TTP={float(ttp or 0.0):.0f}%, "
         f"net={float(raw.get('net_pct', 0.0)):.2f}%"
     )
 

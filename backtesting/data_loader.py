@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 import os
 from typing import Optional, Tuple
@@ -34,6 +35,8 @@ class BacktestDataLoader:
             cmc_api_key="",
         )
         self.max_cache_age_hours = max_cache_age_hours
+        self.ram_cache: OrderedDict[str, LoadResult] = OrderedDict()
+        self.max_ram_cache_size = 50  # Cap at 50 to fit safely within Render's 512MB limit
 
     @staticmethod
     def _rows_to_frame(rows: list[dict]) -> pd.DataFrame:
@@ -217,6 +220,20 @@ class BacktestDataLoader:
         return frame, "coingecko_api", None
 
     def load(self, symbol: str, timeframe: str = "1h", days: int = 30, gecko_id: Optional[str] = None) -> LoadResult:
+        cache_key = f"{symbol}_{timeframe}_{days}"
+        if cache_key in self.ram_cache:
+            self.ram_cache.move_to_end(cache_key)
+            return self.ram_cache[cache_key]
+        
+        res = self._load_internal(symbol, timeframe, days, gecko_id)
+        
+        self.ram_cache[cache_key] = res
+        if len(self.ram_cache) > self.max_ram_cache_size:
+            self.ram_cache.popitem(last=False)
+            
+        return res
+
+    def _load_internal(self, symbol: str, timeframe: str = "1h", days: int = 30, gecko_id: Optional[str] = None) -> LoadResult:
         frame_1h, source, reason = self._get_or_fetch_1h(symbol=symbol, gecko_id=gecko_id, days=days)
 
         if frame_1h is None:
