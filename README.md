@@ -6,7 +6,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 
 1. **Trend Identification (Primary):** Evaluates the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
 2. **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and ranks opportunities for alerts.
-3. **Actionable Telegram Alerts:** Sends enriched entry/exit notifications, early warnings, watchlist summaries, and hourly dashboard images.
+3. **Actionable Telegram Alerts:** Sends enriched entry/exit notifications and event-driven dashboard summaries (on entry/exit), with watchlist context.
 4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity.
 5. **Insights Layer:** Persists rank history, regime state, drift monitoring, outcome analytics, data reliability, and portfolio simulation.
 
@@ -26,7 +26,7 @@ Linear Trend Spotter scans all symbols listed across target exchanges (default: 
 6. 30-day uniformity scoring from market chart history
 7. **Backtesting stage (featured):** always-on multi-strategy, multi-timeframe backtests on final-stage qualified coins
 8. Entry/exit detection vs active list
-9. Telegram notifications (entry/exit, watchlist, early warning, hourly summary image)
+9. Telegram notifications (entry/exit + event summary image when entries/exits occur)
 10. Insights persistence (`scanner_insights.json`)
 11. History persistence + metrics/log summary
 
@@ -66,12 +66,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
   - uniformity score
   - ATR score
   - health score
-  - exchange-quality score
-  - data-reliability score
-  - re-entry quality label/score
   - rank movement vs previous scan
-  - signal age for the top-ranked strategy
-  - backtest confidence for the top-ranked strategy
   - volume acceleration vs recent daily baseline
   - total 24h provider volume
   - exchange-level volumes (Coinbase/Kraken/MEXC)
@@ -82,11 +77,9 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 
 Notification enhancement details:
 
-- **Health score:** blends rank, uniformity, ATR, exchange quality, data reliability, volume acceleration, and top-strategy confidence.
+- **Health score:** blends uniformity, rank, ATR, data reliability, volume acceleration, and strategy-confidence fallback.
 - **Backtest confidence weighting:** top strategies are ranked by weighted net score instead of raw net % alone.
-- **Re-entry quality:** re-entering symbols are labeled/penalized based on recent exit churn.
-- **Exchange quality:** final qualification now includes an exchange-quality filter based on target exchange breadth and liquidity concentration.
-- **Data reliability:** coins receive a reliability score from mapping/ticker/OHLCV source quality.
+- **Data reliability:** reliability is derived from mapping/ticker/OHLCV source quality.
 
 Example entry notification excerpt:
 
@@ -100,14 +93,8 @@ Example entry notification excerpt:
 📈 Uniformity Score: 71/100
 📏 ATR Score: 76/100 (ATR14: 2.40%)
 🩺 Health Score: 79/100 (strong)
-🏦 Exchange Quality: 67/100 (solid)
-🧪 Data Reliability: 84/100 (high)
 
 🏁 Rank: #3 ↑ from #8 (5)
-⏱️ Best Strategy Signal: RSI • 2 candles ago on 4h (~8h)
-🧠 Backtest Confidence: 73/100 (weighted net: +31.25)
-🔁 Re-entry Quality: 100/100 (fresh)
-🌦️ Regime: constructive
 🚀 Volume Acceleration: +37% vs prior 7d avg
 ```
 
@@ -125,40 +112,33 @@ Example entry notification excerpt:
   - max run-up since entry
   - max drawdown since entry
   - hold duration in days
+- Sends an exit dashboard image (image-first, text fallback) with:
+  - top mini-chart feature using recent 1h candles
+  - explicit entry and exit markers on chart
+  - lifecycle + risk panel (reason, P&L/run-up/drawdown, held duration, health/uniformity)
+  - market context panel (entry/exit price, 7d/30d gains, 24h volume, rank, on-list duration, cooldown)
 
-### Exit early-warning alerts
+### Event dashboard image + watchlist mode
 
-- Active coins can emit warning alerts before full exit when they are near failure thresholds.
-- Warning conditions include:
-  - volume near minimum threshold
-  - softening 7d / 30d gain profile
-  - shrinking `30d - 7d` spread
-  - uniformity nearing cutoff
-  - sharp rank deterioration
-  - weak health score
-
-### Hourly dashboard image + watchlist mode
-
-- Every scan can send a compact hourly summary image showing:
+- A compact event summary image is sent only when there is at least one entry or exit.
+- Event summary shows:
   - regime + benchmark drift state
-  - top active rankings with health and gain deltas
-  - early warnings (between active rankings and watchlist)
+  - active rankings with health, gain since entry, and time-on-list
   - top watchlist near-qualifiers
-- Hourly summary delivery is image-first and single-message (photo + short caption) to avoid duplicated text blocks.
-- Watchlist mode captures near-qualifiers that narrowly miss final inclusion, especially on uniformity or exchange-quality thresholds.
+- Watchlist mode captures near-qualifiers that narrowly miss final inclusion (uniformity/gain proximity).
 
-### Per-scan active ranking summary
+### Event active ranking summary
 
-- Sent on every scan when Telegram is enabled.
+- Sent only on scans where at least one entry or exit occurred.
 - Includes all currently active qualified coins, ordered by current rank.
 - Each row includes:
   - rank and movement arrow (`↑`, `↓`, `→`, `🆕`)
   - health score
   - percentage gain since first announcement (entry baseline)
-  - percentage gain since the prior hourly update (previous active-state price baseline)
+  - on-list duration (`Xd Yh`)
 - Active rank uses active-list order (`A#1`, `A#2`, ...), independent of non-active qualified rows.
 - Runtime includes an explicit marker log line:
-  - `📌 ACTIVE_RANKING_SUMMARY_SENT messages=<sent>/<total> active_coins=<count>`
+  - `📌 EVENT_SUMMARY_SENT messages=<sent>/<total> active_coins=<count>`
 
 ### Cooldown re-entry policy
 
@@ -182,7 +162,6 @@ The scanner persists a multi-feature insights artifact in `scanner_insights.json
 - regime detection snapshot
 - benchmark drift monitor history/status
 - watchlist candidates
-- exit early-warning rows
 - post-alert outcome analytics
 - portfolio simulation state
 - low-reliability symbol summaries
@@ -236,13 +215,10 @@ Notes:
 
 - Runtime now treats the historical `cmc_url` database field as a generic source-link storage column for backward compatibility. Under CoinGecko-provider scans it stores the CoinGecko source URL instead of forcing a CoinMarketCap link.
 - CoinGecko ID alias fallback is reused in both Filter 1 qualification and exit-reason attribution so symbols like `CRYPGPT` do not resolve one way on entry and another way on exit.
-| `EXCHANGE_QUALITY_MIN_SCORE` | `25` | Minimum exchange-quality score to pass final qualification |
-| `EARLY_WARNING_ENABLED` | `true` | Enable pre-exit warning alerts |
 | `WATCHLIST_ENABLED` | `true` | Enable near-qualifier watchlist generation |
 | `WATCHLIST_SCORE_BUFFER` | `8` | Uniformity proximity buffer used for watchlist inclusion |
 | `PORTFOLIO_SIM_ENABLED` | `true` | Enable alert-following portfolio simulation state updates |
 | `PORTFOLIO_SIM_STARTING_CAPITAL` | `10000` | Starting capital for portfolio simulation |
-| `HOURLY_SUMMARY_IMAGE_ENABLED` | `true` | Enable hourly dashboard image sends |
 | `SCANNER_INSIGHTS_FILE` | `scanner_insights.json` | Combined insights artifact for dashboard, drift, outcomes, and simulation |
 | `BACKTEST_ENABLED` | `true` | Always-on in runtime (value kept for compatibility; `false` is ignored) |
 | `BACKTEST_REQUIRE_TARGET_EXCHANGE` | `false` | Gate backtests by `BACKTEST_EXCHANGES` when enabled |
@@ -251,7 +227,6 @@ Notes:
 | `BACKTEST_CHECKPOINT_FILE` | `backtest_checkpoint.json` | Incremental backtest checkpoint artifact |
 | `BACKTEST_TELEMETRY_FILE` | `backtest_telemetry.jsonl` | Structured per-event backtest telemetry stream |
 | `EXIT_ANALYTICS_FILE` | `exit_reason_analytics.json` | Cumulative exit-reason analytics artifact |
-| `WEEKLY_DIGEST_ENABLED` | `true` | Enable weekly Telegram digest |
 | `ANOMALY_ALERTS_ENABLED` | `true` | Enable anomaly detector notifications |
 | `ANOMALY_MAX_MISSING_CG_RATIO` | `0.35` | Alert threshold for high CoinGecko mapping misses |
 | `ANOMALY_MIN_OHLCV_SUCCESS_RATIO` | `0.60` | Alert threshold for low OHLCV processing success |

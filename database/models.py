@@ -494,7 +494,14 @@ class ActiveCoinsDatabase(Database):
             exited.append({
                 'symbol': coin_info['symbol'],
                 'name': coin_info['name'],
+                'gecko_id': coin_info.get('gecko_id'),
                 'slug': coin_info['slug'],
+                'entered_date': coin_info.get('entered_date'),
+                'last_seen_date': coin_info.get('last_seen_date'),
+                'entry_price': entry_price if entry_price > 0 else None,
+                'exit_price': last_price if last_price > 0 else None,
+                'peak_price': peak_price if peak_price > 0 else None,
+                'trough_price': trough_price if trough_price > 0 else None,
                 **lifecycle,
             })
             self.remove_coin(symbol)

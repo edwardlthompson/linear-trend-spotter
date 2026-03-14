@@ -23,16 +23,19 @@ from api.tradingview_mapper import TradingViewMapper
 from processors.uniformity_filter import UniformityFilter
 from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
-from notifications.image_renderer import build_fallback_chart_image, build_combined_notification_image, build_hourly_summary_image
+from notifications.image_renderer import (
+    build_fallback_chart_image,
+    build_combined_notification_image,
+    build_exit_notification_image,
+    build_hourly_summary_image,
+)
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
 from backtesting.signals import generate_indicator_signals
 from utils.insights import (
-    build_exit_warnings,
     build_watchlist,
     compute_data_reliability,
-    compute_exchange_quality,
     compute_health_score,
     compute_reentry_quality,
     detect_regime,
@@ -121,6 +124,30 @@ def _pct_change(current_value: float, baseline_value: float) -> float | None:
     if baseline <= 0:
         return None
     return ((current - baseline) / baseline) * 100.0
+
+
+def _format_time_on_list(entered_date_raw: str | None) -> str:
+    entered_date = str(entered_date_raw or '').strip()
+    if not entered_date:
+        return "n/a"
+    try:
+        entered_at = datetime.fromisoformat(entered_date.replace('Z', '+00:00'))
+    except Exception:
+        return "n/a"
+
+    if entered_at.tzinfo is None:
+        entered_at = entered_at.replace(tzinfo=timezone.utc)
+
+    elapsed = datetime.now(timezone.utc) - entered_at.astimezone(timezone.utc)
+    if elapsed.total_seconds() < 0:
+        return "n/a"
+
+    total_hours = int(elapsed.total_seconds() // 3600)
+    days = total_hours // 24
+    hours = total_hours % 24
+    if days > 0:
+        return f"{days}d {hours}h"
+    return f"{hours}h"
 
 
 def _normalize_symbol(raw_symbol: str) -> str:
@@ -214,7 +241,6 @@ def _resolve_top_coin_data(
 
 def _build_active_ranking_rows(
     final_results: list[dict],
-    active_before_update: dict[str, dict],
     active_after_update: dict[str, dict],
 ) -> list[dict]:
     rows: list[dict] = []
@@ -227,12 +253,10 @@ def _build_active_ranking_rows(
             continue
         active_rank += 1
 
-        current_price = float(coin.get('current_price', 0.0) or 0.0)
-        before_state = active_before_update.get(symbol, {})
         after_state = active_after_update.get(symbol, {})
-
+        current_price = float(coin.get('current_price', 0.0) or 0.0)
         gain_since_entry_pct = _pct_change(current_price, float(after_state.get('entry_price', 0.0) or 0.0))
-        gain_since_last_update_pct = _pct_change(current_price, float(before_state.get('last_price', 0.0) or 0.0))
+        time_on_list = _format_time_on_list(after_state.get('entered_date'))
 
         rows.append(
             {
@@ -243,7 +267,7 @@ def _build_active_ranking_rows(
                 'rank_delta': coin.get('rank_delta'),
                 'health_score': coin.get('health_score'),
                 'gain_since_entry_pct': gain_since_entry_pct,
-                'gain_since_last_update_pct': gain_since_last_update_pct,
+                'time_on_list': time_on_list,
             }
         )
 
@@ -898,7 +922,6 @@ def run_scanner():
                 app_logger.info(f"      ⚠️ No ticker data")
                 no_ticker_count += 1
 
-            compute_exchange_quality(coin)
 
         # ============================================================
         # STEP 7: Calculate uniformity scores
@@ -976,7 +999,6 @@ def run_scanner():
         all_processed = cached_coins + [c for c in uncached_coins if 'uniformity_score' in c]
         all_processed_map = {c['symbol']: c for c in all_processed}
         for coin in all_processed:
-            compute_exchange_quality(coin)
             compute_data_reliability(coin)
 
         anomaly_messages = _build_anomaly_messages(
@@ -1142,6 +1164,8 @@ def run_scanner():
         # Attach precise exit reasons based on first failed pipeline stage
         for coin in exited:
             symbol = coin['symbol']
+            coin['exited_at'] = datetime.now(timezone.utc).isoformat()
+            coin['cooldown_until'] = (datetime.now(timezone.utc) + timedelta(hours=settings.alert_cooldown_hours)).isoformat()
 
             if symbol in STABLECOINS:
                 coin['exit_reason'] = "Filtered as stablecoin"
@@ -1169,6 +1193,9 @@ def run_scanner():
 
             gains = cmc_data['gains']
             info = cmc_data['info']
+            coin['gain_7d'] = float(gains.get('7d', 0) or 0)
+            coin['gain_30d'] = float(gains.get('30d', 0) or 0)
+            coin['volume_24h'] = float(info.get('volume_24h', 0) or 0)
 
             if info['volume_24h'] < settings.min_volume:
                 coin['exit_reason'] = (
@@ -1201,6 +1228,8 @@ def run_scanner():
                 continue
 
             processed_coin = all_processed_map[symbol]
+            coin['uniformity_score'] = float(processed_coin.get('uniformity_score', 0) or 0)
+            coin['health_score'] = processed_coin.get('health_score')
             if processed_coin.get('uniformity_score', 0) < settings.uniformity_min_score:
                 coin['exit_reason'] = (
                     f"Uniformity score below threshold ({processed_coin.get('uniformity_score', 0):.1f} < {settings.uniformity_min_score})"
@@ -1240,18 +1269,8 @@ def run_scanner():
             all_processed=all_processed,
             final_symbols={str(coin.get('symbol', '')).upper() for coin in final_results},
             uniformity_min_score=settings.uniformity_min_score,
-            exchange_quality_min_score=settings.exchange_quality_min_score,
             score_buffer=settings.watchlist_score_buffer,
         ) if settings.watchlist_enabled else []
-        active_symbols_set = {str(s).upper() for s in active_after_update.keys()}
-        early_warning_rows = build_exit_warnings(
-            active_rows=[
-                coin for coin in final_results
-                if str(coin.get('symbol', '')).upper() in active_symbols_set
-            ],
-            min_volume=settings.min_volume,
-            uniformity_min_score=settings.uniformity_min_score,
-        ) if settings.early_warning_enabled else []
         insights_payload = update_scanner_insights(
             settings.scanner_insights_file,
             final_results=final_results,
@@ -1265,7 +1284,6 @@ def run_scanner():
             blocked_by_cooldown=blocked_by_cooldown,
             regime=regime,
             watchlist=watchlist_rows,
-            early_warnings=early_warning_rows,
             current_metrics_summary=metrics.get_summary(),
             portfolio_starting_capital=settings.portfolio_sim_starting_capital,
         )
@@ -1273,7 +1291,7 @@ def run_scanner():
         app_logger.info(
             "🧭 Insights updated: "
             f"regime={regime.get('regime')}, watchlist={len(watchlist_rows)}, "
-            f"warnings={len(early_warning_rows)}, drift={drift_summary.get('status', 'stable')}"
+            f"drift={drift_summary.get('status', 'stable')}"
         )
         
         # ============================================================
@@ -1331,9 +1349,12 @@ def run_scanner():
             app_logger.info(f"\n📱 Sending exit notifications for {len(exited)} coins...")
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
-                # Use MessageFormatter per spec §10.2
                 message = MessageFormatter.format_exit(coin)
-                telegram.send_message(message)
+                exit_image = build_exit_notification_image(coin, settings.db_paths['scanner'])
+                if exit_image:
+                    telegram.send_photo(io.BytesIO(exit_image), caption=message)
+                else:
+                    telegram.send_message(message)
                 metrics.increment('notifications_sent')
 
         if telegram and settings.anomaly_alerts_enabled and anomaly_messages:
@@ -1363,48 +1384,45 @@ def run_scanner():
                     )
                     metrics.increment('notifications_sent')
 
-        if telegram:
-            app_logger.info("\n📱 Sending active coin ranking summary notification...")
+        if telegram and (entered or exited):
+            app_logger.info("\n📱 Sending scanner event summary notification...")
             active_ranking_rows = _build_active_ranking_rows(
                 final_results,
-                active_before_update,
                 active_after_update,
             )
             sent_summary_count = 0
-            if settings.hourly_summary_image_enabled:
-                summary_image = build_hourly_summary_image(
-                    active_rows=active_ranking_rows,
-                    warning_rows=early_warning_rows,
-                    watchlist_rows=watchlist_rows,
-                    regime=regime,
-                    drift=drift_summary,
+            summary_image = build_hourly_summary_image(
+                active_rows=active_ranking_rows,
+                watchlist_rows=watchlist_rows,
+                regime=regime,
+                drift=drift_summary,
+            )
+            if summary_image:
+                summary_msg_id = telegram.send_photo(
+                    io.BytesIO(summary_image),
+                    caption=MessageFormatter.format_summary_caption(
+                        regime=regime,
+                        drift=drift_summary,
+                        active_count=len(active_ranking_rows),
+                        watchlist_count=len(watchlist_rows),
+                    ),
                 )
-                if summary_image:
-                    summary_msg_id = telegram.send_photo(
-                        io.BytesIO(summary_image),
-                        caption=MessageFormatter.format_summary_caption(
-                            regime=regime,
-                            drift=drift_summary,
-                            active_count=len(active_ranking_rows),
-                            watchlist_count=len(watchlist_rows),
-                        ),
-                    )
-                    if summary_msg_id:
-                        sent_summary_count = 1
-                        metrics.increment('notifications_sent')
+                if summary_msg_id:
+                    sent_summary_count = 1
+                    metrics.increment('notifications_sent')
 
             if sent_summary_count == 0:
                 fallback_summary = (
-                    "🖼️ <b>Hourly Scanner Dashboard</b>\n"
+                    "🖼️ <b>Scanner Event Dashboard</b>\n"
                     f"Entries: {len(entered)} | Exits: {len(exited)} | Cooldown blocked: {len(blocked_by_cooldown)}\n"
-                    f"Active: {len(active_ranking_rows)} | Warnings: {len(early_warning_rows)} | Watchlist: {len(watchlist_rows)}"
+                    f"Active: {len(active_ranking_rows)} | Watchlist: {len(watchlist_rows)}"
                 )
                 fallback_msg_id = telegram.send_message(fallback_summary)
                 if fallback_msg_id:
                     sent_summary_count = 1
                     metrics.increment('notifications_sent')
             app_logger.info(
-                "📌 ACTIVE_RANKING_SUMMARY_SENT "
+                "📌 EVENT_SUMMARY_SENT "
                 f"messages={sent_summary_count}/1 "
                 f"active_coins={len(active_ranking_rows)}"
             )

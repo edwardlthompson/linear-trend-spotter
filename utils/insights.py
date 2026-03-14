@@ -31,47 +31,6 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def compute_exchange_quality(coin: dict[str, Any]) -> dict[str, Any]:
-    listed_on = [str(item).strip().lower() for item in (coin.get("listed_on") or []) if str(item).strip()]
-    listed_count = len(listed_on)
-    listing_score = min(listed_count / 3.0, 1.0) * 55.0
-
-    exchange_volumes = coin.get("exchange_volumes") or {}
-    numeric_volumes = [
-        float(value) for value in exchange_volumes.values()
-        if isinstance(value, (int, float)) and float(value) > 0
-    ]
-
-    diversity_score = 0.0
-    concentration = None
-    if numeric_volumes:
-        total_volume = sum(numeric_volumes)
-        if total_volume > 0:
-            max_share = max(numeric_volumes) / total_volume
-            concentration = max_share
-            diversity_score = (1.0 - max_share) * 45.0
-    elif listed_count >= 2:
-        diversity_score = 10.0
-
-    score = _clamp(listing_score + diversity_score)
-    if score >= 75:
-        label = "broad"
-    elif score >= 50:
-        label = "solid"
-    elif score >= 30:
-        label = "thin"
-    else:
-        label = "fragile"
-
-    result = {
-        "exchange_quality_score": round(score, 2),
-        "exchange_quality_label": label,
-        "exchange_volume_concentration": round(float(concentration), 4) if concentration is not None else None,
-    }
-    coin.update(result)
-    return result
-
-
 def compute_data_reliability(coin: dict[str, Any]) -> dict[str, Any]:
     score = 0.0
 
@@ -149,7 +108,6 @@ def compute_health_score(coin: dict[str, Any]) -> dict[str, Any]:
 
     uniformity = float(coin.get("uniformity_score", 0.0) or 0.0)
     atr = float(coin.get("atr_score", 50.0) or 50.0)
-    exchange_quality = float(coin.get("exchange_quality_score", 0.0) or 0.0)
     reliability = float(coin.get("data_reliability_score", 0.0) or 0.0)
     volume_accel = float(coin.get("volume_acceleration_pct", 0.0) or 0.0)
     volume_component = _clamp(50.0 + (volume_accel / 4.0))
@@ -161,11 +119,10 @@ def compute_health_score(coin: dict[str, Any]) -> dict[str, Any]:
     confidence_component = float(confidence or 50.0)
 
     score = (
-        (uniformity * 0.25)
+        (uniformity * 0.30)
         + (rank_component * 0.20)
         + (atr * 0.10)
-        + (exchange_quality * 0.15)
-        + (reliability * 0.15)
+        + (reliability * 0.25)
         + (volume_component * 0.05)
         + (confidence_component * 0.10)
     )
@@ -219,7 +176,6 @@ def build_watchlist(
     all_processed: list[dict[str, Any]],
     final_symbols: set[str],
     uniformity_min_score: int,
-    exchange_quality_min_score: int,
     score_buffer: int = 8,
     limit: int = 12,
 ) -> list[dict[str, Any]]:
@@ -231,7 +187,6 @@ def build_watchlist(
 
         score = float(coin.get("uniformity_score", 0.0) or 0.0)
         total_gain = float(coin.get("total_gain", 0.0) or 0.0)
-        exchange_quality = float(coin.get("exchange_quality_score", 0.0) or 0.0)
         reasons: list[str] = []
         closeness = 0.0
 
@@ -240,9 +195,6 @@ def build_watchlist(
         if score >= max(0, uniformity_min_score - int(score_buffer)):
             reasons.append(f"uniformity {score:.1f}/{uniformity_min_score}")
             closeness += max(0.0, 30.0 - abs(uniformity_min_score - score) * 3.0)
-        if exchange_quality < exchange_quality_min_score and exchange_quality >= max(0, exchange_quality_min_score - 15):
-            reasons.append(f"exchange quality {exchange_quality:.0f}/{exchange_quality_min_score}")
-            closeness += max(0.0, 20.0 - abs(exchange_quality_min_score - exchange_quality) * 1.2)
         gains = coin.get("gains") or {}
         gain_7d = float(gains.get("7d", 0.0) or 0.0)
         gain_30d = float(gains.get("30d", 0.0) or 0.0)
@@ -256,58 +208,12 @@ def build_watchlist(
                     "watchlist_score": round(_clamp(closeness), 2),
                     "reasons": reasons,
                     "uniformity_score": round(score, 2),
-                    "exchange_quality_score": round(exchange_quality, 2),
                     "gain_7d": round(gain_7d, 2),
                     "gain_30d": round(gain_30d, 2),
                 }
             )
 
     return sorted(candidates, key=lambda item: (-float(item["watchlist_score"]), item["symbol"]))[:limit]
-
-
-def build_exit_warnings(
-    active_rows: list[dict[str, Any]],
-    min_volume: float,
-    uniformity_min_score: int,
-    limit: int = 10,
-) -> list[dict[str, Any]]:
-    warnings: list[dict[str, Any]] = []
-    for coin in active_rows:
-        reasons: list[str] = []
-        gains = coin.get("gains") or {}
-        gain_7d = float(gains.get("7d", 0.0) or 0.0)
-        gain_30d = float(gains.get("30d", 0.0) or 0.0)
-        volume_24h = float(coin.get("volume_24h", 0.0) or 0.0)
-        uniformity_score = float(coin.get("uniformity_score", 0.0) or 0.0)
-        rank_delta = int(coin.get("rank_delta") or 0)
-        health = float(coin.get("health_score", 0.0) or 0.0)
-
-        if volume_24h < (min_volume * 1.2):
-            reasons.append("volume near threshold")
-        if gain_7d <= 10.0:
-            reasons.append("7d gain soft")
-        if gain_30d <= 35.0:
-            reasons.append("30d gain soft")
-        if gain_30d - gain_7d <= 5.0:
-            reasons.append("trend spread compressing")
-        if uniformity_score < (uniformity_min_score + 5):
-            reasons.append("uniformity near cutoff")
-        if rank_delta <= -3:
-            reasons.append("rank slipping")
-        if health < 55.0:
-            reasons.append("health weak")
-
-        if reasons:
-            warnings.append(
-                {
-                    "symbol": str(coin.get("symbol", "")).upper(),
-                    "reasons": reasons,
-                    "health_score": round(health, 2),
-                    "current_rank": coin.get("current_rank"),
-                }
-            )
-
-    return sorted(warnings, key=lambda item: (len(item["reasons"]), -(item.get("health_score") or 0.0)), reverse=True)[:limit]
 
 
 def update_scanner_insights(
@@ -324,7 +230,6 @@ def update_scanner_insights(
     blocked_by_cooldown: list[dict[str, Any]],
     regime: dict[str, Any],
     watchlist: list[dict[str, Any]],
-    early_warnings: list[dict[str, Any]],
     current_metrics_summary: dict[str, Any],
     portfolio_starting_capital: float,
 ) -> dict[str, Any]:
@@ -423,7 +328,6 @@ def update_scanner_insights(
         "gain_qualified": len(gain_qualified),
         "active": len(active_after_update),
         "watchlist": len(watchlist),
-        "warnings": len(early_warnings),
         "duration": float(current_metrics_summary.get("duration", 0.0) or 0.0),
     }
     scan_summaries.append(current_scan_summary)
@@ -449,7 +353,6 @@ def update_scanner_insights(
             "top_movers": [{"symbol": symbol, "delta": delta} for symbol, delta in top_movers],
         },
         "watchlist": watchlist,
-        "early_warnings": early_warnings,
         "outcome_analytics": {
             "summary": outcomes_summary,
             "active_samples": active_outcomes[:50],

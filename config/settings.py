@@ -85,17 +85,14 @@ class Settings:
             'EXIT_ANALYTICS_FILE': 'exit_reason_analytics.json',
             'USE_14D_FILTER': False,
             'ALERT_COOLDOWN_HOURS': 6,
-            'EXCHANGE_QUALITY_MIN_SCORE': 25,
             'ANOMALY_ALERTS_ENABLED': True,
             'ANOMALY_MAX_MISSING_CG_RATIO': 0.35,
             'ANOMALY_MIN_OHLCV_SUCCESS_RATIO': 0.60,
             'ANOMALY_MAX_NO_TICKER_RATIO': 0.50,
-            'EARLY_WARNING_ENABLED': True,
             'WATCHLIST_ENABLED': True,
             'WATCHLIST_SCORE_BUFFER': 8,
             'PORTFOLIO_SIM_ENABLED': True,
             'PORTFOLIO_SIM_STARTING_CAPITAL': 10000,
-            'HOURLY_SUMMARY_IMAGE_ENABLED': True,
             'SCANNER_INSIGHTS_FILE': 'scanner_insights.json',
             'WEEKLY_DIGEST_ENABLED': True,
             'WEEKLY_DIGEST_WEEKDAY_UTC': 0,
@@ -164,10 +161,8 @@ class Settings:
             'NOTIFICATION_INCLUDE_QUALITY_PANEL',
             'USE_14D_FILTER',
             'ANOMALY_ALERTS_ENABLED',
-            'EARLY_WARNING_ENABLED',
             'WATCHLIST_ENABLED',
             'PORTFOLIO_SIM_ENABLED',
-            'HOURLY_SUMMARY_IMAGE_ENABLED',
             'WEEKLY_DIGEST_ENABLED',
         ]:
             require_bool(bool_key)
@@ -192,7 +187,6 @@ class Settings:
             ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
             ('ARTIFACT_RETENTION_DAYS', 1, 3650),
             ('ALERT_COOLDOWN_HOURS', 0, 720),
-            ('EXCHANGE_QUALITY_MIN_SCORE', 0, 100),
             ('WATCHLIST_SCORE_BUFFER', 1, 30),
             ('PORTFOLIO_SIM_STARTING_CAPITAL', 100, 1000000000),
             ('WEEKLY_DIGEST_WEEKDAY_UTC', 0, 6),
@@ -507,10 +501,6 @@ class Settings:
         return int(self._config.get('ALERT_COOLDOWN_HOURS', 6))
 
     @property
-    def exchange_quality_min_score(self) -> int:
-        return int(self._config.get('EXCHANGE_QUALITY_MIN_SCORE', 25))
-
-    @property
     def anomaly_alerts_enabled(self) -> bool:
         return bool(self._config.get('ANOMALY_ALERTS_ENABLED', True))
 
@@ -527,10 +517,6 @@ class Settings:
         return float(self._config.get('ANOMALY_MAX_NO_TICKER_RATIO', 0.50))
 
     @property
-    def early_warning_enabled(self) -> bool:
-        return bool(self._config.get('EARLY_WARNING_ENABLED', True))
-
-    @property
     def watchlist_enabled(self) -> bool:
         return bool(self._config.get('WATCHLIST_ENABLED', True))
 
@@ -545,10 +531,6 @@ class Settings:
     @property
     def portfolio_sim_starting_capital(self) -> int:
         return int(self._config.get('PORTFOLIO_SIM_STARTING_CAPITAL', 10000))
-
-    @property
-    def hourly_summary_image_enabled(self) -> bool:
-        return bool(self._config.get('HOURLY_SUMMARY_IMAGE_ENABLED', True))
 
     @property
     def scanner_insights_file(self) -> Path:
