@@ -7,13 +7,11 @@ from .coingecko import CoinGeckoClient
 from .coingecko_mapper import CoinGeckoMapper
 from .chart_img import ChartIMGClient
 from .tradingview_mapper import TradingViewMapper
-from .kraken_ohlcv import KrakenOHLCVClient
 
 __all__ = [
     'CoinMarketCapClient',
     'CoinGeckoClient',
     'CoinGeckoMapper',
     'ChartIMGClient',
-    'TradingViewMapper',
-    'KrakenOHLCVClient'
+    'TradingViewMapper'
 ]

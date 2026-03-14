@@ -853,13 +853,19 @@ def run_scanner():
         # STEP 4: Get exchange listing data (for volume display)
         # ============================================================
         app_logger.info(f"\n🏦 Getting exchange listing data...")
-        
+
+        symbols_for_listing_check = [str(coin.get('symbol', '')).upper() for coin in gain_qualified if coin.get('symbol')]
+        exchange_listing_maps: dict[str, dict[str, bool]] = {}
+        for exchange in settings.target_exchanges:
+            exchange_listing_maps[exchange] = exchange_db.batch_check_listings(symbols_for_listing_check, exchange)
+
         for coin in gain_qualified:
-            listed_on = []
-            for exchange in settings.target_exchanges:
-                if exchange_db.is_listed(coin['symbol'], exchange):
-                    listed_on.append(exchange)
-            coin['listed_on'] = listed_on
+            symbol = str(coin.get('symbol', '')).upper()
+            coin['listed_on'] = [
+                exchange
+                for exchange in settings.target_exchanges
+                if exchange_listing_maps.get(exchange, {}).get(symbol, False)
+            ]
 
         # ============================================================
         # STEP 5: Get CoinGecko IDs for exchange volumes
