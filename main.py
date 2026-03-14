@@ -777,13 +777,32 @@ def run_scanner():
         # STEP 3: Match with top-coin provider data and apply volume/gain filters
         # ============================================================
         app_logger.info(f"\n💰 FILTER 1: Applying volume and gain filters ({top_coins_provider.upper()})...")
-        
+
+        max_detailed_filter_logs = 180
+        detailed_filter_logs_emitted = 0
+        suppressed_filter_logs = 0
+        filter_failure_counts: dict[str, int] = {
+            'stablecoin': 0,
+            'missing_provider': 0,
+            'volume_low': 0,
+            'gains_low': 0,
+        }
+
+        def _log_filter_line(message: str) -> None:
+            nonlocal detailed_filter_logs_emitted, suppressed_filter_logs
+            if detailed_filter_logs_emitted < max_detailed_filter_logs:
+                app_logger.info(message)
+                detailed_filter_logs_emitted += 1
+            else:
+                suppressed_filter_logs += 1
+
         gain_qualified = []
         
         for symbol in all_symbols:
             # Filter out stablecoins per spec §5.5
             if symbol in STABLECOINS:
-                app_logger.info(f"   ⏭️ {symbol}: Skipped (stablecoin)")
+                filter_failure_counts['stablecoin'] += 1
+                _log_filter_line(f"   ⏭️ {symbol}: Skipped (stablecoin)")
                 continue
                 
             cmc_data, resolved_cmc_symbol, resolution_type = _resolve_top_coin_data(
@@ -799,11 +818,11 @@ def run_scanner():
             if cmc_data:
                 if resolution_type != 'direct':
                     if top_coins_provider == 'coingecko' and resolution_type == 'coingecko_id_alias':
-                        app_logger.info(
+                        _log_filter_line(
                             f"   ↪️ {symbol}: Matched CoinGecko id {resolved_cmc_symbol} via {resolution_type}"
                         )
                     else:
-                        app_logger.info(
+                        _log_filter_line(
                             f"   ↪️ {symbol}: Matched CMC symbol {resolved_cmc_symbol} via {resolution_type}"
                         )
                 gains = cmc_data['gains']
@@ -827,17 +846,32 @@ def run_scanner():
                             'current_price': float(info.get('price', 0) or 0),
                         }
                         gain_qualified.append(coin_info)
-                        app_logger.info(f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% Vol:${info['volume_24h']:,.0f}")
+                        _log_filter_line(f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% Vol:${info['volume_24h']:,.0f}")
                     else:
-                        app_logger.info(f"   ❌ {symbol}: Gains too low (7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}%)")
+                        filter_failure_counts['gains_low'] += 1
+                        _log_filter_line(f"   ❌ {symbol}: Gains too low (7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}%)")
                 else:
-                    app_logger.info(f"   ❌ {symbol}: Volume too low (${info['volume_24h']:,.0f})")
+                    filter_failure_counts['volume_low'] += 1
+                    _log_filter_line(f"   ❌ {symbol}: Volume too low (${info['volume_24h']:,.0f})")
             else:
-                app_logger.info(
+                filter_failure_counts['missing_provider'] += 1
+                _log_filter_line(
                     f"   ❌ {symbol}: Not found in {top_coins_provider.upper()} data"
                 )
         
         app_logger.info(f"\n   ✅ PASSED gain filter: {len(gain_qualified)} coins")
+        if suppressed_filter_logs > 0:
+            app_logger.info(
+                "   ℹ️ Filter detail logs suppressed for speed: "
+                f"{suppressed_filter_logs} lines omitted after first {max_detailed_filter_logs}"
+            )
+        app_logger.info(
+            "   📉 Filter failure summary: "
+            f"stablecoin={filter_failure_counts['stablecoin']}, "
+            f"missing_provider={filter_failure_counts['missing_provider']}, "
+            f"volume_low={filter_failure_counts['volume_low']}, "
+            f"gains_low={filter_failure_counts['gains_low']}"
+        )
         metrics.increment('gain_filter_passed', len(gain_qualified))
 
         gain_qualified_symbols = {c['symbol'] for c in gain_qualified}

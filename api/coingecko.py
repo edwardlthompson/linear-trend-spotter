@@ -38,19 +38,23 @@ class CoinGeckoClient:
     
     def __init__(self, calls_per_minute: int = 10):
         self.session = requests.Session()
-        # Public API is shared; cap to a conservative upper bound for reliability
-        self.rate_limiter = RateLimiter(max(1, min(calls_per_minute, 12)))
         self.logger = logging.getLogger('CoinGeckoClient')
         headers = {'User-Agent': 'Linear-Trend-Spotter/1.0'}
         api_key = os.getenv('COINGECKO_API_KEY', '').strip()
         if api_key and api_key.startswith('CG-'):
             headers['x-cg-demo-api-key'] = api_key
             self.base_url = self.BASE_URL
+            effective_cpm = max(1, min(calls_per_minute, 30))
         elif api_key:
             headers['x-cg-pro-api-key'] = api_key
             self.base_url = self.PRO_BASE_URL
+            effective_cpm = max(1, min(calls_per_minute, 120))
         else:
             self.base_url = self.BASE_URL
+            # Public API is shared; keep conservative cap for reliability.
+            effective_cpm = max(1, min(calls_per_minute, 12))
+
+        self.rate_limiter = RateLimiter(effective_cpm)
         self.session.headers.update(headers)
     
     def _make_request(
@@ -133,7 +137,7 @@ class CoinGeckoClient:
     
     def get_tickers(self, coin_id: str) -> Optional[Dict]:
         """Get tickers for a coin (exchange volume data)"""
-        self.logger.info(f"Fetching tickers for {coin_id}")
+        self.logger.debug(f"Fetching tickers for {coin_id}")
         # Non-critical endpoint in this pipeline: fail fast to avoid scan stalls
         return self._make_request(
             f"{self.base_url}/coins/{coin_id}/tickers",
