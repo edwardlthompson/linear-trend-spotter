@@ -15,6 +15,10 @@ echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Render worker started" | tee -a "$LOG_F
 echo "PROJECT_DIR=$PROJECT_DIR DATA_DIR=$DATA_DIR INTERVAL=${SCAN_INTERVAL_SECONDS}s" | tee -a "$LOG_FILE"
 echo "RENDER_GIT_BRANCH=${RENDER_GIT_BRANCH:-unknown} RENDER_GIT_COMMIT=${RENDER_GIT_COMMIT:-unknown}" | tee -a "$LOG_FILE"
 
+# Start Telegram bot listener in the background (Free single-container approach)
+echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting Telegram bot listener..." | tee -a "$LOG_FILE"
+python3 -u telegram_bot.py >> "$LOG_DIR/telegram_bot.log" 2>&1 &
+
 while true; do
   started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "[$started] Starting scheduled scan" | tee -a "$LOG_FILE"
