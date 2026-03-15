@@ -1344,32 +1344,16 @@ def run_scanner():
                     app_logger.info(f"   🟢 {coin['symbol']}")
                     
                     # Get chart image from Chart-IMG (external service)
-                    chart_bytes = None
-                    if chart_img:
-                        try:
-                            chart_bytes = chart_img.get_chart(
-                                coin_symbol=coin['symbol'],
-                                exchange='mexc',
-                                interval="1D",
-                                width=800,
-                                height=400
-                            )
-                        except Exception as e:
-                            app_logger.error(f"      ❌ Chart error: {e}")
-
-                    if not chart_bytes:
-                        chart_bytes = build_fallback_chart_image(coin['symbol'], settings.db_paths['scanner'])
-                        if chart_bytes:
-                            app_logger.info("      ℹ️ Using cached OHLCV fallback chart")
-                    
-                    # Use MessageFormatter per spec §10.1
                     caption = MessageFormatter.format_entry(coin)
                     
-                    # Send one combined image notification (chart + strategy table)
-                    if chart_bytes:
-                        combined_image = build_combined_notification_image(coin, chart_bytes)
-                        image_payload = combined_image if combined_image else chart_bytes
-                        img_data = io.BytesIO(image_payload)
+                    combined_image = None
+                    try:
+                        combined_image = build_combined_notification_image(coin, settings.db_paths['scanner'])
+                    except Exception as e:
+                        app_logger.error(f"      ❌ Failed to build combined image for {coin['symbol']}: {e}")
+
+                    if combined_image:
+                        img_data = io.BytesIO(combined_image)
                         message_id = telegram.send_photo(img_data, caption=caption)
                         if message_id:
                             app_logger.info(f"      📤 Sent combined image notification")

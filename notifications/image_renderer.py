@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from notifications.formatter import MessageFormatter
+from backtesting.signals import generate_indicator_signals
 
 
 def _safe_float(value) -> Optional[float]:
@@ -376,8 +378,12 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
     return output.read()
 
 
-def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optional[bytes]:
-    """Build one image containing the price chart on top and bordered strategy table below."""
+def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[bytes]:
+    """Build one image containing the price chart on top (with strategy Signals) and ranked table below."""
+    symbol = str(coin.get('symbol', '')).upper()
+    if not symbol:
+        return None
+
     top_strategies = list(coin.get("backtest_top_strategies", [])[:5])
     buy_hold = coin.get("backtest_buy_hold")
 
@@ -385,8 +391,29 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
     if buy_hold:
         rows.append(buy_hold)
 
-    image = plt.imread(io.BytesIO(chart_bytes), format="png")
+    # 1. Fetch OHLCV data for local rendering
+    chart_points: List[tuple] = []
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT ts, open, high, low, close, volume
+                FROM ohlcv_cache
+                WHERE symbol = ? AND timeframe = '1h'
+                ORDER BY ts ASC
+                """,
+                (symbol,),
+            )
+            fetched = cursor.fetchall()
+            # Cache stores ASC order standard or DESC sometimes, ensure DESC limit or ASC
+            # Just take the last 336 items
+            fetched = fetched[-336:] if len(fetched) >= 336 else fetched
+            chart_points = fetched
+    except Exception:
+        chart_points = []
 
+    # 2. Build table body (Same as original)
     ranked_rows = sorted(rows, key=lambda item: float(item.get("net_pct", float("-inf"))), reverse=True) if rows else []
     strategy_rows = [row for row in ranked_rows if str(row.get("indicator", "")) != "B&H"]
     buy_hold_rows = [row for row in ranked_rows if str(row.get("indicator", "")) == "B&H"]
@@ -429,17 +456,60 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
         for row in buy_hold_rows:
             append_row(row)
 
-    fig = plt.figure(figsize=(12, 9), dpi=160)
+    # 3. Create Figure
+    fig = plt.figure(figsize=(12, 10), dpi=160)
     fig.patch.set_facecolor("#0f172a")
-    gs = fig.add_gridspec(2, 1, height_ratios=[2.6, 2.0], hspace=0.08)
+    gs = fig.add_gridspec(2, 1, height_ratios=[2.8, 1.8], hspace=0.15)
 
+    # 3a. Draw Chart
     ax_chart = fig.add_subplot(gs[0])
-    ax_chart.set_facecolor("#0f172a")
-    ax_chart.imshow(image)
-    ax_chart.axis("off")
-    symbol = str(coin.get("symbol", "?")).upper()
-    ax_chart.set_title(f"{symbol}/USD • Price Chart", fontsize=12, fontweight="bold", pad=8, color="#e2e8f0")
+    ax_chart.set_facecolor("#111827")
+    ax_chart.set_title(f"{symbol}/USD • Local Chart with Backtest Overlay", fontsize=13, fontweight="bold", color="#e2e8f0", pad=12)
+    ax_chart.grid(color="#374151", alpha=0.35, linewidth=0.6)
+    ax_chart.tick_params(colors="#cbd5e1")
 
+    if chart_points:
+        # Values to plot
+        x_values = list(range(len(chart_points)))
+        close_values = [float(item[3]) for item in chart_points] # close is index 3 or 4? ts, open, high, low, close, volume => index 4!
+        close_values = [float(item[4]) for item in chart_points] # Correcting index to close (0=ts, 1=open, 2=high, 3=low, 4=close, 5=volume)
+        
+        ax_chart.plot(x_values, close_values, color="#38bdf8", linewidth=1.6)
+        ax_chart.set_ylabel("Price", color="#94a3b8")
+
+        # Overlay signals from top strategy
+        if top_strategies:
+            try:
+                top_strat = top_strategies[0]
+                indicator = str(top_strat.get('indicator', ''))
+                params = top_strat.get('params', {}) or {}
+                
+                # Convert to DataFrame
+                df = pd.DataFrame(chart_points, columns=['ts', 'open', 'high', 'low', 'close', 'volume'])
+                df['open'] = df['open'].astype(float)
+                df['high'] = df['high'].astype(float)
+                df['low'] = df['low'].astype(float)
+                df['close'] = df['close'].astype(float)
+                df['volume'] = df['volume'].astype(float)
+                df.set_index('ts', inplace=True)
+                
+                buy_signals, sell_signals = generate_indicator_signals(indicator, df, params)
+                
+                # Plot signals
+                buy_idx = [i for i, val in enumerate(buy_signals.values) if val]
+                sell_idx = [i for i, val in enumerate(sell_signals.values) if val]
+                
+                if buy_idx:
+                    ax_chart.scatter(buy_idx, [close_values[i] for i in buy_idx], color="#22c55e", s=40, marker="^", label="Buy", zorder=5)
+                if sell_idx:
+                    ax_chart.scatter(sell_idx, [close_values[i] for i in sell_idx], color="#ef4444", s=40, marker="v", label="Sell", zorder=5)
+                ax_chart.legend(loc="upper left", facecolor="#1e293b", edgecolor="#475569", labelcolor="#cbd5e1", fontsize=9)
+            except Exception as e:
+                pass # Silently proceed if signal derivation crashes on faulty shapes
+    else:
+        ax_chart.text(0.5, 0.5, "No cached 1h OHLCV data for chart", ha="center", va="center", color="#cbd5e1")
+
+    # 3b. Draw Table (Same as original)
     ax_table = fig.add_subplot(gs[1])
     ax_table.set_facecolor("#0f172a")
     ax_table.axis("off")
@@ -483,6 +553,8 @@ def build_combined_notification_image(coin: Dict, chart_bytes: bytes) -> Optiona
             cell.set_facecolor("#111827" if is_buy_hold else "#0b1220")
             cell.get_text().set_color("#e2e8f0")
             if col_index == 5:
+                # Value was saved with % suffix in logic for safety or cast float?
+                # Format previously appended text, check how MessageFormatter did it
                 net_text = str(row_values[5])
                 if net_text.startswith('+'):
                     cell.get_text().set_color("#22c55e")
