@@ -71,8 +71,8 @@ Qualification determines which coins enter the **backtesting stage** and therefo
   - total 24h provider volume
   - exchange-level volumes (Coinbase/Kraken/MEXC)
 - Sends a single combined image when a chart is available:
-  - price chart (top)
-  - ranked backtest strategy table (bottom)
+  - **Price Line Chart (top):** Rendered with continuous line graphs tailored to accommodate high-density historical overlays without visual dots limits clutter.
+  - Ranked backtest strategy table (bottom)
 - Strategy rows are now confidence-weighted before choosing the top notification strategy.
 
 Notification enhancement details:

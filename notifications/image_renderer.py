@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from config.settings import settings
 from notifications.formatter import MessageFormatter
 from backtesting.engine import run_backtest
 from backtesting.models import BacktestConfig
@@ -279,19 +280,14 @@ def build_fallback_chart_image(symbol: str, db_path: Path) -> Optional[bytes]:
 
 def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
     """Build bordered strategy table image (top strategies + B&H)."""
-    top_strategies = list(coin.get("backtest_top_strategies", [])[:5])
+    all_strategies = list(coin.get("backtest_top_strategies", []))
     buy_hold = coin.get("backtest_buy_hold")
 
-    rows = list(top_strategies)
-    if buy_hold:
-        rows.append(buy_hold)
-
-    if not rows:
+    if not all_strategies and not buy_hold:
         return None
 
-    ranked_rows = sorted(rows, key=lambda item: float(item.get("net_pct", float("-inf"))), reverse=True)
-    strategy_rows = [row for row in ranked_rows if str(row.get("indicator", "")) != "B&H"]
-    buy_hold_rows = [row for row in ranked_rows if str(row.get("indicator", "")) == "B&H"]
+    bh_net = float(buy_hold.get("net_pct", float("-inf"))) if buy_hold else float("-inf")
+    better_strategies = [s for s in all_strategies if float(s.get("net_pct", 0.0)) > bh_net]
 
     table_body: List[List[str]] = []
 
@@ -304,10 +300,12 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
         if indicator == "B&H":
             stop_loss = "-"
             trades = "-"
+            tsl_hits = "-"
             win_pct = "-"
         else:
             stop_loss = f"{_resolve_trailing_stop_pct(item):.2f}%"
             trades = str(int(item.get("trades", 0)))
+            tsl_hits = str(int(item.get("tsl_hits", 0)))
             win_pct = f"{float(item.get('win_pct', 0.0)):.2f}%"
 
         table_body.append(
@@ -319,19 +317,28 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
                 f"${float(item.get('final_equity', 0.0)):,.2f}",
                 f"{float(item.get('net_pct', 0.0)):+.2f}%",
                 trades,
+                tsl_hits,
                 win_pct,
             ]
         )
 
-    for row in strategy_rows:
-        append_row(row)
+    strategy_rows = sorted(all_strategies, key=lambda s: float(s.get("net_pct", 0.0)), reverse=True)
 
-    if buy_hold_rows:
-        table_body.append(["", "", "", "", "", "", "", ""])
-        for row in buy_hold_rows:
+    if better_strategies:
+        sorted_better = sorted(better_strategies, key=lambda s: float(s.get("net_pct", 0.0)), reverse=True)
+        for row in sorted_better:
+            append_row(row)
+        if buy_hold:
+            table_body.append([""] * 9)
+            append_row(buy_hold)
+    else:
+        if buy_hold:
+            append_row(buy_hold)
+            table_body.append([""] * 9)
+        for row in strategy_rows[:5]:
             append_row(row)
 
-    headers = ["Indicator", "TF", "Key Settings", "Stop Loss %", "Final $", "Net %", "Trades", "Win %"]
+    headers = ["Indicator", "TF", "Key Settings", "TSL %", "Final $", "Net %", "Trades", "TSL Hits", "Win %"]
     fig, axis = plt.subplots(figsize=(12, 4.9), dpi=160)
     fig.patch.set_facecolor("#0f172a")
     axis.set_facecolor("#0f172a")
@@ -348,7 +355,7 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
     table = axis.table(
         cellText=table_body,
         colLabels=headers,
-        colWidths=[0.12, 0.07, 0.32, 0.1, 0.1, 0.08, 0.08, 0.08],
+        colWidths=[0.11, 0.06, 0.28, 0.09, 0.1, 0.08, 0.08, 0.09, 0.08],
         loc="center",
         cellLoc="left",
     )
@@ -375,6 +382,9 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
         is_buy_hold = row_values[0] == "B&H"
         cell.set_facecolor("#111827" if is_buy_hold else "#0b1220")
         cell.get_text().set_color("#e2e8f0")
+        if is_buy_hold:
+            cell.set_text_props(weight="bold")
+
         if col_index == 5:
             net_text = str(row_values[5])
             if net_text.startswith('+'):
@@ -395,12 +405,8 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
     if not symbol:
         return None
 
-    top_strategies = list(coin.get("backtest_top_strategies", [])[:5])
+    all_strategies = list(coin.get("backtest_top_strategies", []))
     buy_hold = coin.get("backtest_buy_hold")
-
-    rows = list(top_strategies)
-    if buy_hold:
-        rows.append(buy_hold)
 
     # 1. Fetch OHLCV data for local rendering
     chart_points: List[tuple] = []
@@ -417,17 +423,14 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 (symbol,),
             )
             fetched = cursor.fetchall()
-            # Cache stores ASC order standard or DESC sometimes, ensure DESC limit or ASC
-            # Just take the last 336 items
-            fetched = fetched[-336:] if len(fetched) >= 336 else fetched
+            # Keep all for backtest calculation warmup
             chart_points = fetched
     except Exception:
         chart_points = []
 
     # 2. Build table body (Same as original)
-    ranked_rows = sorted(rows, key=lambda item: float(item.get("net_pct", float("-inf"))), reverse=True) if rows else []
-    strategy_rows = [row for row in ranked_rows if str(row.get("indicator", "")) != "B&H"]
-    buy_hold_rows = [row for row in ranked_rows if str(row.get("indicator", "")) == "B&H"]
+    bh_net = float(buy_hold.get("net_pct", float("-inf"))) if buy_hold else float("-inf")
+    better_strategies = [s for s in all_strategies if float(s.get("net_pct", 0.0)) > bh_net]
 
     table_body: List[List[str]] = []
 
@@ -440,10 +443,12 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         if indicator == "B&H":
             stop_loss = "-"
             trades = "-"
+            tsl_hits = "-"
             win_pct = "-"
         else:
             stop_loss = f"{_resolve_trailing_stop_pct(item):.2f}%"
             trades = str(int(item.get("trades", 0)))
+            tsl_hits = str(int(item.get("tsl_hits", 0)))
             win_pct = f"{float(item.get('win_pct', 0.0)):.2f}%"
 
         table_body.append(
@@ -455,17 +460,29 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 f"${float(item.get('final_equity', 0.0)):,.2f}",
                 f"{float(item.get('net_pct', 0.0)):+.2f}%",
                 trades,
+                tsl_hits,
                 win_pct,
             ]
         )
 
-    for row in strategy_rows:
-        append_row(row)
+    strategy_rows = sorted(all_strategies, key=lambda s: float(s.get("net_pct", 0.0)), reverse=True)
 
-    if buy_hold_rows:
-        table_body.append(["", "", "", "", "", "", "", ""])
-        for row in buy_hold_rows:
+    if better_strategies:
+        sorted_better = sorted(better_strategies, key=lambda s: float(s.get("net_pct", 0.0)), reverse=True)
+        for row in sorted_better:
             append_row(row)
+        if buy_hold:
+            table_body.append([""] * 9)
+            append_row(buy_hold)
+    else:
+        if buy_hold:
+            append_row(buy_hold)
+            table_body.append([""] * 9)
+        for row in strategy_rows[:5]:
+            append_row(row)
+
+    # Define top_strategies for downstream chart signal overlays (Line 515)
+    top_strategies = strategy_rows
 
     # 3. Create Figure
     fig = plt.figure(figsize=(12, 10), dpi=160)
@@ -480,22 +497,23 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
     ax_chart.tick_params(colors="#cbd5e1")
 
     if chart_points:
-        # Values to plot
-        x_values = list(range(len(chart_points)))
-        close_values = [float(item[3]) for item in chart_points] # close is index 3 or 4? ts, open, high, low, close, volume => index 4!
-        close_values = [float(item[4]) for item in chart_points] # Correcting index to close (0=ts, 1=open, 2=high, 3=low, 4=close, 5=volume)
-        
-        ax_chart.plot(x_values, close_values, color="#38bdf8", linewidth=1.6)
-        ax_chart.set_ylabel("Price", color="#94a3b8")
+        close_values = [float(item[4]) for item in chart_points]
+        open_values = [float(item[1]) for item in chart_points]
+        high_values = [float(item[2]) for item in chart_points]
+        low_values = [float(item[3]) for item in chart_points]
 
-        # Overlay signals from top strategy
+        # 3a. Pre-calculate Backtest Results to get Dynamic Display Window
+        start_idx = max(0, len(chart_points) - 144) 
+        buy_signals = []
+        sell_signals = []
+        run_result = None
+        
         if top_strategies:
             try:
                 top_strat = top_strategies[0]
                 indicator = str(top_strat.get('indicator', ''))
                 params = top_strat.get('params', {}) or {}
                 
-                # Convert to DataFrame
                 df = pd.DataFrame(chart_points, columns=['ts', 'open', 'high', 'low', 'close', 'volume'])
                 df['open'] = df['open'].astype(float)
                 df['high'] = df['high'].astype(float)
@@ -505,84 +523,111 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 df.set_index('ts', inplace=True)
                 
                 buy_signals, sell_signals = generate_indicator_signals(indicator, df, params)
-
-                signal_buy_idx = [idx for idx, flag in enumerate(buy_signals) if bool(flag)]
-                signal_sell_idx = [idx for idx, flag in enumerate(sell_signals) if bool(flag)]
-
-                if signal_buy_idx:
-                    ax_chart.scatter(
-                        signal_buy_idx,
-                        [close_values[i] for i in signal_buy_idx],
-                        color="#22c55e",
-                        s=20,
-                        marker="o",
-                        alpha=0.45,
-                        label="Signal Buy",
-                        zorder=4,
-                    )
-                if signal_sell_idx:
-                    ax_chart.scatter(
-                        signal_sell_idx,
-                        [close_values[i] for i in signal_sell_idx],
-                        color="#ef4444",
-                        s=20,
-                        marker="o",
-                        alpha=0.45,
-                        label="Signal Sell",
-                        zorder=4,
-                    )
-
+                
                 run_result = run_backtest(
                     frame=df,
                     buy_signals=buy_signals,
                     sell_signals=sell_signals,
                     config=BacktestConfig(
+                        starting_capital=float(settings.backtest_starting_capital),
+                        fee_bps_round_trip=float(settings.backtest_fee_bps_round_trip),
                         trailing_stop_loss_pct=float(top_strat.get("trailing_stop_loss_pct") or top_strat.get("trailing_stop_pct") or 1.0),
                         take_profit_pct=float(top_strat.get("take_profit_pct") or 0.0),
                         trailing_take_profit_pct=float(top_strat.get("trailing_take_profit_pct") or 0.0),
                     ),
                 )
-
-                index_lookup = {str(ts): i for i, ts in enumerate(df.index)}
-
+                
+                index_lookup = {str(ts): idx for idx, ts in enumerate(df.index)}
                 def _lookup_pos(ts_raw: str) -> int | None:
                     direct = index_lookup.get(str(ts_raw))
-                    if direct is not None:
-                        return direct
-                    try:
-                        compact = str(int(float(ts_raw)))
-                    except Exception:
-                        return None
+                    if direct is not None: return direct
+                    try: compact = str(int(float(ts_raw)))
+                    except Exception: return None
                     return index_lookup.get(compact)
+
+                trade_indices = []
+                for trade in run_result.trades:
+                    e_idx = _lookup_pos(str(trade.entry_time))
+                    ex_idx = _lookup_pos(str(trade.exit_time))
+                    if e_idx is not None: trade_indices.append(e_idx)
+                    if ex_idx is not None: trade_indices.append(ex_idx)
+                
+                if trade_indices:
+                    # Expand viewport to Earliest trade minus small buffer
+                    start_idx = max(0, min(trade_indices) - 5)
+            except Exception:
+                pass
+
+        display_close = close_values[start_idx:]
+        display_open = open_values[start_idx:]
+        display_high = high_values[start_idx:]
+        display_low = low_values[start_idx:]
+
+        # Draw solid line for price data to declutter dense grids
+        x_values = list(range(len(display_close)))
+        ax_chart.plot(x_values, display_close, color="#38bdf8", linewidth=1.2, zorder=3)
+
+        if display_close:
+            last_close = display_close[-1]
+            ax_chart.axhline(last_close, color="#cbd5e1", linestyle="--", linewidth=0.8, alpha=0.55, zorder=2)
+            ax_chart.text(
+                len(display_close), 
+                last_close, 
+                f" {last_close:,.2f}", 
+                color="#cbd5e1", fontsize=7.5, va="center", ha="left",
+                bbox=dict(facecolor="#1e293b", alpha=0.85, boxstyle="round,pad=0.15", linewidth=0),
+                zorder=4
+            )
+            ax_chart.set_xlim(-1, len(display_close) + 8)
+            ax_chart.set_ylim(min(display_low) * 0.988, max(display_high) * 1.012)
+
+        ax_chart.set_ylabel("Price", color="#94a3b8")
+
+        # Map signal scatter overlays using dynamic start_idx window alignment
+        if run_result:
+            try:
+                signal_buy_idx = [idx - start_idx for idx, flag in enumerate(buy_signals) if bool(flag) and idx >= start_idx]
+                signal_sell_idx = [idx - start_idx for idx, flag in enumerate(sell_signals) if bool(flag) and idx >= start_idx]
+
+                # Removed signal dots to declutter chart
 
                 buy_idx = []
                 sell_idx = []
                 for trade in run_result.trades:
                     entry_idx = _lookup_pos(str(trade.entry_time))
                     exit_idx = _lookup_pos(str(trade.exit_time))
+                    
                     if entry_idx is not None:
-                        buy_idx.append(entry_idx)
+                        rel_entry = entry_idx - start_idx
+                        if rel_entry >= 0 and rel_entry < len(display_close):
+                            buy_idx.append(rel_entry)
                     if exit_idx is not None:
-                        sell_idx.append(exit_idx)
+                        rel_exit = exit_idx - start_idx
+                        if rel_exit >= 0 and rel_exit < len(display_close):
+                            sell_idx.append(rel_exit)
+                            pnl = float(trade.pnl_pct)
+                            color = "#22c55e" if pnl >= 0 else "#ef4444"
+                            y_val = display_close[rel_exit]
+                            
+                            ax_chart.annotate(
+                                f"{pnl:+.1f}%",
+                                xy=(rel_exit, y_val), xytext=(0, 7 if pnl >= 0 else -7),
+                                textcoords="offset points", color=color, fontsize=6.5, fontweight="bold",
+                                ha="center", va="bottom" if pnl >= 0 else "top",
+                                bbox=dict(facecolor="#0f172a", alpha=0.75, boxstyle="round,pad=0.12", linewidth=0),
+                                zorder=6,
+                            )
 
                 if buy_idx:
                     ax_chart.scatter(
-                        buy_idx,
-                        [close_values[i] for i in buy_idx],
-                        color="#22c55e",
-                        s=55,
-                        marker="^",
-                        edgecolors="#14532d",
-                        linewidths=0.4,
-                        label="Entry",
-                        zorder=5,
+                        buy_idx, [display_close[i] for i in buy_idx],
+                        color="#22c55e", s=55, marker="^", edgecolors="#14532d", linewidths=0.4, label="Entry", zorder=5,
                     )
                 if sell_idx:
                     ax_chart.scatter(
-                        sell_idx,
-                        [close_values[i] for i in sell_idx],
-                        color="#ef4444",
-                        s=55,
+                        sell_idx, [display_close[i] for i in sell_idx],
+                        color="#ef4444", s=55,
+                        
                         marker="v",
                         edgecolors="#7f1d1d",
                         linewidths=0.4,
@@ -617,11 +662,11 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
     )
 
     if table_body:
-        headers = ["Indicator", "TF", "Key Settings", "Stop Loss %", "Final $", "Net %", "Trades", "Win %"]
+        headers = ["Indicator", "TF", "Key Settings", "TSL %", "Final $", "Net %", "Trades", "TSL Hits", "Win %"]
         table = ax_table.table(
             cellText=table_body,
             colLabels=headers,
-            colWidths=[0.12, 0.07, 0.32, 0.1, 0.1, 0.08, 0.08, 0.08],
+            colWidths=[0.11, 0.06, 0.28, 0.09, 0.1, 0.08, 0.08, 0.09, 0.08],
             loc="center",
             cellLoc="left",
         )
@@ -647,9 +692,9 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
             is_buy_hold = row_values[0] == "B&H"
             cell.set_facecolor("#111827" if is_buy_hold else "#0b1220")
             cell.get_text().set_color("#e2e8f0")
+            if is_buy_hold:
+                cell.set_text_props(weight="bold")
             if col_index == 5:
-                # Value was saved with % suffix in logic for safety or cast float?
-                # Format previously appended text, check how MessageFormatter did it
                 net_text = str(row_values[5])
                 if net_text.startswith('+'):
                     cell.get_text().set_color("#22c55e")
