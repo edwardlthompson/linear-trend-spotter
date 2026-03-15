@@ -216,6 +216,40 @@
 				"scripts/run_full_unbounded_cg_first.py"
 			],
 			"isBackground": false
+		},
+		{
+			"label": "verify-backtest-data-fast-sanity",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"scripts/verify_backtest_data.py",
+				"--sanity",
+				"--max-seconds",
+				"30",
+				"--per-symbol-timeout",
+				"5",
+				"--min-passed",
+				"0"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "verify-backtest-data-strict",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"scripts/verify_backtest_data.py"
+			],
+			"isBackground": false
+		},
+		{
+			"label": "run-fresh-noresume-verify",
+			"type": "shell",
+			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
+			"args": [
+				"scripts/run_full_noresume_watchdog.py"
+			],
+			"isBackground": false
 		}
 	]
 }

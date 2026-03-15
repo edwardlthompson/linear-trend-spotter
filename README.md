@@ -9,7 +9,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 3. **Actionable Telegram Alerts:** Sends enriched entry/exit notifications and event-driven dashboard summaries (on entry/exit), with watchlist context.
 4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity, enforcing strict OOM memory clipping for low-RAM remote deployments (e.g. Render Basic plans).
 5. **Insights Layer:** Persists rank history, regime state, drift monitoring, outcome analytics, data reliability, and portfolio simulation.
-6. **3Commas Alignment:** Deterministic backtesting engine strictly implements Hard Take Profit (TP), Trailing Take Profit (TTP), and Trailing Stop Loss (TSL) parameters aligned perfectly with 3Commas native intervals.
+6. **Deterministic TSL-Only Backtesting:** Deterministic backtesting engine optimizes with trailing stop loss only (no TP/TTP sweep) using bounded hill-climbing search for fast convergence.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 
@@ -224,6 +224,11 @@ Notes:
 | `BACKTEST_REQUIRE_TARGET_EXCHANGE` | `false` | Gate backtests by `BACKTEST_EXCHANGES` when enabled |
 | `BACKTEST_MAX_PARAM_COMBOS` | `100` | Max param combos per indicator/timeframe |
 | `BACKTEST_PARALLEL_WORKERS` | `4` | Process workers for per-coin backtesting |
+| `BACKTEST_PER_COIN_TIMEOUT_SECONDS` | `1800` | Per-coin watchdog timeout before pool fallback handling |
+| `BACKTEST_TIMEFRAMES` | `['1h','4h']` | Backtest timeframes used by scanner |
+| `BACKTEST_TRAILING_STOP_MIN` | `2` | Minimum trailing stop loss % |
+| `BACKTEST_TRAILING_STOP_MAX` | `20` | Maximum trailing stop loss % |
+| `BACKTEST_TRAILING_STOP_STEP` | `2` | Trailing stop step size (even-number sweep) |
 | `BACKTEST_CHECKPOINT_FILE` | `backtest_checkpoint.json` | Incremental backtest checkpoint artifact |
 | `BACKTEST_TELEMETRY_FILE` | `backtest_telemetry.jsonl` | Structured per-event backtest telemetry stream |
 | `EXIT_ANALYTICS_FILE` | `exit_reason_analytics.json` | Cumulative exit-reason analytics artifact |
@@ -273,9 +278,14 @@ Configure in `config.json`:
 
 Data source behavior:
 
-- Primary source for all symbols: CoinGecko OHLCV (`1h/4h/1d` when hourly available)
+- Primary source for backtest timeframes: CoinGecko OHLCV (`1h/4h`)
 - Intraday fallback: Polygon hourly OHLCV
-- Last-resort fallback: CoinGecko daily OHLC (`1d` only)
+
+Search behavior:
+
+- Parameter optimization uses **coordinate-descent hill climbing** (start from midpoint defaults, test one-step up/down neighbors, keep improving direction).
+- Optimization is **TSL-only** (`take_profit_pct=0`, `trailing_take_profit_pct=0`).
+- Default TSL sweep uses even values: `2, 4, 6, ..., 20`.
 
 Backtest fairness + result quality rules:
 
@@ -303,6 +313,27 @@ Backtesting artifact:
 Operational recovery checklist:
 
 - `docs/backtesting-runbook.md`
+
+Sanity verification profiles:
+
+- **Strict verifier (CI / release gate):** requires broad symbol coverage and full pass threshold.
+
+```powershell
+python scripts/verify_backtest_data.py
+```
+
+- **Fast verifier (local smoke check):** bounded runtime with per-symbol timeout to avoid long API-backoff stalls.
+
+```powershell
+python scripts/verify_backtest_data.py --sanity --max-seconds 30 --per-symbol-timeout 5 --min-passed 0
+```
+
+Notes:
+
+- `--sanity` bounds the run to a small symbol set for quick feedback.
+- `--max-seconds` caps total runtime.
+- `--per-symbol-timeout` isolates slow symbols so one fallback chain cannot block the full verifier.
+- Use non-zero `--min-passed` when you want a quality threshold even in bounded mode.
 
 ---
 

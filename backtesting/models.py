@@ -8,11 +8,42 @@ from typing import Optional
 
 @dataclass
 class BacktestConfig:
-    starting_capital: float = 1000.0
-    fee_bps_round_trip: float = 52.0
-    trailing_stop_loss_pct: float = 0.0
-    take_profit_pct: float = 0.0
-    trailing_take_profit_pct: float = 0.0
+    starting_capital: float
+    fee_bps_round_trip: float
+    trailing_stop_loss_pct: float
+    take_profit_pct: float
+    trailing_take_profit_pct: float
+
+    def __init__(
+        self,
+        starting_capital: float = 1000.0,
+        fee_bps_round_trip: float = 52.0,
+        trailing_stop_loss_pct: float = 1.0,
+        take_profit_pct: float = 0.0,
+        trailing_take_profit_pct: float = 0.0,
+        trailing_stop_pct: float | None = None,
+    ) -> None:
+        self.starting_capital = float(starting_capital)
+        self.fee_bps_round_trip = float(fee_bps_round_trip)
+        resolved_tsl = float(
+            trailing_stop_loss_pct if trailing_stop_pct is None else trailing_stop_pct
+        )
+        if resolved_tsl < 1.0:
+            raise ValueError("trailing_stop_loss_pct must be >= 1.0")
+        self.trailing_stop_loss_pct = resolved_tsl
+        self.take_profit_pct = float(take_profit_pct)
+        self.trailing_take_profit_pct = float(trailing_take_profit_pct)
+
+    @property
+    def trailing_stop_pct(self) -> float:
+        return float(self.trailing_stop_loss_pct)
+
+    @trailing_stop_pct.setter
+    def trailing_stop_pct(self, value: float) -> None:
+        resolved = float(value)
+        if resolved < 1.0:
+            raise ValueError("trailing_stop_loss_pct must be >= 1.0")
+        self.trailing_stop_loss_pct = resolved
 
     @property
     def side_fee_rate(self) -> float:

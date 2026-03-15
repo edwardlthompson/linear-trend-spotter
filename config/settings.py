@@ -68,12 +68,13 @@ class Settings:
             'BACKTEST_FEE_BPS_ROUND_TRIP': 52,
             'BACKTEST_MAX_PARAM_COMBOS': 100,
             'BACKTEST_PARALLEL_WORKERS': 4,
+            'BACKTEST_PER_COIN_TIMEOUT_SECONDS': 1800,
             'BACKTEST_MAX_COINS_PER_RUN': 0,
-            'BACKTEST_TIMEFRAMES': ['1h', '4h', '1d'],
+            'BACKTEST_TIMEFRAMES': ['1h', '4h'],
             'BACKTEST_INDICATORS': [],
-            'BACKTEST_TRAILING_STOP_MIN': 1,
+            'BACKTEST_TRAILING_STOP_MIN': 2,
             'BACKTEST_TRAILING_STOP_MAX': 20,
-            'BACKTEST_TRAILING_STOP_STEP': 1,
+            'BACKTEST_TRAILING_STOP_STEP': 2,
             'BACKTEST_RESUME_ENABLED': True,
             'BACKTEST_CHECKPOINT_FILE': 'backtest_checkpoint.json',
             'BACKTEST_TELEMETRY_FILE': 'backtest_telemetry.jsonl',
@@ -180,6 +181,7 @@ class Settings:
             ('CIRCUIT_RECOVERY_TIMEOUT', 1, 3600),
             ('BACKTEST_MAX_PARAM_COMBOS', 1, 5000),
             ('BACKTEST_PARALLEL_WORKERS', 1, 32),
+            ('BACKTEST_PER_COIN_TIMEOUT_SECONDS', 30, 86400),
             ('BACKTEST_MAX_COINS_PER_RUN', 0, 10000),
             ('BACKTEST_TRAILING_STOP_MIN', 1, 100),
             ('BACKTEST_TRAILING_STOP_MAX', 0, 100),
@@ -429,6 +431,10 @@ class Settings:
             # Max 2 workers on Render Basic plan (0.5 CPU) to prevent stalling
             return min(configured, 2)
         return configured
+
+    @property
+    def backtest_per_coin_timeout_seconds(self) -> int:
+        return int(self._config.get('BACKTEST_PER_COIN_TIMEOUT_SECONDS', 1800))
 
     @property
     def backtest_max_coins_per_run(self) -> int:

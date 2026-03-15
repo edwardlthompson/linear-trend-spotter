@@ -52,7 +52,7 @@ def main() -> int:
     config = BacktestConfig(
         starting_capital=1000.0,
         fee_bps_round_trip=52.0,
-        trailing_stop_pct=5.0,
+        trailing_stop_loss_pct=5.0,
     )
 
     result_first = run_backtest(frame, buy_signals, sell_signals, config)

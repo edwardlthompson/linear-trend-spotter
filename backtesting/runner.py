@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -41,7 +41,12 @@ def _classify_failure(reason: str) -> str:
         return "optimizer_error"
     if normalized in {"load_failed", "insufficient_history", "no_market_data"}:
         return "data_unavailable"
-    if "pickle" in normalized or "brokenprocesspool" in normalized:
+    if (
+        "pickle" in normalized
+        or "brokenprocesspool" in normalized
+        or "process pool" in normalized
+        or "terminated abruptly" in normalized
+    ):
         return "worker_pool_error"
     if "timeout" in normalized:
         return "timeout"
@@ -160,7 +165,7 @@ def _optimize_coin_task(
                 BacktestConfig(
                     starting_capital=starting_capital,
                     fee_bps_round_trip=fee_bps_round_trip,
-                    trailing_stop_pct=0.0,
+                    trailing_stop_loss_pct=1.0,
                 ),
             )
             strategy_rows.append(
@@ -385,22 +390,33 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                 for symbol in checkpoint.get("eligible_symbols", [])
             }
             if prior_eligible == set(eligible_symbols):
-                resumed_symbols = {
+                checkpoint_completed_symbols = {
                     str(symbol).upper()
                     for symbol in checkpoint.get("completed_symbols", [])
                 }
+                checkpoint_failures = list(checkpoint.get("failures", []))
+                failed_symbols = {
+                    str(item.get("symbol", "")).upper()
+                    for item in checkpoint_failures
+                    if str(item.get("symbol", "")).strip()
+                }
+                resumed_symbols = checkpoint_completed_symbols - failed_symbols
+
                 summary["coins_processed"] = int(checkpoint.get("coins_processed", 0))
-                summary["coins_failed"] = int(checkpoint.get("coins_failed", 0))
+                summary["coins_failed"] = 0
                 summary["results"] = list(checkpoint.get("results", []))
                 summary["skipped"].extend(list(checkpoint.get("skipped", [])))
-                summary["failures"].extend(list(checkpoint.get("failures", [])))
+                summary["failures"] = []
                 existing_breakdown = checkpoint.get("failure_breakdown", {})
                 if isinstance(existing_breakdown, dict):
                     for key, count in existing_breakdown.items():
-                        failure_counter[str(key)] += int(count)
-                if not failure_counter:
-                    for item in summary["failures"]:
-                        failure_counter[_classify_failure(str(item.get("reason", "")))] += 1
+                        key_name = str(key)
+                        if key_name and int(count) > 0:
+                            failure_counter[key_name] += int(count)
+
+                if failed_symbols:
+                    failure_counter.clear()
+
                 summary["resumed_from_checkpoint"] = True
                 summary["resumed_completed_symbols"] = len(resumed_symbols)
                 _append_jsonl(
@@ -408,6 +424,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     _telemetry_event(
                         "resume_loaded",
                         resumed=len(resumed_symbols),
+                        retry_failed=len(failed_symbols),
                         prior_rows=len(summary["results"]),
                     ),
                 )
@@ -574,9 +591,14 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
         progress_started_at = time.monotonic()
         total_to_process = len(pending_coins)
         completed_count = 0
+        timeout_seconds = int(settings.backtest_per_coin_timeout_seconds)
         symbol_to_index = {
             coin["symbol"]: index
             for index, coin in enumerate(pending_coins, start=1)
+        }
+        coin_lookup = {
+            coin["symbol"]: coin
+            for coin in pending_coins
         }
         with ProcessPoolExecutor(max_workers=worker_count) as executor:
             for coin in pending_coins:
@@ -609,12 +631,205 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                 f"submitted {len(future_map)} coins to worker pool",
                 flush=True,
             )
+            submit_started_at = {
+                future: time.monotonic()
+                for future in future_map
+            }
+            pending_futures = set(future_map.keys())
+            fallback_symbols: list[str] = []
 
-            for future in as_completed(future_map):
-                symbol = future_map[future]
+            while pending_futures:
+                done, not_done = wait(
+                    pending_futures,
+                    timeout=5,
+                    return_when=FIRST_COMPLETED,
+                )
+
+                if not done:
+                    now = time.monotonic()
+                    timed_out = [
+                        future
+                        for future in list(not_done)
+                        if (now - submit_started_at.get(future, now)) >= timeout_seconds
+                    ]
+                    if timed_out:
+                        for future in timed_out:
+                            symbol = future_map[future]
+                            idx = symbol_to_index.get(symbol, 0)
+                            reason = f"timeout after {timeout_seconds}s"
+                            class_name = _classify_failure(reason)
+                            failure_counter[class_name] += 1
+                            summary["coins_failed"] += 1
+                            if len(summary["failures"]) < max_failure_samples:
+                                summary["failures"].append({"symbol": symbol, "reason": reason, "class_name": class_name})
+                            completed_symbols.append(symbol)
+                            completed_count += 1
+                            _log_progress(
+                                total=total_to_process,
+                                completed=completed_count,
+                                failed=summary["coins_failed"],
+                                symbol=symbol,
+                                status="failed",
+                                rows=0,
+                                skipped=0,
+                                started_at=progress_started_at,
+                            )
+                            _append_jsonl(
+                                telemetry_path,
+                                _telemetry_event(
+                                    "coin_failed",
+                                    symbol=symbol,
+                                    queue_index=idx,
+                                    reason=reason,
+                                    class_name=class_name,
+                                ),
+                            )
+                            pending_futures.discard(future)
+
+                        fallback_symbols = [future_map[future] for future in pending_futures]
+                        print(
+                            "[BACKTEST] "
+                            f"pool watchdog triggered; timed out {len(timed_out)} coins, switching {len(fallback_symbols)} unfinished coins to serial mode",
+                            flush=True,
+                        )
+                        _append_jsonl(
+                            telemetry_path,
+                            _telemetry_event(
+                                "pool_watchdog_triggered",
+                                timeout_seconds=timeout_seconds,
+                                timed_out_symbols=[future_map[future] for future in timed_out],
+                                unfinished_symbols=fallback_symbols,
+                            ),
+                        )
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        pending_futures.clear()
+                        _save_checkpoint(
+                            checkpoint_path,
+                            eligible_symbols,
+                            completed_symbols,
+                            summary["coins_processed"],
+                            summary["coins_failed"],
+                            dict(failure_counter),
+                            summary["results"],
+                            summary["skipped"],
+                            summary["failures"],
+                        )
+                    continue
+
+                for future in done:
+                    pending_futures.discard(future)
+                    symbol = future_map[future]
+                    idx = symbol_to_index.get(symbol, 0)
+                    try:
+                        result = future.result()
+                        summary["coins_processed"] += 1
+                        summary["results"].extend(result.get("rows", []))
+                        summary["skipped"].extend(result.get("skipped", []))
+                        skipped_reason_counts = Counter(
+                            str(item.get("reason", "unknown"))
+                            for item in result.get("skipped", [])
+                        )
+                        completed_symbols.append(symbol)
+                        completed_count += 1
+                        _log_progress(
+                            total=total_to_process,
+                            completed=completed_count,
+                            failed=summary["coins_failed"],
+                            symbol=symbol,
+                            status="ok",
+                            rows=len(result.get("rows", [])),
+                            skipped=len(result.get("skipped", [])),
+                            started_at=progress_started_at,
+                        )
+                        _append_jsonl(
+                            telemetry_path,
+                            _telemetry_event(
+                                "coin_processed",
+                                symbol=symbol,
+                                queue_index=idx,
+                                rows=len(result.get("rows", [])),
+                                skipped=len(result.get("skipped", [])),
+                                skipped_reason_counts=dict(skipped_reason_counts),
+                            ),
+                        )
+                        _save_checkpoint(
+                            checkpoint_path,
+                            eligible_symbols,
+                            completed_symbols,
+                            summary["coins_processed"],
+                            summary["coins_failed"],
+                            dict(failure_counter),
+                            summary["results"],
+                            summary["skipped"],
+                            summary["failures"],
+                        )
+                    except Exception as exc:
+                        summary["coins_failed"] += 1
+                        reason = str(exc)
+                        class_name = _classify_failure(reason)
+                        failure_counter[class_name] += 1
+                        if len(summary["failures"]) < max_failure_samples:
+                            summary["failures"].append({"symbol": symbol, "reason": reason, "class_name": class_name})
+                        completed_symbols.append(symbol)
+                        completed_count += 1
+                        _log_progress(
+                            total=total_to_process,
+                            completed=completed_count,
+                            failed=summary["coins_failed"],
+                            symbol=symbol,
+                            status="failed",
+                            rows=0,
+                            skipped=0,
+                            started_at=progress_started_at,
+                        )
+                        _append_jsonl(
+                            telemetry_path,
+                            _telemetry_event(
+                                "coin_failed",
+                                symbol=symbol,
+                                queue_index=idx,
+                                reason=reason,
+                                class_name=class_name,
+                            ),
+                        )
+                        _save_checkpoint(
+                            checkpoint_path,
+                            eligible_symbols,
+                            completed_symbols,
+                            summary["coins_processed"],
+                            summary["coins_failed"],
+                            dict(failure_counter),
+                            summary["results"],
+                            summary["skipped"],
+                            summary["failures"],
+                        )
+
+        if fallback_symbols:
+            print(
+                "[BACKTEST] "
+                f"continuing in serial mode for unfinished coins: {', '.join(fallback_symbols)}",
+                flush=True,
+            )
+            for symbol in fallback_symbols:
+                coin = coin_lookup.get(symbol)
+                if not coin:
+                    continue
                 idx = symbol_to_index.get(symbol, 0)
                 try:
-                    result = future.result()
+                    result = _optimize_coin_task(
+                        coin["symbol"],
+                        coin.get("gecko_id"),
+                        timeframes,
+                        indicators,
+                        str(settings.db_paths["scanner"]),
+                        int(settings.cache_price_hours),
+                        int(settings.backtest_max_param_combos),
+                        float(settings.backtest_starting_capital),
+                        float(settings.backtest_fee_bps_round_trip),
+                        stop_min,
+                        stop_max,
+                        stop_step,
+                    )
                     summary["coins_processed"] += 1
                     summary["results"].extend(result.get("rows", []))
                     summary["skipped"].extend(result.get("skipped", []))
@@ -629,7 +844,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                         completed=completed_count,
                         failed=summary["coins_failed"],
                         symbol=symbol,
-                        status="ok",
+                        status="ok-serial",
                         rows=len(result.get("rows", [])),
                         skipped=len(result.get("skipped", [])),
                         started_at=progress_started_at,
@@ -640,6 +855,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                             "coin_processed",
                             symbol=symbol,
                             queue_index=idx,
+                            mode="serial_fallback",
                             rows=len(result.get("rows", [])),
                             skipped=len(result.get("skipped", [])),
                             skipped_reason_counts=dict(skipped_reason_counts),
@@ -670,7 +886,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                         completed=completed_count,
                         failed=summary["coins_failed"],
                         symbol=symbol,
-                        status="failed",
+                        status="failed-serial",
                         rows=0,
                         skipped=0,
                         started_at=progress_started_at,
@@ -681,6 +897,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                             "coin_failed",
                             symbol=symbol,
                             queue_index=idx,
+                            mode="serial_fallback",
                             reason=reason,
                             class_name=class_name,
                         ),

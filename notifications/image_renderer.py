@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from notifications.formatter import MessageFormatter
+from backtesting.engine import run_backtest
+from backtesting.models import BacktestConfig
 from backtesting.signals import generate_indicator_signals
 
 
@@ -57,6 +59,15 @@ def _format_money(value: Optional[float]) -> str:
     if isinstance(value, (int, float)):
         return f"${float(value):,.6g}" if abs(float(value)) < 1 else f"${float(value):,.2f}"
     return "n/a"
+
+
+def _resolve_trailing_stop_pct(item: Dict) -> float:
+    raw_value = item.get("trailing_stop_loss_pct", item.get("trailing_stop_pct"))
+    try:
+        value = float(raw_value)
+    except Exception:
+        return 1.0
+    return 1.0 if value < 1.0 else value
 
 
 def _time_on_list_label(entered_at: Optional[datetime], exited_at: Optional[datetime]) -> str:
@@ -295,7 +306,7 @@ def build_strategy_table_image(coin: Dict) -> Optional[bytes]:
             trades = "-"
             win_pct = "-"
         else:
-            stop_loss = f"{float(item.get('trailing_stop_pct') or 0.0):.2f}%"
+            stop_loss = f"{_resolve_trailing_stop_pct(item):.2f}%"
             trades = str(int(item.get("trades", 0)))
             win_pct = f"{float(item.get('win_pct', 0.0)):.2f}%"
 
@@ -431,7 +442,7 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
             trades = "-"
             win_pct = "-"
         else:
-            stop_loss = f"{float(item.get('trailing_stop_pct') or 0.0):.2f}%"
+            stop_loss = f"{_resolve_trailing_stop_pct(item):.2f}%"
             trades = str(int(item.get("trades", 0)))
             win_pct = f"{float(item.get('win_pct', 0.0)):.2f}%"
 
@@ -494,16 +505,100 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 df.set_index('ts', inplace=True)
                 
                 buy_signals, sell_signals = generate_indicator_signals(indicator, df, params)
-                
-                # Plot signals
-                buy_idx = [i for i, val in enumerate(buy_signals.values) if val]
-                sell_idx = [i for i, val in enumerate(sell_signals.values) if val]
-                
+
+                signal_buy_idx = [idx for idx, flag in enumerate(buy_signals) if bool(flag)]
+                signal_sell_idx = [idx for idx, flag in enumerate(sell_signals) if bool(flag)]
+
+                if signal_buy_idx:
+                    ax_chart.scatter(
+                        signal_buy_idx,
+                        [close_values[i] for i in signal_buy_idx],
+                        color="#22c55e",
+                        s=20,
+                        marker="o",
+                        alpha=0.45,
+                        label="Signal Buy",
+                        zorder=4,
+                    )
+                if signal_sell_idx:
+                    ax_chart.scatter(
+                        signal_sell_idx,
+                        [close_values[i] for i in signal_sell_idx],
+                        color="#ef4444",
+                        s=20,
+                        marker="o",
+                        alpha=0.45,
+                        label="Signal Sell",
+                        zorder=4,
+                    )
+
+                run_result = run_backtest(
+                    frame=df,
+                    buy_signals=buy_signals,
+                    sell_signals=sell_signals,
+                    config=BacktestConfig(
+                        trailing_stop_loss_pct=float(top_strat.get("trailing_stop_loss_pct") or top_strat.get("trailing_stop_pct") or 1.0),
+                        take_profit_pct=float(top_strat.get("take_profit_pct") or 0.0),
+                        trailing_take_profit_pct=float(top_strat.get("trailing_take_profit_pct") or 0.0),
+                    ),
+                )
+
+                index_lookup = {str(ts): i for i, ts in enumerate(df.index)}
+
+                def _lookup_pos(ts_raw: str) -> int | None:
+                    direct = index_lookup.get(str(ts_raw))
+                    if direct is not None:
+                        return direct
+                    try:
+                        compact = str(int(float(ts_raw)))
+                    except Exception:
+                        return None
+                    return index_lookup.get(compact)
+
+                buy_idx = []
+                sell_idx = []
+                for trade in run_result.trades:
+                    entry_idx = _lookup_pos(str(trade.entry_time))
+                    exit_idx = _lookup_pos(str(trade.exit_time))
+                    if entry_idx is not None:
+                        buy_idx.append(entry_idx)
+                    if exit_idx is not None:
+                        sell_idx.append(exit_idx)
+
                 if buy_idx:
-                    ax_chart.scatter(buy_idx, [close_values[i] for i in buy_idx], color="#22c55e", s=40, marker="^", label="Buy", zorder=5)
+                    ax_chart.scatter(
+                        buy_idx,
+                        [close_values[i] for i in buy_idx],
+                        color="#22c55e",
+                        s=55,
+                        marker="^",
+                        edgecolors="#14532d",
+                        linewidths=0.4,
+                        label="Entry",
+                        zorder=5,
+                    )
                 if sell_idx:
-                    ax_chart.scatter(sell_idx, [close_values[i] for i in sell_idx], color="#ef4444", s=40, marker="v", label="Sell", zorder=5)
-                ax_chart.legend(loc="upper left", facecolor="#1e293b", edgecolor="#475569", labelcolor="#cbd5e1", fontsize=9)
+                    ax_chart.scatter(
+                        sell_idx,
+                        [close_values[i] for i in sell_idx],
+                        color="#ef4444",
+                        s=55,
+                        marker="v",
+                        edgecolors="#7f1d1d",
+                        linewidths=0.4,
+                        label="Exit",
+                        zorder=5,
+                    )
+
+                legend_handles, legend_labels = ax_chart.get_legend_handles_labels()
+                if legend_handles:
+                    ax_chart.legend(
+                        loc="upper left",
+                        facecolor="#1e293b",
+                        edgecolor="#475569",
+                        labelcolor="#cbd5e1",
+                        fontsize=9,
+                    )
             except Exception as e:
                 pass # Silently proceed if signal derivation crashes on faulty shapes
     else:

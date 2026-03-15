@@ -66,6 +66,7 @@ def run_backtest(
         close_price = float(close_values[index_position])
         high_price = float(high_values[index_position])
         low_price = float(low_values[index_position])
+        exited_this_bar = False
 
         buy_signal = bool(buy_values[index_position])
         sell_signal = bool(sell_values[index_position])
@@ -146,17 +147,18 @@ def run_backtest(
                 entry_fee = 0.0
                 highest_price = 0.0
                 entry_time = None
+                exited_this_bar = True
 
-        if position_qty == 0 and new_buy_edge:
-            entry_notional = cash
-            entry_fee = entry_notional * config.side_fee_rate
-            net_to_asset = entry_notional - entry_fee
-            if net_to_asset > 0 and close_price > 0:
-                position_qty = net_to_asset / close_price
-                entry_price = close_price
-                highest_price = close_price
-                entry_time = timestamp
-                cash = 0.0
+            if position_qty == 0 and new_buy_edge and not exited_this_bar:
+                entry_notional = cash
+                entry_fee = entry_notional * config.side_fee_rate
+                net_to_asset = entry_notional - entry_fee
+                if net_to_asset > 0 and close_price > 0:
+                    position_qty = net_to_asset / close_price
+                    entry_price = close_price
+                    highest_price = close_price
+                    entry_time = timestamp
+                    cash = 0.0
 
         previous_buy_signal = buy_signal
 

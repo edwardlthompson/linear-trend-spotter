@@ -123,7 +123,7 @@ def main() -> int:
     config = BacktestConfig(
         starting_capital=settings.backtest_starting_capital,
         fee_bps_round_trip=settings.backtest_fee_bps_round_trip,
-        trailing_stop_pct=args.trailing_stop,
+        trailing_stop_loss_pct=args.trailing_stop,
     )
 
     cache = PriceCache(settings.db_paths["scanner"])
