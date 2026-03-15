@@ -130,6 +130,7 @@ def optimize_indicator(
                 "final_equity": float(result.final_equity),
                 "net_pct": float(result.net_pct),
                 "trades": int(result.total_trades),
+                "tsl_hits": sum(1 for t in result.trades if t.exit_reason == "trailing_stop_loss"),
                 "win_pct": float(result.win_pct),
             }
             if float(row["win_pct"]) > MIN_STRATEGY_WIN_PCT:

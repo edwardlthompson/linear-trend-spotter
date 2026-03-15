@@ -145,7 +145,15 @@ class TelegramBotHandler:
                     last_update_id = update_id
                     
                     if 'message' in update and 'text' in update['message']:
-                        text = update['message']['text']
+                        message = update['message']
+                        chat_id = message.get('chat', {}).get('id')
+                        
+                        # Security check: verify sender
+                        if str(chat_id) != str(settings.telegram['chat_id']):
+                            self.logger.warning(f"Ignored message from unauthorized chat: {chat_id}")
+                            continue
+                            
+                        text = message['text']
                         
                         if text == '/start':
                             welcome = (
@@ -175,6 +183,13 @@ class TelegramBotHandler:
                     
                     elif 'callback_query' in update:
                         query = update['callback_query']
+                        chat_id = query.get('message', {}).get('chat', {}).get('id')
+                        
+                        # Security check: verify sender
+                        if str(chat_id) != str(settings.telegram['chat_id']):
+                            self.logger.warning(f"Ignored callback from unauthorized chat: {chat_id}")
+                            continue
+                            
                         cb_id = query['id']
                         cb_data = query.get('data', '')
                         msg_id = query.get('message', {}).get('message_id')

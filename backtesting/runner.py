@@ -816,6 +816,8 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     continue
                 idx = symbol_to_index.get(symbol, 0)
                 try:
+                    # Run optimize task directly in serial mode without timeout wrapper
+                    # to prevent premature failures on heavy coins.
                     result = _optimize_coin_task(
                         coin["symbol"],
                         coin.get("gecko_id"),

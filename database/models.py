@@ -1,5 +1,6 @@
 """Database models and schema"""
 import sqlite3
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -29,6 +30,7 @@ class Database:
     
     def __init__(self, db_path: Path):
         self.db_path = db_path
+        self._local = threading.local()
         self._init_db()
     
     def _init_db(self):
@@ -36,8 +38,16 @@ class Database:
         raise NotImplementedError
     
     def get_connection(self):
-        """Get a database connection"""
-        return sqlite3.connect(self.db_path)
+        """Get a database connection (thread-local)"""
+        if not hasattr(self._local, 'conn'):
+            self._local.conn = sqlite3.connect(self.db_path)
+        return self._local.conn
+    
+    def close(self):
+        """Close database connection"""
+        if hasattr(self._local, 'conn'):
+            self._local.conn.close()
+            del self._local.conn
     
     def execute(self, query: str, params: tuple = ()):
         """Execute a query and return cursor"""
