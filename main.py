@@ -1185,20 +1185,20 @@ def run_scanner():
 
             if fallback_summary:
                 for coin in entered:
+                    for enriched_coin in final_results:
+                        if str(enriched_coin.get('symbol', '')).upper() == str(coin.get('symbol', '')).upper():
+                            coin.update(enriched_coin)
+
+                for coin in entered:
                     if coin.get('backtest_top_strategies') and coin.get('backtest_buy_hold'):
                         continue
                     symbol = coin.get('symbol', '')
                     if not symbol:
                         continue
-                    details = notification_rows_for_symbol(fallback_summary, symbol, top_n=5)
-                    coin['backtest_top_strategies'] = details.get('top_strategies', [])
-                    coin['backtest_buy_hold'] = details.get('buy_hold')
-
-            for coin in entered:
-                for enriched_coin in final_results:
-                    if str(enriched_coin.get('symbol', '')).upper() == str(coin.get('symbol', '')).upper():
-                        coin.update(enriched_coin)
-                        break
+                    if fallback_summary:
+                        details = notification_rows_for_symbol(fallback_summary, symbol, top_n=5)
+                        coin['backtest_top_strategies'] = details.get('top_strategies', [])
+                        coin['backtest_buy_hold'] = details.get('buy_hold')
 
         # Attach precise exit reasons based on first failed pipeline stage
         for coin in exited:
