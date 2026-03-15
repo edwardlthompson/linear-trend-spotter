@@ -831,10 +831,9 @@ def run_scanner():
                 # Check volume filter
                 if info['volume_24h'] >= settings.min_volume:
                     # Check gain filter:
-                    # - 7d > 7%
                     # - 30d > 30%
                     # - 30d must be higher than 7d
-                    if gains['7d'] > 7 and gains['30d'] > 30 and gains['30d'] > gains['7d']:
+                    if gains['30d'] > 30 and gains['30d'] > gains['7d']:
                         coin_info = {
                             'symbol': symbol,
                             'cmc_symbol': resolved_cmc_symbol,
@@ -1390,7 +1389,12 @@ def run_scanner():
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
                 message = MessageFormatter.format_exit(coin)
-                exit_image = build_exit_notification_image(coin, settings.db_paths['scanner'])
+                try:
+                    exit_image = build_exit_notification_image(coin, settings.db_paths['scanner'])
+                except Exception as e:
+                    app_logger.error(f"      ❌ Failed to build exit image for {coin['symbol']}: {e}")
+                    exit_image = None
+
                 if exit_image:
                     telegram.send_photo(io.BytesIO(exit_image), caption=message)
                 else:

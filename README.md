@@ -40,7 +40,6 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 ### Filter 1: Volume + gains
 
 - 24h provider volume must be `>= MIN_VOLUME_M` (default `1,000,000`)
-- 7d gain must be `> 7%`
 - 30d gain must be `> 30%`
 - 30d gain must be strictly higher than 7d gain (`30d > 7d`)
 - Stablecoins are excluded
@@ -104,7 +103,7 @@ Example entry notification excerpt:
 - Sent once when a previously active coin leaves qualification.
 - Includes precise exit reason (first failed stage), for example:
   - 24h volume below threshold
-  - 7d / 30d threshold violation
+  - 30d threshold violation
   - `30d <= 7d`
   - missing top-coin provider or CoinGecko data
   - uniformity score below threshold

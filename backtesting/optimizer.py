@@ -116,11 +116,9 @@ def optimize_indicator(
                         "win_pct": float(result.win_pct),
                     }
 
-            if float(row["win_pct"]) <= MIN_STRATEGY_WIN_PCT:
-                continue
-
-            if best_for_combo is None or row["net_pct"] > best_for_combo["net_pct"]:
-                best_for_combo = row
+                    if float(row["win_pct"]) > MIN_STRATEGY_WIN_PCT:
+                        if best_for_combo is None or row["net_pct"] > best_for_combo["net_pct"]:
+                            best_for_combo = row
 
         if best_for_combo is not None:
             signal_cache[cache_key] = dict(best_for_combo)
