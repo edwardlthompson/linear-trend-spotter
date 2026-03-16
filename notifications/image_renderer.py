@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import pandas as pd
 
 from config.settings import settings
@@ -616,26 +617,39 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                     entry_idx = _lookup_pos(str(trade.entry_time))
                     exit_idx = _lookup_pos(str(trade.exit_time))
                     
-                    if entry_idx is not None:
-                        rel_entry = entry_idx - start_idx
-                        if rel_entry >= 0 and rel_entry < len(display_close):
-                            buy_idx.append(rel_entry)
-                    if exit_idx is not None:
-                        rel_exit = exit_idx - start_idx
-                        if rel_exit >= 0 and rel_exit < len(display_close):
-                            sell_idx.append(rel_exit)
-                            pnl = float(trade.pnl_pct)
-                            color = "#22c55e" if pnl >= 0 else "#ef4444"
-                            y_val = display_close[rel_exit]
-                            
-                            ax_chart.annotate(
-                                f"{pnl:+.1f}%",
-                                xy=(rel_exit, y_val), xytext=(0, 7 if pnl >= 0 else -7),
-                                textcoords="offset points", color=color, fontsize=6.5, fontweight="bold",
-                                ha="center", va="bottom" if pnl >= 0 else "top",
-                                bbox=dict(facecolor="#0f172a", alpha=0.75, boxstyle="round,pad=0.12", linewidth=0),
-                                zorder=6,
+                    rel_entry = entry_idx - start_idx if entry_idx is not None else None
+                    rel_exit = exit_idx - start_idx if exit_idx is not None else None
+                    
+                    if rel_entry is not None and rel_entry >= 0 and rel_entry < len(display_close):
+                        buy_idx.append(rel_entry)
+                        
+                    if rel_exit is not None and rel_exit >= 0 and rel_exit < len(display_close):
+                        sell_idx.append(rel_exit)
+                        pnl = float(trade.pnl_pct)
+                        color = "#22c55e" if pnl >= 0 else "#ef4444"
+                        y_val = display_close[rel_exit]
+                        
+                        ax_chart.annotate(
+                            f"{pnl:+.1f}%",
+                            xy=(rel_exit, y_val), xytext=(0, 7 if pnl >= 0 else -7),
+                            textcoords="offset points", color=color, fontsize=6.5, fontweight="bold",
+                            ha="center", va="bottom" if pnl >= 0 else "top",
+                            bbox=dict(facecolor="#0f172a", alpha=0.75, boxstyle="round,pad=0.12", linewidth=0),
+                            zorder=6,
+                        )
+
+                        # Add shaded Colored Rectangle bounding box for trade duration and price bounds
+                        if rel_entry is not None and rel_entry >= 0:
+                            rect_color = "#10b981" if pnl >= 0 else "#ef4444"
+                            entry_p = float(trade.entry_price)
+                            exit_p = float(trade.exit_price)
+                            rect = patches.Rectangle(
+                                (rel_entry, min(entry_p, exit_p)),
+                                rel_exit - rel_entry,
+                                abs(exit_p - entry_p),
+                                linewidth=0, facecolor=rect_color, alpha=0.14, zorder=2
                             )
+                            ax_chart.add_patch(rect)
 
                 if buy_idx:
                     ax_chart.scatter(
