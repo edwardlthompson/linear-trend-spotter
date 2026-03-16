@@ -516,19 +516,8 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         high_values = [float(item[2]) for item in chart_points]
         low_values = [float(item[3]) for item in chart_points]
 
-        # Calculate ATR array for continuous envelope shading on 1h intervals
-        true_ranges = []
-        for index in range(len(close_values)):
-            if index == 0:
-                tr = high_values[index] - low_values[index]
-            else:
-                tr = max(
-                    high_values[index] - low_values[index],
-                    abs(high_values[index] - close_values[index - 1]),
-                    abs(low_values[index] - close_values[index - 1]),
-                )
-            true_ranges.append(tr)
-        atr_values = pd.Series(true_ranges).rolling(window=24, min_periods=1).mean().fillna(0).tolist()
+
+        # 3a. Pre-calculate Backtest Results to get Dynamic Display Window
 
         # 3a. Pre-calculate Backtest Results to get Dynamic Display Window
         start_idx = max(0, len(chart_points) - 144) 
@@ -614,15 +603,7 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         x_values = list(range(len(display_close)))
         ax_chart.plot(x_values, display_close, color="#38bdf8", linewidth=1.2, zorder=3)
 
-        # Draw shaded ATR Envelope bounds
-        try:
-            display_atr = atr_values[start_idx:]
-            if len(display_atr) == len(display_close):
-                atr_upper = [display_close[i] + display_atr[i] for i in range(len(display_close))]
-                atr_lower = [display_close[i] - display_atr[i] for i in range(len(display_close))]
-                ax_chart.fill_between(x_values, atr_lower, atr_upper, color="#22d3ee", alpha=0.15, label="ATR Band", zorder=1)
-        except Exception:
-            pass
+
 
         if display_close:
             last_close = display_close[-1]
@@ -790,41 +771,26 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
 
 def build_hourly_summary_image(
     active_rows: List[Dict],
-    watchlist_rows: List[Dict],
-    regime: Optional[Dict] = None,
-    drift: Optional[Dict] = None,
 ) -> Optional[bytes]:
     """Render a compact event dashboard image for Telegram summary sends."""
     try:
-        top_active = list(active_rows[:12])
-        top_watchlist = list(watchlist_rows[:6])
+        top_active = list(active_rows[:15])
 
-        fig = plt.figure(figsize=(12, 9), dpi=170)
-        gs = fig.add_gridspec(3, 1, height_ratios=[0.8, 2.3, 1.7], hspace=0.20)
+        fig = plt.figure(figsize=(12, 8), dpi=170)
+        gs = fig.add_gridspec(2, 1, height_ratios=[0.5, 4.0], hspace=0.15)
         fig.patch.set_facecolor("#0f172a")
 
         ax_header = fig.add_subplot(gs[0])
         ax_header.axis("off")
         ax_header.set_facecolor("#0f172a")
-        regime_name = str((regime or {}).get("regime", "unknown"))
-        drift_status = str((drift or {}).get("status", "stable"))
-        avg_30d = float((regime or {}).get("avg_gain_30d", 0.0) or 0.0)
-        ax_header.text(0.01, 0.72, "Scanner Event Dashboard", fontsize=16, fontweight="bold", color="#e2e8f0")
+        ax_header.text(0.01, 0.65, "Scanner Event Dashboard", fontsize=16, fontweight="bold", color="#e2e8f0")
         ax_header.text(
             0.01,
-            0.34,
-            f"Regime: {regime_name} | Avg 30d gain: {avg_30d:+.1f}% | Drift: {drift_status} | Active: {len(active_rows)} | Watchlist: {len(watchlist_rows)}",
-            fontsize=10,
+            0.20,
+            f"Active Rankings: {len(active_rows)}",
+            fontsize=11,
             color="#cbd5e1",
         )
-        if (drift or {}).get("notes"):
-            ax_header.text(
-                0.01,
-                0.08,
-                "Drift notes: " + "; ".join((drift or {}).get("notes", [])[:3]),
-                fontsize=9,
-                color="#94a3b8",
-            )
 
         ax_active = fig.add_subplot(gs[1])
         ax_active.axis("off")
@@ -865,40 +831,6 @@ def build_hourly_summary_image(
                     cell.get_text().set_color("#22c55e" if text.startswith('+') else "#f87171" if text.startswith('-') else "#cbd5e1")
         else:
             ax_active.text(0.5, 0.5, "No active rows", ha="center", va="center", color="#cbd5e1")
-
-        ax_watch = fig.add_subplot(gs[2])
-        ax_watch.axis("off")
-        ax_watch.set_facecolor("#111827")
-        ax_watch.set_title("Watchlist", fontsize=12, fontweight="bold", pad=8, color="#bbf7d0")
-        if top_watchlist:
-            watch_table = []
-            for row in top_watchlist:
-                watch_table.append([
-                    str(row.get('symbol', '')).upper(),
-                    f"{float(row.get('watchlist_score', 0.0)):.0f}",
-                    "; ".join((row.get('reasons') or [])[:2]),
-                ])
-            table = ax_watch.table(
-                cellText=watch_table,
-                colLabels=["Symbol", "Watch", "Reason"],
-                colWidths=[0.14, 0.1, 0.64],
-                loc="center",
-                cellLoc="left",
-            )
-            table.auto_set_font_size(False)
-            table.set_fontsize(9)
-            table.scale(1, 1.35)
-            for (row_index, col_index), cell in table.get_celld().items():
-                cell.set_edgecolor("#334155")
-                cell.set_linewidth(0.7)
-                if row_index == 0:
-                    cell.set_facecolor("#166534")
-                    cell.set_text_props(color="#f0fdf4", weight="bold")
-                    continue
-                cell.set_facecolor("#0b1220")
-                cell.get_text().set_color("#86efac" if col_index == 2 else "#e2e8f0")
-        else:
-            ax_watch.text(0.5, 0.5, "No watchlist candidates", ha="center", va="center", color="#cbd5e1")
 
         output = io.BytesIO()
         fig.savefig(output, format="png", bbox_inches="tight")

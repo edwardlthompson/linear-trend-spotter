@@ -107,7 +107,6 @@ def compute_health_score(coin: dict[str, Any]) -> dict[str, Any]:
         rank_component = max(0.0, 100.0 - ((rank - 1) * 6.0))
 
     uniformity = float(coin.get("uniformity_score", 0.0) or 0.0)
-    atr = float(coin.get("atr_score", 50.0) or 50.0)
     reliability = float(coin.get("data_reliability_score", 0.0) or 0.0)
     volume_accel = float(coin.get("volume_acceleration_pct", 0.0) or 0.0)
     volume_component = _clamp(50.0 + (volume_accel / 4.0))
@@ -119,12 +118,11 @@ def compute_health_score(coin: dict[str, Any]) -> dict[str, Any]:
     confidence_component = float(confidence or 50.0)
 
     score = (
-        (uniformity * 0.30)
+        (uniformity * 0.35)
         + (rank_component * 0.20)
-        + (atr * 0.10)
         + (reliability * 0.25)
         + (volume_component * 0.05)
-        + (confidence_component * 0.10)
+        + (confidence_component * 0.15)
     )
     score = _clamp(score)
 
@@ -145,75 +143,7 @@ def compute_health_score(coin: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def detect_regime(all_cmc_coins: list[dict[str, Any]], gain_qualified: list[dict[str, Any]], final_results: list[dict[str, Any]]) -> dict[str, Any]:
-    gains_7d = [float((coin.get("gains") or {}).get("7d", 0.0) or 0.0) for coin in gain_qualified]
-    gains_30d = [float((coin.get("gains") or {}).get("30d", 0.0) or 0.0) for coin in gain_qualified]
-    avg_7d = sum(gains_7d) / len(gains_7d) if gains_7d else 0.0
-    avg_30d = sum(gains_30d) / len(gains_30d) if gains_30d else 0.0
-    qualification_ratio = (len(final_results) / max(1, len(all_cmc_coins))) * 100.0
 
-    if avg_30d >= 60 and len(final_results) >= 8:
-        regime = "trend-friendly"
-    elif avg_30d >= 30 and len(final_results) >= 4:
-        regime = "constructive"
-    elif avg_30d >= 10:
-        regime = "mixed"
-    else:
-        regime = "risk-off"
-
-    return {
-        "timestamp": _iso_now(),
-        "regime": regime,
-        "avg_gain_7d": round(avg_7d, 2),
-        "avg_gain_30d": round(avg_30d, 2),
-        "qualified_count": len(final_results),
-        "gain_qualified_count": len(gain_qualified),
-        "qualification_ratio_pct": round(qualification_ratio, 2),
-    }
-
-
-def build_watchlist(
-    all_processed: list[dict[str, Any]],
-    final_symbols: set[str],
-    uniformity_min_score: int,
-    score_buffer: int = 8,
-    limit: int = 12,
-) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
-    for coin in all_processed:
-        symbol = str(coin.get("symbol", "")).upper()
-        if not symbol or symbol in final_symbols:
-            continue
-
-        score = float(coin.get("uniformity_score", 0.0) or 0.0)
-        total_gain = float(coin.get("total_gain", 0.0) or 0.0)
-        reasons: list[str] = []
-        closeness = 0.0
-
-        if total_gain <= 0:
-            continue
-        if score >= max(0, uniformity_min_score - int(score_buffer)):
-            reasons.append(f"uniformity {score:.1f}/{uniformity_min_score}")
-            closeness += max(0.0, 30.0 - abs(uniformity_min_score - score) * 3.0)
-        gains = coin.get("gains") or {}
-        gain_7d = float(gains.get("7d", 0.0) or 0.0)
-        gain_30d = float(gains.get("30d", 0.0) or 0.0)
-        if gain_7d > 5 or gain_30d > 25:
-            closeness += min(25.0, max(gain_7d, 0.0) + max(gain_30d - 25.0, 0.0) / 4.0)
-        if reasons:
-            candidates.append(
-                {
-                    "symbol": symbol,
-                    "name": coin.get("name", symbol),
-                    "watchlist_score": round(_clamp(closeness), 2),
-                    "reasons": reasons,
-                    "uniformity_score": round(score, 2),
-                    "gain_7d": round(gain_7d, 2),
-                    "gain_30d": round(gain_30d, 2),
-                }
-            )
-
-    return sorted(candidates, key=lambda item: (-float(item["watchlist_score"]), item["symbol"]))[:limit]
 
 
 def update_scanner_insights(
@@ -228,8 +158,6 @@ def update_scanner_insights(
     active_before_update: dict[str, dict[str, Any]],
     active_after_update: dict[str, dict[str, Any]],
     blocked_by_cooldown: list[dict[str, Any]],
-    regime: dict[str, Any],
-    watchlist: list[dict[str, Any]],
     current_metrics_summary: dict[str, Any],
     portfolio_starting_capital: float,
 ) -> dict[str, Any]:
@@ -237,7 +165,6 @@ def update_scanner_insights(
     history = list(payload.get("rank_persistence", {}).get("history", []))
     snapshot = {
         "timestamp": _iso_now(),
-        "regime": regime.get("regime"),
         "ranks": [
             {
                 "symbol": str(coin.get("symbol", "")).upper(),
@@ -321,38 +248,15 @@ def update_scanner_insights(
         last_price = float(state.get("last_price") or position.get("entry_price") or 0.0)
         mark_to_market += float(position.get("qty", 0.0) or 0.0) * last_price
 
-    scan_summaries = list(payload.get("benchmark_drift", {}).get("history", []))
-    current_scan_summary = {
-        "timestamp": _iso_now(),
-        "qualified": len(final_results),
-        "gain_qualified": len(gain_qualified),
-        "active": len(active_after_update),
-        "watchlist": len(watchlist),
-        "duration": float(current_metrics_summary.get("duration", 0.0) or 0.0),
-    }
-    scan_summaries.append(current_scan_summary)
-    scan_summaries = scan_summaries[-50:]
-    drift = {"status": "stable", "notes": []}
-    if len(scan_summaries) >= 4:
-        prior = scan_summaries[:-1]
-        median_duration = median(float(item.get("duration", 0.0) or 0.0) for item in prior)
-        median_qualified = median(float(item.get("qualified", 0.0) or 0.0) for item in prior)
-        if median_duration > 0 and current_scan_summary["duration"] > median_duration * 1.5:
-            drift["notes"].append("scan duration above baseline")
-        if median_qualified > 0 and current_scan_summary["qualified"] < median_qualified * 0.6:
-            drift["notes"].append("qualified count below baseline")
-        if drift["notes"]:
-            drift["status"] = "drift"
+
 
     top_movers = sorted(mover_totals.items(), key=lambda item: abs(item[1]), reverse=True)[:10]
     payload = {
         "updated_at": _iso_now(),
-        "regime": regime,
         "rank_persistence": {
             "history": history,
             "top_movers": [{"symbol": symbol, "delta": delta} for symbol, delta in top_movers],
         },
-        "watchlist": watchlist,
         "outcome_analytics": {
             "summary": outcomes_summary,
             "active_samples": active_outcomes[:50],
@@ -364,11 +268,6 @@ def update_scanner_insights(
             "equity": round(mark_to_market, 2),
             "positions": positions,
             "trades": trades[-100:],
-        },
-        "benchmark_drift": {
-            "history": scan_summaries,
-            "status": drift["status"],
-            "notes": drift["notes"],
         },
         "data_reliability": {
             "top_low_reliability": [

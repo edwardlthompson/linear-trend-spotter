@@ -125,14 +125,6 @@ class MessageFormatter:
         # Uniformity score
         caption += f"📈 Uniformity Score: {score:.0f}/100\n"
 
-        atr_score = coin.get('atr_score')
-        atr_pct = coin.get('atr_pct')
-        if isinstance(atr_score, (int, float)):
-            if isinstance(atr_pct, (int, float)):
-                caption += f"📏 ATR Score: {float(atr_score):.0f}/100 (ATR30: {float(atr_pct):.2f}%)\n"
-            else:
-                caption += f"📏 ATR Score: {float(atr_score):.0f}/100\n"
-
         health_score = coin.get('health_score')
         if isinstance(health_score, (int, float)):
             caption += f"🩺 Health Score: {float(health_score):.0f}/100"
@@ -286,10 +278,6 @@ class MessageFormatter:
         entries_count: int,
         exits_count: int,
         blocked_count: int,
-        watchlist_rows: List[Dict],
-        regime: str | None,
-        drift_status: str | None,
-        drift_notes: List[str] | None = None,
         max_chars: int = 3800,
     ) -> str:
         lines: List[str] = []
@@ -297,13 +285,6 @@ class MessageFormatter:
         lines.append(
             f"Entries: {entries_count} | Exits: {exits_count} | Cooldown blocked: {blocked_count} | Active: {len(active_rows)}"
         )
-        if regime:
-            lines.append(f"Regime: {regime}")
-        if drift_status:
-            lines.append(f"Benchmark drift: {drift_status}")
-        if drift_notes:
-            for note in drift_notes[:2]:
-                lines.append(f"• Drift note: {note}")
 
         lines.append("")
         lines.append("🏁 <b>Active Rankings</b>")
@@ -322,14 +303,7 @@ class MessageFormatter:
         else:
             lines.append("• No active coins this scan.")
 
-        lines.append("")
-        lines.append("👀 <b>Watchlist</b>")
-        if watchlist_rows:
-            for row in watchlist_rows[:6]:
-                reasons = ", ".join((row.get('reasons') or [])[:2])
-                lines.append(f"• <b>{row.get('symbol')}</b> | score {float(row.get('watchlist_score', 0.0)):.0f} | {reasons}")
-        else:
-            lines.append("• None")
+
 
         text = "\n".join(lines)
         if len(text) <= max_chars:
@@ -337,33 +311,8 @@ class MessageFormatter:
         return text[: max_chars - 20].rstrip() + "\n…truncated"
 
     @staticmethod
-    def format_watchlist_summary(watchlist_rows: List[Dict]) -> str:
-        if not watchlist_rows:
-            return "👀 <b>Watchlist</b>\nNo near-qualifiers this scan."
-
-        lines = ["👀 <b>Watchlist Near-Qualifiers</b>"]
-        for row in watchlist_rows[:8]:
-            reasons = ", ".join(row.get('reasons', [])[:2])
-            lines.append(
-                f"• <b>{row.get('symbol')}</b> | score {float(row.get('watchlist_score', 0.0)):.0f} | {reasons}"
-            )
-        return "\n".join(lines)
-
-    @staticmethod
-    def format_drift_summary(drift: Dict) -> str:
-        status = str(drift.get('status', 'stable'))
-        notes = drift.get('notes', []) or []
-        if status == 'stable':
-            return "📏 <b>Benchmark Drift</b>\nStatus: stable"
-        return "📏 <b>Benchmark Drift</b>\nStatus: drift\n" + "\n".join(f"• {note}" for note in notes)
-
-    @staticmethod
-    def format_summary_caption(regime: Dict | None, drift: Dict | None, active_count: int, watchlist_count: int) -> str:
-        regime_label = str((regime or {}).get('regime', 'unknown'))
-        drift_label = str((drift or {}).get('status', 'stable'))
+    def format_summary_caption(active_count: int) -> str:
         return (
             "🖼️ <b>Scanner Event Dashboard</b>\n"
-            f"Regime: {regime_label}\n"
-            f"Benchmark drift: {drift_label}\n"
-            f"Active: {active_count} | Watchlist: {watchlist_count}"
+            f"Active: {active_count}"
         )

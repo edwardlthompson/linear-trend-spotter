@@ -34,11 +34,9 @@ from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
 from backtesting.signals import generate_indicator_signals
 from utils.insights import (
-    build_watchlist,
     compute_data_reliability,
     compute_health_score,
     compute_reentry_quality,
-    detect_regime,
     update_scanner_insights,
 )
 from utils.metrics import metrics, timed_block
@@ -388,41 +386,7 @@ def _attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
     coin['volume_baseline_24h'] = baseline_avg
 
 
-def _attach_atr_score(coin: dict, loader: BacktestDataLoader) -> None:
-    loaded = loader.load(
-        symbol=str(coin.get('symbol', '')).upper(),
-        timeframe='1d',
-        days=60,
-        gecko_id=coin.get('gecko_id') or coin.get('cg_id'),
-    )
-    if loaded.frame is None or loaded.frame.empty or len(loaded.frame.index) < 20:
-        return
 
-    high = [float(value) for value in loaded.frame['high'].tolist()]
-    low = [float(value) for value in loaded.frame['low'].tolist()]
-    close = [float(value) for value in loaded.frame['close'].tolist()]
-
-    true_ranges = []
-    for index in range(1, len(close)):
-        tr = max(
-            high[index] - low[index],
-            abs(high[index] - close[index - 1]),
-            abs(low[index] - close[index - 1]),
-        )
-        true_ranges.append(tr)
-
-    if len(true_ranges) < 30:
-        return
-
-    atr30 = sum(true_ranges[-30:]) / 30.0
-    last_close = close[-1]
-    if last_close <= 0:
-        return
-
-    atr_pct = (atr30 / last_close) * 100.0
-    atr_score = max(0.0, min(100.0, 100.0 - (atr_pct * 10.0)))
-    coin['atr_pct'] = atr_pct
-    coin['atr_score'] = atr_score
 
 
 def _build_anomaly_messages(
@@ -1089,9 +1053,7 @@ def run_scanner():
             ),
         )
         _attach_rank_movement(final_results, history_db.get_latest_rank_map())
-        regime = detect_regime(all_cmc_coins, gain_qualified, final_results)
-        for coin in final_results:
-            coin['market_regime'] = regime.get('regime')
+
 
         # ============================================================
         # STEP 9.1: Optional backtesting run (feature-flagged)
@@ -1134,7 +1096,6 @@ def run_scanner():
         notification_loader = BacktestDataLoader(cache=cache, max_cache_age_hours=settings.cache_price_hours)
         for coin in final_results:
             coin.update(compute_reentry_quality(str(coin.get('symbol', '')), recent_exits_30d))
-            _attach_atr_score(coin, notification_loader)
             _attach_signal_age(coin, notification_loader)
             _attach_volume_acceleration(coin, notification_loader)
             compute_health_score(coin)
@@ -1304,12 +1265,7 @@ def run_scanner():
             app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
 
         active_after_update = active_db.get_active()
-        watchlist_rows = build_watchlist(
-            all_processed=all_processed,
-            final_symbols={str(coin.get('symbol', '')).upper() for coin in final_results},
-            uniformity_min_score=settings.uniformity_min_score,
-            score_buffer=settings.watchlist_score_buffer,
-        ) if settings.watchlist_enabled else []
+        watchlist_rows = []
         insights_payload = update_scanner_insights(
             settings.scanner_insights_file,
             final_results=final_results,
@@ -1321,17 +1277,11 @@ def run_scanner():
             active_before_update=active_before_update,
             active_after_update=active_after_update,
             blocked_by_cooldown=blocked_by_cooldown,
-            regime=regime,
-            watchlist=watchlist_rows,
+
             current_metrics_summary=metrics.get_summary(),
             portfolio_starting_capital=settings.portfolio_sim_starting_capital,
         )
-        drift_summary = insights_payload.get('benchmark_drift', {}) or {}
-        app_logger.info(
-            "🧭 Insights updated: "
-            f"regime={regime.get('regime')}, watchlist={len(watchlist_rows)}, "
-            f"drift={drift_summary.get('status', 'stable')}"
-        )
+        app_logger.info("🧭 Insights updated")
         
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
@@ -1421,18 +1371,12 @@ def run_scanner():
             sent_summary_count = 0
             summary_image = build_hourly_summary_image(
                 active_rows=active_ranking_rows,
-                watchlist_rows=watchlist_rows,
-                regime=regime,
-                drift=drift_summary,
             )
             if summary_image:
                 summary_msg_id = telegram.send_photo(
                     io.BytesIO(summary_image),
                     caption=MessageFormatter.format_summary_caption(
-                        regime=regime,
-                        drift=drift_summary,
                         active_count=len(active_ranking_rows),
-                        watchlist_count=len(watchlist_rows),
                     ),
                 )
                 if summary_msg_id:
