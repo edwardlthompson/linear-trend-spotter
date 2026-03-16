@@ -406,9 +406,17 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
     if not symbol:
         return None
 
-    all_strategies = list(coin.get("backtest_top_strategies", []))
-    buy_hold = coin.get("backtest_buy_hold")
+    all_strategies_raw = list(coin.get("backtest_top_strategies", []))
+    all_strategies = []
+    for s in all_strategies_raw:
+        if float(s.get("win_pct", 0.0)) < 70.0: continue
+        trades_cnt = int(s.get("trades", 0))
+        tsl_hits_cnt = int(s.get("tsl_hits", 0))
+        if trades_cnt > 0 and (tsl_hits_cnt / trades_cnt) > 0.50: continue
+        all_strategies.append(s)
 
+    buy_hold = coin.get("backtest_buy_hold")
+    
     # 1. Fetch OHLCV data for local rendering
     chart_points: List[tuple] = []
     try:
@@ -445,11 +453,15 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
             stop_loss = "-"
             trades = "-"
             tsl_hits = "-"
+            tsl_hit_pct = "-"
             win_pct = "-"
         else:
             stop_loss = f"{_resolve_trailing_stop_pct(item):.2f}%"
-            trades = str(int(item.get("trades", 0)))
-            tsl_hits = str(int(item.get("tsl_hits", 0)))
+            trades_cnt = int(item.get("trades", 0))
+            tsl_hits_cnt = int(item.get("tsl_hits", 0))
+            trades = str(trades_cnt)
+            tsl_hits = str(tsl_hits_cnt)
+            tsl_hit_pct = f"{(tsl_hits_cnt / trades_cnt * 100.0):.1f}%" if trades_cnt > 0 else "0.0%"
             win_pct = f"{float(item.get('win_pct', 0.0)):.2f}%"
 
         table_body.append(
@@ -458,10 +470,11 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 timeframe,
                 key_settings,
                 stop_loss,
+                tsl_hits,
+                tsl_hit_pct,
                 f"${float(item.get('final_equity', 0.0)):,.2f}",
                 f"{float(item.get('net_pct', 0.0)):+.2f}%",
                 trades,
-                tsl_hits,
                 win_pct,
             ]
         )
@@ -473,12 +486,12 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         for row in sorted_better:
             append_row(row)
         if buy_hold:
-            table_body.append([""] * 9)
+            table_body.append([""] * 10)
             append_row(buy_hold)
     else:
         if buy_hold:
             append_row(buy_hold)
-            table_body.append([""] * 9)
+            table_body.append([""] * 10)
         for row in strategy_rows[:5]:
             append_row(row)
 
@@ -695,11 +708,11 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
     )
 
     if table_body:
-        headers = ["Indicator", "TF", "Key Settings", "TSL %", "Final $", "Net %", "Trades", "TSL Hits", "Win %"]
+        headers = ["Indicator", "TF", "Key Settings", "TSL %", "TSL Hits", "TSL Hit %", "Final $", "Net %", "Trades", "Win %"]
         table = ax_table.table(
             cellText=table_body,
             colLabels=headers,
-            colWidths=[0.11, 0.06, 0.28, 0.09, 0.1, 0.08, 0.08, 0.09, 0.08],
+            colWidths=[0.11, 0.05, 0.22, 0.08, 0.08, 0.09, 0.1, 0.09, 0.08, 0.1],
             loc="center",
             cellLoc="left",
         )
@@ -727,8 +740,8 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
             cell.get_text().set_color("#e2e8f0")
             if is_buy_hold:
                 cell.set_text_props(weight="bold")
-            if col_index == 5:
-                net_text = str(row_values[5])
+            if col_index == 7:
+                net_text = str(row_values[7])
                 if net_text.startswith('+'):
                     cell.get_text().set_color("#22c55e")
                 elif net_text.startswith('-'):
