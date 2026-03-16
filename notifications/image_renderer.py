@@ -516,6 +516,20 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         high_values = [float(item[2]) for item in chart_points]
         low_values = [float(item[3]) for item in chart_points]
 
+        # Calculate ATR array for continuous envelope shading on 1h intervals
+        true_ranges = []
+        for index in range(len(close_values)):
+            if index == 0:
+                tr = high_values[index] - low_values[index]
+            else:
+                tr = max(
+                    high_values[index] - low_values[index],
+                    abs(high_values[index] - close_values[index - 1]),
+                    abs(low_values[index] - close_values[index - 1]),
+                )
+            true_ranges.append(tr)
+        atr_values = pd.Series(true_ranges).rolling(window=24, min_periods=1).mean().fillna(0).tolist()
+
         # 3a. Pre-calculate Backtest Results to get Dynamic Display Window
         start_idx = max(0, len(chart_points) - 144) 
         buy_signals = []
@@ -599,6 +613,16 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         # Draw solid line for price data to declutter dense grids
         x_values = list(range(len(display_close)))
         ax_chart.plot(x_values, display_close, color="#38bdf8", linewidth=1.2, zorder=3)
+
+        # Draw shaded ATR Envelope bounds
+        try:
+            display_atr = atr_values[start_idx:]
+            if len(display_atr) == len(display_close):
+                atr_upper = [display_close[i] + display_atr[i] for i in range(len(display_close))]
+                atr_lower = [display_close[i] - display_atr[i] for i in range(len(display_close))]
+                ax_chart.fill_between(x_values, atr_lower, atr_upper, color="#38bdf8", alpha=0.07, label="ATR Band", zorder=1)
+        except Exception:
+            pass
 
         if display_close:
             last_close = display_close[-1]
