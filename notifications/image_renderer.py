@@ -522,6 +522,15 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 df['volume'] = df['volume'].astype(float)
                 df.set_index('ts', inplace=True)
                 
+                # Resample frame if strategy timeframe differs from default 1h chart points
+                timeframe = str(top_strat.get('tf') or top_strat.get('timeframe') or '1h')
+                if timeframe not in ('1h', '60m'):
+                    rule = "4h" if timeframe == "4h" else "1d" if timeframe in ("1d", "daily") else timeframe
+                    df.index = pd.to_datetime(df.index, unit='s', utc=True)
+                    df = df.resample(rule).agg({
+                        "open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"
+                    }).dropna(subset=["open", "high", "low", "close"])
+
                 buy_signals, sell_signals = generate_indicator_signals(indicator, df, params)
                 
                 run_result = run_backtest(
@@ -537,13 +546,23 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                     ),
                 )
                 
-                index_lookup = {str(ts): idx for idx, ts in enumerate(df.index)}
-                def _lookup_pos(ts_raw: str) -> int | None:
-                    direct = index_lookup.get(str(ts_raw))
-                    if direct is not None: return direct
-                    try: compact = str(int(float(ts_raw)))
-                    except Exception: return None
-                    return index_lookup.get(compact)
+                index_lookup_1h = {str(item[0]): idx for idx, item in enumerate(chart_points)}
+                
+                def _lookup_pos(ts_raw) -> int | None:
+                    try:
+                        # 1. Digit string (Epoch) fallback first
+                        ts_str = str(ts_raw).strip()
+                        if ts_str.replace('.', '', 1).isdigit():
+                            ts_epoch = str(int(float(ts_str)))
+                            if ts_epoch in index_lookup_1h:
+                                return index_lookup_1h[ts_epoch]
+                        
+                        # 2. DatetimeIndex Timestamp node fallback
+                        ts_dt = pd.to_datetime(ts_raw)
+                        ts_epoch = str(int(ts_dt.timestamp()))
+                        return index_lookup_1h.get(ts_epoch)
+                    except Exception:
+                        return None
 
                 trade_indices = []
                 for trade in run_result.trades:
