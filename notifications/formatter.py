@@ -129,7 +129,7 @@ class MessageFormatter:
         atr_pct = coin.get('atr_pct')
         if isinstance(atr_score, (int, float)):
             if isinstance(atr_pct, (int, float)):
-                caption += f"📏 ATR Score: {float(atr_score):.0f}/100 (ATR14: {float(atr_pct):.2f}%)\n"
+                caption += f"📏 ATR Score: {float(atr_score):.0f}/100 (ATR30: {float(atr_pct):.2f}%)\n"
             else:
                 caption += f"📏 ATR Score: {float(atr_score):.0f}/100\n"
 

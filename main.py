@@ -411,15 +411,15 @@ def _attach_atr_score(coin: dict, loader: BacktestDataLoader) -> None:
         )
         true_ranges.append(tr)
 
-    if len(true_ranges) < 14:
+    if len(true_ranges) < 30:
         return
 
-    atr14 = sum(true_ranges[-14:]) / 14.0
+    atr30 = sum(true_ranges[-30:]) / 30.0
     last_close = close[-1]
     if last_close <= 0:
         return
 
-    atr_pct = (atr14 / last_close) * 100.0
+    atr_pct = (atr30 / last_close) * 100.0
     atr_score = max(0.0, min(100.0, 100.0 - (atr_pct * 10.0)))
     coin['atr_pct'] = atr_pct
     coin['atr_score'] = atr_score
