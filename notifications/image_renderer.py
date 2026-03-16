@@ -620,7 +620,7 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
             if len(display_atr) == len(display_close):
                 atr_upper = [display_close[i] + display_atr[i] for i in range(len(display_close))]
                 atr_lower = [display_close[i] - display_atr[i] for i in range(len(display_close))]
-                ax_chart.fill_between(x_values, atr_lower, atr_upper, color="#38bdf8", alpha=0.07, label="ATR Band", zorder=1)
+                ax_chart.fill_between(x_values, atr_lower, atr_upper, color="#22d3ee", alpha=0.15, label="ATR Band", zorder=1)
         except Exception:
             pass
 
