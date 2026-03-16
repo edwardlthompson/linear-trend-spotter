@@ -71,7 +71,7 @@ Qualification determines which coins enter the **backtesting stage** and therefo
   - total 24h provider volume
   - exchange-level volumes (Coinbase/Kraken/MEXC)
 - Sends a single combined image when a chart is available:
-  - **Price Line Chart (top):** Rendered with continuous line graphs tailored to accommodate high-density historical overlays without visual dots limits clutter.
+  - **Price Line Chart (top):** Rendered with continuous line graphs including profitable/losing trade durations highlighted with Green/Red transparent background boxes, avoiding dot clutter. Automatically resamples data to match strategy timeframe accurate overlays.
   - Ranked backtest strategy table (bottom)
 - Strategy rows are now confidence-weighted before choosing the top notification strategy.
 
@@ -91,7 +91,7 @@ Example entry notification excerpt:
    30d: +48.7%
 
 📈 Uniformity Score: 71/100
-📏 ATR Score: 76/100 (ATR14: 2.40%)
+📏 ATR Score: 76/100 (ATR30: 2.40%)
 🩺 Health Score: 79/100 (strong)
 
 🏁 Rank: #3 ↑ from #8 (5)
@@ -290,7 +290,9 @@ Search behavior:
 Backtest fairness + result quality rules:
 
 - Strategy runs start long on the first bar (same start posture as `B&H`)
-- Strategy rows with `win_pct <= 50.0` are filtered out before ranked output
+- Strategy rows with win rate $< 70\%$ are filtered out before ranked output.
+- Strategy rows with TSL Hit Frequency $> 50\%$ are filtered out.
+- Strategy columns are reordered to group TSL settings metrics together: `TSL % | TSL Hits | TSL Hit %`.
 
 Run scanner:
 
