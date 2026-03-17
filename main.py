@@ -1205,9 +1205,6 @@ def run_scanner():
 
             gain_7d = gains.get('7d', 0)
             gain_30d = gains.get('30d', 0)
-            if gain_7d <= 7:
-                coin['exit_reason'] = f"7d gain below threshold ({gain_7d:.1f}% ≤ 7.0%)"
-                continue
             if gain_30d <= 30:
                 coin['exit_reason'] = f"30d gain below threshold ({gain_30d:.1f}% ≤ 30.0%)"
                 continue
