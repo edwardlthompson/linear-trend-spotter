@@ -1305,7 +1305,9 @@ def run_scanner():
                         if message_id:
                             app_logger.info(f"      📤 Sent combined image notification")
                         else:
-                            app_logger.error(f"      ❌ Failed to send combined image notification")
+                            app_logger.error(f"      ❌ Failed to send combined image notification, falling back to text")
+                            telegram.send_message(caption)
+
                     else:
                         message_id = telegram.send_message(caption)
                         if message_id:
@@ -1327,9 +1329,13 @@ def run_scanner():
                     exit_image = None
 
                 if exit_image:
-                    telegram.send_photo(io.BytesIO(exit_image), caption=message)
+                    sent = telegram.send_photo(io.BytesIO(exit_image), caption=message)
+                    if not sent:
+                        app_logger.warning(f"      ⚠️ Failed to send exit image for {coin['symbol']}, falling back to text")
+                        telegram.send_message(message)
                 else:
                     telegram.send_message(message)
+
                 metrics.increment('notifications_sent')
 
         if telegram and settings.anomaly_alerts_enabled and anomaly_messages:

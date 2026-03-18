@@ -539,6 +539,12 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 df['volume'] = df['volume'].astype(float)
                 df.set_index('ts', inplace=True)
                 
+                if not df.empty:
+                    max_ts = int(df.index[-1])
+                    cutoff_ts = max_ts - (30 * 24 * 3600)
+                    df = df.loc[cutoff_ts:]
+
+                
                 # Resample frame if strategy timeframe differs from default 1h chart points
                 timeframe = str(top_strat.get('tf') or top_strat.get('timeframe') or '1h')
                 if timeframe not in ('1h', '60m'):
