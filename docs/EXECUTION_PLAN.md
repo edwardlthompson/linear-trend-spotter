@@ -13,7 +13,8 @@
 3. Master execution order (phases A–Q)  
 4. Technical reference (OHLCV chain + provider strategy)  
 5. Milestones **A** through **Q** (tasks and verification)  
-6. Progress summary & appendix  
+6. **Risks, follow-ups & operational checklist** (post-H4 / H6 / J2 / Q2)  
+7. Progress summary & appendix  
 
 ---
 
@@ -232,7 +233,7 @@ Re-verify quotas on official docs before large refactors.
 - [x] **H0. Measurement (do first)**  
   - Add lightweight **counters or structured logs** (per scan): CoinGecko requests by endpoint family (markets, OHLCV, mapper, tickers). Log to existing metrics file or `app_logger` summary line at scan end.  
   - **Verification:** One scan produces a numeric summary; baseline saved in Notes.
-  - **Notes:** Implemented via `utils/coingecko_usage.py` (`record_coingecko_http`) from `api/coingecko.py` (`_make_request` + `/coins/markets` pages) and `api/coingecko_mapper.py` (`/coins/list`). Counters live in `metrics.counts` as `coingecko_http_*`, appear in `metrics.report()` / persisted `metrics.json` history. Save your first post-deploy **totals** here as baseline when tuning **H1–H6**: _e.g. `coingecko_http_total`, `markets`, `market_chart`, `coin_detail`, `tickers`, `ohlc`, `coins_list`._
+  - **Notes:** Implemented via `utils/coingecko_usage.py` (`record_coingecko_http`) from `api/coingecko.py` (`_make_request` + `/coins/markets` pages) and `api/coingecko_mapper.py` (`/coins/list`). Counters live in `metrics.counts` as `coingecko_http_*`, appear in `metrics.report()` / persisted `metrics.json` history. Save your first post-deploy **totals** here as baseline when tuning **H1–H6**: _e.g. `coingecko_http_total`, `markets`, `market_chart`, `coin_detail`, `tickers`, `ohlc`, `coins_list`._ **Follow-up:** paste **before** and **after** counter blocks (same `config.json`, same cadence) under this Note or in **Section 6.1** to close the **H6 ≥50%** evidence gap.
 
 - [x] **H1. Cache & config tuning (low risk, no universe/interval change)**  
   - Tune `CACHE_PRICE_HOURS` / `CACHE_GECKO_ID_DAYS` only with **before/after qualification comparison** on a fixed config (same `TOP_COINS_LIMIT`, same exchanges, same `SCAN_INTERVAL_SECONDS`); ensure `BACKTEST_RESUME_ENABLED` avoids duplicate heavy fetches. **Do not** reduce coin universe or interval.  
@@ -247,13 +248,13 @@ Re-verify quotas on official docs before large refactors.
 - [x] **H3. Provider mix (universe vs OHLCV)**  
   - Document and test Render env: e.g. `TOP_COINS_PROVIDER=cmc` for **top-coin / listing** pulls while **OHLCV remains CG → Polygon → CMC** per canonical chain.  
   - **Verification:** Full scan completes; backtest stage still meets minimum pass rate defined in runbook.
-  - **Notes:** README § CI and deployment documents Render `config.json` + `TOP_COINS_PROVIDER=cmc` with unchanged OHLCV order. CI/backtest smoke unchanged (no live scan in CI).
+  - **Notes:** README and CI/deployment docs cover Render `config.json` + `TOP_COINS_PROVIDER=cmc` with unchanged OHLCV order. CI/backtest smoke unchanged (no live scan in CI).
 
 - [x] **H4. Align all OHLCV paths with CG → Polygon → CMC**  
   - Audit `main.py` (uniformity / 30d paths), `backtesting/data_loader.py`, and `api/price_history_fallback.py`; document each call site in the Appendix table.  
   - Implement **CMC as explicit third step** where missing (e.g. hourly/daily after Polygon fails), gated on `CMC_API_KEY` and endpoint capability; do **not** reorder ahead of CoinGecko.  
   - **Verification:** `scripts/verify_backtest_data.py` (or agreed subset) passes; logs show fallback order when CG is stubbed or forced to fail in a dev test.
-  - **Notes:** `PriceHistoryFallbackClient.get_cmc_hourly_ohlcv` + `get_polygon_30d_daily_ohlcv`; `BacktestDataLoader` and `main.py` STEP 7 cache under `cmc`; Appendix technical table updated.
+  - **Notes:** `PriceHistoryFallbackClient.get_cmc_hourly_ohlcv` + `get_polygon_30d_daily_ohlcv`; `BacktestDataLoader` and `main.py` STEP 7 cache under `cmc`; Appendix technical table updated. **Risk / follow-up:** CMC **hourly OHLCV** and historical depth depend on your [CMC API plan](https://coinmarketcap.com/api/pricing); on the lowest tiers the endpoint may return **403/empty**—the chain then correctly stays on CoinGecko/Polygon. Monitor worker logs for `cmc_api` / missing tertiary; upgrade CMC or rely on CG+Polygon if hourly CMC never populates. Details: **Section 6.2**.
 
 - [x] **H5. Mapper refresh cadence**  
   - `CoinGeckoMapper.fetch_coingecko_list`: ensure full list refresh is not triggered too often (configurable interval or “stale after N days”).  
@@ -263,11 +264,11 @@ Re-verify quotas on official docs before large refactors.
 - [x] **H6. Final**  
   - Confirm **≥50%** reduction vs H0 baseline **or** document why not achievable on free tier (then narrow scope: e.g. paid CG tier or acceptable product limits).  
   - **Verification:** Before/after numbers in Notes; stakeholder summary in this file (short paragraph under H).
-  - **Notes:** **H0–H4** reduce redundant calls (counters, cache TTL, batched markets, deduped tickers, CMC tertiary). A signed-off **≥50%** figure still needs two production counter dumps on identical config (paste under H0 Notes). On strict free tiers, hourly CMC OHLCV may be unavailable—Polygon/CG remain primary; document plan tier against [CMC pricing](https://coinmarketcap.com/api/pricing).
+  - **Notes:** **H0–H4** reduce redundant calls (counters, cache TTL, batched markets, deduped tickers, CMC tertiary). A signed-off **≥50%** figure still needs two production counter dumps on identical config (paste under H0 Notes or **Section 6.1**). On strict free tiers, hourly CMC OHLCV may be unavailable—Polygon/CG remain primary; document plan tier against [CMC pricing](https://coinmarketcap.com/api/pricing). **Checklist:** Sections **6.1–6.2**.
 
 ### Stakeholder summary (H6)
 
-Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → CoinMarketCap) in the scanner and backtest loader without shrinking universe or scan cadence. **CoinGecko credit savings** come from earlier milestones (**H0–H2**) plus optional CMC offload for **listings** (`TOP_COINS_PROVIDER=cmc`). A finance-ready **“≥50% fewer CG calls”** proof still needs two timed counter exports on the same `config.json`; until then, treat **H6** as *architecturally complete / measurement pending*.
+Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → CoinMarketCap) in the scanner and backtest loader without shrinking universe or scan cadence. **CoinGecko credit savings** come from earlier milestones (**H0–H2**) plus optional CMC offload for **listings** (`TOP_COINS_PROVIDER=cmc`). A finance-ready **“≥50% fewer CG calls”** proof still needs two timed counter exports on the same `config.json`; until then, treat **H6** as *architecturally complete / measurement pending*. **Operational detail:** see **Section 6 — Risks, follow-ups & operational checklist** below.
 
 ---
 
@@ -285,7 +286,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone J — Observability & operations
 
-*Promoted from former backlog § “Observability & operations.” Must satisfy **Non-regression** defaults.*
+*Promoted from former backlog (“Observability & operations”). Must satisfy **Non-regression** defaults.*
 
 ### Tasks
 
@@ -294,7 +295,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 - [x] **J2.** **Heartbeat / health artifact:** write a small JSON file to `DATA_DIR` (or fixed path) after each successful scan (timestamp, duration, status)—no change to scan logic.  
   - **Verification:** File appears after run; interval and universe unchanged.
-  - **Notes:** `SCAN_HEARTBEAT_ENABLED` (default **false**); `utils/scan_artifacts.write_scan_heartbeat`; filename `SCAN_HEARTBEAT_FILE` (default `scan_heartbeat.json`).
+  - **Notes:** `SCAN_HEARTBEAT_ENABLED` (default **false**); `utils/scan_artifacts.write_scan_heartbeat`; filename `SCAN_HEARTBEAT_FILE` (default `scan_heartbeat.json`). **Ops:** enable only when you want a Render-readable health file; see **Section 6.3** (retention, disk).
 
 - [ ] **J3.** **Scan cost dashboard:** extend `scanner_insights.json` or add `scan_costs.json` with CG/Polygon/CMC call counts and cache hit rates (can build on H0 counters).  
   - **Verification:** Artifact valid JSON; scan completes; counts non-decreasing for same work (no dropped coins).
@@ -306,7 +307,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone K — Telegram & UX enhancements
 
-*Promoted from former backlog § “Telegram & UX.” All bot additions must be **additive**; default polling/commands unchanged when disabled.*
+*Promoted from former backlog (“Telegram & UX”). All bot additions must be **additive**; default polling/commands unchanged when disabled.*
 
 ### Tasks
 
@@ -326,7 +327,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone L — Data & strategy extensions
 
-*Promoted from former backlog § “Data & strategy.” Defaults must match current min bars and notification content.*
+*Promoted from former backlog (“Data & strategy”). Defaults must match current min bars and notification content.*
 
 ### Tasks
 
@@ -346,7 +347,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone M — Engineering quality
 
-*Promoted from former backlog § “Engineering quality.”*
+*Promoted from former backlog (“Engineering quality”).*
 
 ### Tasks
 
@@ -363,7 +364,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone N — Security & compliance
 
-*Promoted from former backlog § “Security & compliance.”*
+*Promoted from former backlog (“Security & compliance”).*
 
 ### Tasks
 
@@ -377,7 +378,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone O — Product & research (optional, larger scope)
 
-*Promoted from former backlog § “Product / research.” Each sub-feature **default off** until config enables.*
+*Promoted from former backlog (“Product / research”). Each sub-feature **default off** until config enables.*
 
 ### Tasks
 
@@ -451,7 +452,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 - [x] **Q2.** **Snapshot writer** in scanner completion path: build list from the **same** structure used for alerts; write atomically (`tmp` then rename); env e.g. `PUBLIC_QUALIFIED_SNAPSHOT=1`.  
   - **Verification:** With flag on, one scan produces valid JSON; with flag off, no file or no write; **provider call counts** (H0) unchanged vs baseline for same config.
-  - **Notes:** `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` / `PUBLIC_QUALIFIED_SNAPSHOT_FILE` in `config.json`; `utils/scan_artifacts.write_public_qualified_snapshot` after metrics save. **Q3** redaction: default payload omits secrets/backtest tables; extend schema when product defines optional public fields.
+  - **Notes:** `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` / `PUBLIC_QUALIFIED_SNAPSHOT_FILE` in `config.json`; `utils/scan_artifacts.write_public_qualified_snapshot` after metrics save. **Q3** redaction: default payload omits secrets/backtest tables; extend schema when product defines optional public fields. **Ops / risk:** do not enable on shared disks without reviewing row content; no API keys in JSON—see **Sections 6.3–6.4**.
 
 - [ ] **Q3.** **Redaction / safety:** env or config for fields to omit on public JSON (e.g. internal debug); default keeps parity with notifications for allowed fields only.  
   - **Verification:** Redacted mode produces smaller JSON; no secrets in file.
@@ -527,6 +528,65 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 
 ---
 
+## Risks, follow-ups & operational checklist
+
+This section captures **residual risks** and **ops actions** called out after H4 / H6 / J2 / Q2 work. It does not replace milestone tasks; it centralizes what product and ops should verify on a live worker.
+
+### 6.1 H0 baseline and H6 “≥50% CoinGecko reduction” evidence
+
+| Step | Action |
+|------|--------|
+| 1 | Freeze a **reference `config.json`** (or Render-mounted equivalent): same `TOP_COINS_LIMIT`, `TARGET_EXCHANGES`, `SCAN_INTERVAL_SECONDS`, `TOP_COINS_PROVIDER`, cache TTLs. |
+| 2 | Run **one full scan** (or wait for the hourly worker). Copy the **`metrics.report()` / `metrics.json`** block (or log line) showing **`coingecko_http_*`** totals — label it **Baseline**. |
+| 3 | After any tuning deploy (H1–H4), repeat on the **same config** without changing cadence. Copy totals — label it **After**. |
+| 4 | Compute **delta %** on `coingecko_http_total` (and per-family rows if disputes arise). Store both blocks under **Milestone H0 Notes** or here as a dated sub-bullet. |
+| 5 | **Qualification guardrail:** compare **final qualified count** and alert volume; if they diverge materially from baseline, treat the run as regression investigation before signing H6. |
+
+Until steps 2–4 exist in writing, **H6 remains “measurement pending”** even though engineering work is merged.
+
+### 6.2 CMC API tier vs tertiary OHLCV (H4)
+
+| Risk | Mitigation |
+|------|------------|
+| **Hourly/daily OHLCV** from CoinMarketCap may be **disabled, rate-limited, or shallow** on the lowest commercial/free tiers ([CMC API pricing](https://coinmarketcap.com/api/pricing)). | Confirm your plan includes **historical OHLCV** where you rely on tertiary CMC. |
+| Parser or HTTP **403/429** yields **empty tertiary**; pipeline correctly falls back to **CoinGecko → Polygon** only. | On Render, grep or tail worker logs for **`cmc_api`** / **`cmc_cache`** in `ohlcv_source` vs **`none`**. If `cmc_*` never appears, CMC is not contributing—**upgrade CMC** or accept **CG+Polygon-only** behavior. |
+| **Daily CMC leg** uses **close-only** history synthesized into OHLC when full candles are unavailable—uniformity/backtests may differ slightly vs true exchange OHLC. | Compare a few symbols against CG when disputes arise; document acceptable variance with stakeholders. |
+
+### 6.3 Optional scan artifacts (J2 heartbeat, Q2 public snapshot)
+
+| Setting | Default | When to enable |
+|---------|---------|----------------|
+| `SCAN_HEARTBEAT_ENABLED` | `false` | When an external monitor (or human) should read **`DATA_DIR` / `SCAN_HEARTBEAT_FILE`** after each successful scan. |
+| `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` | `false` | When a static dashboard (Milestone **Q4+**) will **`fetch()`** the JSON from a URL that serves **`PUBLIC_QUALIFIED_SNAPSHOT_FILE`**. |
+
+**Follow-ups**
+
+- **Disk:** both files live under **`DATA_DIR`** (Render: `/var/data`). Ensure disk budget and **artifact hygiene** (`ARTIFACT_*`) remain sufficient if you add large snapshots.
+- **Secrets:** snapshot builder **must not** embed API keys or Telegram tokens; today’s payload is **notification-shaped fields only**—re-audit when extending schema (**Q3**).
+- **Provider load:** snapshot write is **serialization only** (no extra market HTTP); if a future host adds **dynamic** fields, re-check **Non-regression guardrail 7**.
+
+### 6.4 Public snapshot exposure (Q2 / Q3)
+
+| Risk | Mitigation |
+|------|------------|
+| JSON may be **world-readable** if you expose it via a public URL. | Omit sensitive fields (**Q3**); use **CORS** allowlist when wiring **Q5**; prefer **private network** or **signed URLs** if product requires. |
+| **PII / strategy leakage** if rows include more than marketing agreed. | Review `utils/scan_artifacts.build_public_qualified_snapshot` before widening fields. |
+
+### 6.5 GitHub branch protection (Milestone A4)
+
+| Step | Action |
+|------|--------|
+| 1 | Repo **Admin** → **Settings** → **Branches** → **Add rule** for `main`. |
+| 2 | Require status check **`verify`** (or the exact name shown on green **`ci.yml`** runs). |
+| 3 | Optionally require **up-to-date branches** before merge. |
+| 4 | Document completion date under **Milestone A4 Notes** (no secrets). |
+
+### 6.6 Remaining engineering scope (pointer)
+
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2**, **J1/J3/J4**, **K–O**, **P2/P4**, **Q3–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+
+---
+
 ## Progress summary (for humans)
 
 | Milestone | Theme | Status |
@@ -568,3 +628,4 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
 | Backtest library surface | `backtesting/*`, `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
 | Public dashboard + PWA + UX | `main.py` (writer hook), `DATA_DIR/qualified_public_snapshot.json`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
+| Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |
