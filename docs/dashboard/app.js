@@ -9,6 +9,8 @@
   const LS_PREV_SYMBOLS = "qualified_dash_prev_symbols_json";
   const LS_PREV_SCHEMA = "qualified_dash_prev_schema_version";
   const LS_THEME = "qualified_dash_theme";
+  /** Tier-A poll: previous filtered symbol list under current UI filters (JSON array string). */
+  const LS_POLL_FILTERED_SYMS = "qualified_dash_poll_filtered_syms";
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
@@ -81,6 +83,11 @@
   const elExportCsv = document.getElementById("exportCsvBtn");
   const elExportJson = document.getElementById("exportJsonBtn");
   const elPushTierB = document.getElementById("pushTierBBtn");
+  const elExchangeFilter = document.getElementById("exchangeFilter");
+  const elBacktestModal = document.getElementById("backtestModal");
+  const elBacktestModalTitle = document.getElementById("backtestModalTitle");
+  const elBacktestModalBody = document.getElementById("backtestModalBody");
+  const elBacktestModalClose = document.getElementById("backtestModalClose");
 
   let pollTimer = null;
   let notifyAlertsEnabled = false;
@@ -93,6 +100,8 @@
   let filterHealthMin = null;
   let searchQuery = "";
   let searchDebounceTimer = null;
+  /** @type {string} exchange id or "" for all */
+  let filterExchange = "";
   /** @type {number | null} */
   let hashHighlightTimer = null;
 
@@ -288,6 +297,78 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function coinG7(c) {
+    const g = c.gains || {};
+    return typeof g["7d"] === "number" ? g["7d"] : null;
+  }
+
+  function coinVolAccelPct(c) {
+    const v = c.volume_acceleration_pct;
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function formatUsdVolDisplay(val) {
+    if (val == null || val === "" || val === "N/A") return "—";
+    if (typeof val === "number" && Number.isFinite(val)) {
+      const x = Math.abs(val);
+      if (x >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+      if (x >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+      if (x >= 1e3) return `$${(val / 1e3).toFixed(1)}k`;
+      return `$${val.toFixed(0)}`;
+    }
+    return String(val);
+  }
+
+  function exchangeVolumeCellHtml(c) {
+    const listed = Array.isArray(c.listed_on) ? c.listed_on : [];
+    const ev = c.exchange_volumes && typeof c.exchange_volumes === "object" ? c.exchange_volumes : {};
+    const keys = listed.length ? listed : Object.keys(ev);
+    if (!keys.length) {
+      return '<span class="cell-muted">—</span>';
+    }
+    const lines = [];
+    for (const ex of keys.slice(0, 7)) {
+      const raw = ev[ex];
+      lines.push(
+        `<span class="exch-line"><strong>${escapeHtml(String(ex))}</strong> ${escapeHtml(formatUsdVolDisplay(raw))}</span>`,
+      );
+    }
+    if (keys.length > 7) {
+      lines.push(`<span class="cell-muted">+${keys.length - 7} more</span>`);
+    }
+    return `<div class="exch-cell">${lines.join("")}</div>`;
+  }
+
+  function populateExchangeFilterOptions(coins) {
+    if (!elExchangeFilter) return;
+    const union = new Set();
+    for (const c of coins) {
+      const lo = c.listed_on;
+      if (!Array.isArray(lo)) continue;
+      for (const x of lo) {
+        const id = String(x || "").trim().toLowerCase();
+        if (id) union.add(id);
+      }
+    }
+    const sorted = [...union].sort();
+    const cur = filterExchange;
+    elExchangeFilter.innerHTML = '<option value="">All exchanges</option>';
+    for (const id of sorted) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = id;
+      elExchangeFilter.appendChild(opt);
+    }
+    if (cur && sorted.includes(cur)) {
+      elExchangeFilter.value = cur;
+    } else if (cur && !sorted.includes(cur)) {
+      filterExchange = "";
+      elExchangeFilter.value = "";
+    }
+  }
+
   function sortCoinsInPlace(rows) {
     const dir = sortDir;
     const mult = dir;
@@ -306,6 +387,20 @@
         case "g30": {
           const na = coinG30(a);
           const nb = coinG30(b);
+          const fa = na != null ? na : -1e9;
+          const fb = nb != null ? nb : -1e9;
+          return mult * (fa - fb);
+        }
+        case "g7": {
+          const na = coinG7(a);
+          const nb = coinG7(b);
+          const fa = na != null ? na : -1e9;
+          const fb = nb != null ? nb : -1e9;
+          return mult * (fa - fb);
+        }
+        case "volaccel": {
+          const na = coinVolAccelPct(a);
+          const nb = coinVolAccelPct(b);
           const fa = na != null ? na : -1e9;
           const fb = nb != null ? nb : -1e9;
           return mult * (fa - fb);
@@ -352,6 +447,14 @@
       rows = rows.filter((c) => {
         const h = coinHealth(c);
         return h != null && h >= filterHealthMin;
+      });
+    }
+    if (filterExchange) {
+      const fx = filterExchange.toLowerCase();
+      rows = rows.filter((c) => {
+        const lo = c.listed_on;
+        if (!Array.isArray(lo)) return false;
+        return lo.some((x) => String(x || "").trim().toLowerCase() === fx);
       });
     }
     return rows;
@@ -531,21 +634,31 @@
     det.hidden = open;
   }
 
+  const COL_COUNT = 9;
+
   function renderRowsHtml(coins) {
     if (!coins.length) {
-      return '<tr><td colspan="6" class="empty">No qualified coins in this snapshot.</td></tr>';
+      return `<tr><td colspan="${COL_COUNT}" class="empty">No qualified coins match the current filters.</td></tr>`;
     }
     return coins
       .map((c, idx) => {
         const rawSym = String(c.symbol || "").toUpperCase();
         const sym = escapeHtml(String(c.symbol || ""));
-        const name = escapeHtml(String(c.name || ""));
+        const nameRaw = String(c.name || "");
+        const name = escapeHtml(nameRaw);
         const g = c.gains || {};
+        const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
         const g30 = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
         const h =
           c.health_score != null && c.health_score !== ""
             ? Number(c.health_score).toFixed(1)
+            : "—";
+        const vac = coinVolAccelPct(c);
+        const vwd = c.volume_acceleration_window_days;
+        const volStr =
+          vac != null
+            ? `${vac >= 0 ? "+" : ""}${vac.toFixed(0)}%${typeof vwd === "number" ? ` / ${vwd}d` : ""}`
             : "—";
         const url = c.source_url ? String(c.source_url) : "";
         const link = url
@@ -556,14 +669,18 @@
           : "";
         const detailId = `coin-detail-${idx}`;
         const detail = detailBlockHtml(c);
+        const exchHtml = exchangeVolumeCellHtml(c);
         return `<tr class="coin-row" role="button" tabindex="0" aria-expanded="false" aria-controls="${detailId}" data-symbol="${escapeAttr(rawSym)}">
           <td headers="col-symbol"><strong>${sym}</strong>${badge}</td>
-          <td headers="col-name">${name}</td>
+          <td headers="col-name"><button type="button" class="coin-name-btn" data-symbol="${escapeAttr(rawSym)}">${name}</button></td>
+          <td headers="col-g7" class="num"><span class="visually-hidden">7-day gain </span>${g7}%</td>
           <td headers="col-g30" class="num"><span class="visually-hidden">30-day gain </span>${g30}%</td>
           <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span>${u}</td>
           <td headers="col-health" class="num"><span class="visually-hidden">Health </span>${h}</td>
+          <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span>${volStr}</td>
+          <td headers="col-exch" class="exch-col">${exchHtml}</td>
           <td headers="col-link">${link}</td>
-        </tr><tr class="coin-detail" id="${detailId}" hidden><td colspan="6" class="detail-cell">${detail}</td></tr>`;
+        </tr><tr class="coin-detail" id="${detailId}" hidden><td colspan="${COL_COUNT}" class="detail-cell">${detail}</td></tr>`;
       })
       .join("");
   }
@@ -594,15 +711,32 @@
 
   function exportViewCsv() {
     const rows = getFilteredSortedCoins();
-    const header = ["symbol", "name", "gain_30d_pct", "uniformity", "health", "source_url"];
+    const header = [
+      "symbol",
+      "name",
+      "gain_7d_pct",
+      "gain_30d_pct",
+      "uniformity",
+      "health",
+      "volume_acceleration_pct",
+      "volume_acceleration_window_days",
+      "listed_on",
+      "source_url",
+    ];
     const lines = [header.join(",")];
     for (const c of rows) {
       const g = c.gains || {};
+      const g7 = typeof g["7d"] === "number" ? g["7d"] : "";
       const g30 = typeof g["30d"] === "number" ? g["30d"] : "";
       const u = typeof c.uniformity_score === "number" ? c.uniformity_score : "";
       const h = c.health_score != null && c.health_score !== "" ? c.health_score : "";
+      const vac = c.volume_acceleration_pct;
+      const vwd = c.volume_acceleration_window_days;
+      const lo = Array.isArray(c.listed_on) ? c.listed_on.join("|") : "";
       const url = c.source_url ? String(c.source_url) : "";
-      lines.push([c.symbol, c.name, g30, u, h, url].map(escapeCsvCell).join(","));
+      lines.push(
+        [c.symbol, c.name, g7, g30, u, h, vac, vwd, lo, url].map(escapeCsvCell).join(","),
+      );
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     downloadBlob(`qualified_export_${stamp}.csv`, "text/csv;charset=utf-8", lines.join("\r\n"));
@@ -655,12 +789,27 @@
     updateStaleBanner(data);
     updateHealthStrip(data);
 
+    populateExchangeFilterOptions(coins);
     applyTableView();
     writeSnapshotVisitState(data);
   }
 
   if (elTbody) {
     elTbody.addEventListener("click", (ev) => {
+      const nameBtn = ev.target.closest(".coin-name-btn");
+      if (nameBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const sym = nameBtn.getAttribute("data-symbol") || "";
+        const coins = getFilteredSortedCoins();
+        const coin = coins.find((x) => String(x.symbol || "").toUpperCase() === sym.toUpperCase());
+        if (coin && elBacktestModal && elBacktestModalTitle && elBacktestModalBody) {
+          elBacktestModalTitle.textContent = `${String(coin.symbol || "")} · ${String(coin.name || "")}`;
+          elBacktestModalBody.innerHTML = detailBlockHtml(coin);
+          elBacktestModal.showModal();
+        }
+        return;
+      }
       const row = ev.target.closest("tr.coin-row");
       if (!row || ev.target.closest("a")) return;
       toggleRowDetail(row);
@@ -695,25 +844,48 @@
     return String(text.length) + ":" + text.slice(0, 2000);
   }
 
-  async function notifySnapshotChanged(text, data) {
-    const next = await digestHex(text);
-    const prev = localStorage.getItem(LS_DIGEST);
-    if (prev === null || prev === "") {
-      localStorage.setItem(LS_DIGEST, next);
+  /** Tier-A alerts: only when the **filtered** coin list (current UI filters) changes vs last poll. */
+  async function notifySnapshotChangedFiltered(text, data) {
+    const coins = Array.isArray(data.coins) ? data.coins : [];
+    const filtered = applyFilters(coins);
+    const syms = [
+      ...new Set(filtered.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean)),
+    ].sort();
+    const key = JSON.stringify(syms);
+    const nextDigest = await digestHex(text);
+    const prevFilteredRaw = localStorage.getItem(LS_POLL_FILTERED_SYMS);
+    localStorage.setItem(LS_DIGEST, nextDigest);
+    if (prevFilteredRaw === null || prevFilteredRaw === "") {
+      localStorage.setItem(LS_POLL_FILTERED_SYMS, key);
       return;
     }
-    if (prev === next) {
+    if (prevFilteredRaw === key) {
       return;
     }
-    localStorage.setItem(LS_DIGEST, next);
-    const n = Array.isArray(data.coins) ? data.coins.length : 0;
-    const body = `Snapshot changed · ${n} qualified coin(s)`;
+    localStorage.setItem(LS_POLL_FILTERED_SYMS, key);
+    let prevArr = [];
+    try {
+      prevArr = JSON.parse(prevFilteredRaw);
+    } catch {
+      prevArr = [];
+    }
+    const prevSet = new Set(Array.isArray(prevArr) ? prevArr.map((s) => String(s).toUpperCase()) : []);
+    const curSet = new Set(syms);
+    const added = syms.filter((s) => !prevSet.has(s));
+    const removed = [...prevSet].filter((s) => !curSet.has(s)).sort();
+    let body = `Filtered view: ${syms.length} coin(s)`;
+    if (added.length) {
+      body += ` · New: ${added.slice(0, 14).join(", ")}${added.length > 14 ? "…" : ""}`;
+    }
+    if (removed.length) {
+      body += ` · Out: ${removed.slice(0, 10).join(", ")}${removed.length > 10 ? "…" : ""}`;
+    }
     try {
       const reg = await navigator.serviceWorker.ready;
       if (reg && typeof reg.showNotification === "function") {
         await reg.showNotification("Qualified list updated", {
           body,
-          tag: "qualified-snapshot",
+          tag: "qualified-snapshot-filtered",
           renotify: true,
         });
       } else if (typeof Notification === "function") {
@@ -750,7 +922,7 @@
       }
       render(data);
       if (forNotify && notifyAlertsEnabled) {
-        await notifySnapshotChanged(text, data);
+        await notifySnapshotChangedFiltered(text, data);
       } else {
         localStorage.setItem(LS_DIGEST, await digestHex(text));
       }
@@ -817,6 +989,22 @@
     });
   }
 
+  if (elExchangeFilter) {
+    elExchangeFilter.addEventListener("change", () => {
+      filterExchange = String(elExchangeFilter.value || "").trim().toLowerCase();
+      applyTableView();
+    });
+  }
+
+  if (elBacktestModalClose && elBacktestModal) {
+    elBacktestModalClose.addEventListener("click", () => elBacktestModal.close());
+  }
+  if (elBacktestModal) {
+    elBacktestModal.addEventListener("click", (ev) => {
+      if (ev.target === elBacktestModal) elBacktestModal.close();
+    });
+  }
+
   if (elLoad) {
     elLoad.addEventListener("click", () => loadSnapshot({ showErrors: true, forNotify: false }));
   }
@@ -857,6 +1045,7 @@
       }
       await registerServiceWorker();
       notifyAlertsEnabled = true;
+      localStorage.removeItem(LS_POLL_FILTERED_SYMS);
       clearError();
       await loadSnapshot({ showErrors: true, forNotify: false });
       startPoll();

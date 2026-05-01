@@ -63,10 +63,16 @@ html[data-theme="dark"] {
 body {
   margin: 0;
   padding: 1rem;
-  max-width: 960px;
+  max-width: 1280px;
   margin-inline: auto;
   color: var(--color-text);
   background: var(--color-bg);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+  padding: 0 0.25rem;
 }
 
 h1 {
@@ -385,11 +391,100 @@ a {
   color: var(--color-link);
 }
 
-@media (max-width: 640px) {
-  th:nth-child(3),
-  td:nth-child(3),
-  th:nth-child(5),
-  td:nth-child(5) {
+.cell-muted {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.exch-cell {
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-width: 14rem;
+}
+
+.exch-line {
+  display: block;
+}
+
+.coin-name-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--color-link);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.coin-name-btn:hover {
+  opacity: 0.85;
+}
+
+.bt-modal {
+  max-width: calc(100vw - 2rem);
+  width: min(42rem, 100%);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 12px 40px var(--shadow);
+}
+
+.bt-modal::backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.bt-modal-box {
+  display: flex;
+  flex-direction: column;
+  max-height: min(85vh, 640px);
+}
+
+.bt-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bt-modal-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.bt-modal-close {
+  border: none;
+  background: var(--color-btn-bg);
+  color: var(--color-text);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.bt-modal-close:hover {
+  background: var(--color-btn-hover);
+}
+
+.bt-modal-body {
+  padding: 0.75rem 1rem 1rem;
+  overflow: auto;
+  flex: 1;
+}
+
+@media (max-width: 720px) {
+  #col-exch,
+  .exch-col,
+  #col-volaccel,
+  td[headers="col-volaccel"] {
     display: none;
   }
 }

@@ -107,8 +107,19 @@ def build_public_qualified_snapshot(
         }
         if not minimal:
             coin["exchange_volumes"] = row.get("exchange_volumes")
+            coin["listed_on"] = row.get("listed_on")
             coin["volume_24h"] = row.get("volume_24h")
             coin["ohlcv_source"] = row.get("ohlcv_source")
+            if row.get("volume_acceleration_pct") is not None:
+                try:
+                    coin["volume_acceleration_pct"] = float(row.get("volume_acceleration_pct", 0) or 0)
+                except (TypeError, ValueError):
+                    pass
+            if row.get("volume_acceleration_window_days") is not None:
+                try:
+                    coin["volume_acceleration_window_days"] = int(row.get("volume_acceleration_window_days") or 0)
+                except (TypeError, ValueError):
+                    pass
             strategies = row.get("backtest_top_strategies")
             if strategies is not None:
                 coin["backtest_top_strategies"] = strategies

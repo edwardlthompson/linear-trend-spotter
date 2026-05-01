@@ -15,6 +15,10 @@ python -m http.server 8765
 
 Open `http://localhost:8765/?api=https%3A%2F%2Fyour-worker.example%2Fqualified_public_snapshot.json` (replace with your real snapshot GET URL).
 
+## Dashboard UI extensions
+
+See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md): exchange column + filter, 7d / vol acceleration, Tier-A notifications scoped to **filtered** rows, name-click **modal** for backtest JSON. Snapshot (`field_set` **`full`**) must include `listed_on`, `exchange_volumes`, acceleration fields — implemented in `utils/scan_artifacts.build_public_qualified_snapshot`.
+
 ## GitHub Pages (Q6)
 
 1. Build or copy `docs/dashboard/*` to the Pages branch or `/docs` site root.

@@ -39,6 +39,12 @@
         Search
         <input id="searchInput" type="search" placeholder="Symbol or name" autocomplete="off" />
       </label>
+      <label>
+        Exchange
+        <select id="exchangeFilter" title="Show coins listed on this exchange (snapshot field listed_on)">
+          <option value="">All exchanges</option>
+        </select>
+      </label>
       <span class="chip-group">
         <span class="chip-label">Health ≥</span>
         <button type="button" class="chip chip-filter is-active" data-min="">All</button>
@@ -51,6 +57,7 @@
     <div id="staleBanner" class="stale-banner" role="status" hidden></div>
     <div id="healthStrip" class="health-strip" role="status" hidden></div>
     <div id="diffBanner" class="diff-banner" role="status" hidden></div>
+    <div class="table-scroll">
     <table>
       <caption class="visually-hidden">
         Qualified coins from the scanner snapshot. Sort with column header buttons; expand a row for
@@ -65,6 +72,11 @@
           </th>
           <th scope="col" id="col-name">
             <button type="button" class="sort-btn" data-sort="name" aria-label="Sort by name">Name</button>
+          </th>
+          <th scope="col" id="col-g7">
+            <button type="button" class="sort-btn" data-sort="g7" aria-label="Sort by 7-day gain">
+              7d
+            </button>
           </th>
           <th scope="col" id="col-g30">
             <button type="button" class="sort-btn" data-sort="g30" aria-label="Sort by 30-day gain">
@@ -81,11 +93,31 @@
               Health
             </button>
           </th>
+          <th scope="col" id="col-volaccel">
+            <button type="button" class="sort-btn" data-sort="volaccel" aria-label="Sort by volume acceleration">
+              Vol Δ%
+            </button>
+          </th>
+          <th scope="col" id="col-exch">Volume / exchanges</th>
           <th scope="col" id="col-link">Link</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
+    </div>
+
+    <dialog id="backtestModal" class="bt-modal">
+      <div class="bt-modal-box">
+        <header class="bt-modal-head">
+          <h2 id="backtestModalTitle" class="bt-modal-title">Backtest detail</h2>
+          <button type="button" class="bt-modal-close" id="backtestModalClose" aria-label="Close">
+            ×
+          </button>
+        </header>
+        <div id="backtestModalBody" class="bt-modal-body"></div>
+      </div>
+    </dialog>
+
     <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>

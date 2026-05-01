@@ -100,6 +100,27 @@ def test_scan_health_omits_invalid_values() -> None:
     assert "errors_count" not in payload
 
 
+def test_full_includes_listed_on_and_volume_acceleration() -> None:
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 3.0, "30d": 10.0},
+            "uniformity_score": 70.0,
+            "health_score": 80,
+            "listed_on": ["binance", "kraken"],
+            "volume_acceleration_pct": 12.5,
+            "volume_acceleration_window_days": 14,
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    coin = payload["coins"][0]
+    assert coin["listed_on"] == ["binance", "kraken"]
+    assert coin["volume_acceleration_pct"] == 12.5
+    assert coin["volume_acceleration_window_days"] == 14
+
+
 def test_minimal_field_set_omits_backtest_and_exchange_fields() -> None:
     rows = [
         {
@@ -116,3 +137,5 @@ def test_minimal_field_set_omits_backtest_and_exchange_fields() -> None:
     coin = payload["coins"][0]
     assert "backtest_top_strategies" not in coin
     assert "exchange_volumes" not in coin
+    assert "listed_on" not in coin
+    assert "volume_acceleration_pct" not in coin
