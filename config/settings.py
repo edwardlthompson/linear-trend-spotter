@@ -85,6 +85,11 @@ class Settings:
             'BACKTEST_CHECKPOINT_FILE': 'backtest_checkpoint.json',
             'BACKTEST_TELEMETRY_FILE': 'backtest_telemetry.jsonl',
             'BACKTEST_FAILURE_SAMPLES_LIMIT': 200,
+            'OHLCV_MIN_1H_BARS_PER_DAY': 24,
+            'OHLCV_MIN_1H_BARS_SLACK': 12,
+            'OHLCV_MIN_1H_BARS_FLOOR': 600,
+            'OHLCV_MIN_1D_BARS_SLACK': 2,
+            'OHLCV_MIN_1D_BARS_FLOOR': 25,
             'ARTIFACT_HYGIENE_ENABLED': True,
             'ARTIFACT_RETENTION_DAYS': 7,
             'ARTIFACT_ARCHIVE_DIR': '.archive/auto',
@@ -231,6 +236,11 @@ class Settings:
             ('BACKTEST_TRAILING_STOP_MAX', 0, 100),
             ('BACKTEST_TRAILING_STOP_STEP', 1, 20),
             ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
+            ('OHLCV_MIN_1H_BARS_PER_DAY', 1, 48),
+            ('OHLCV_MIN_1H_BARS_SLACK', 0, 5000),
+            ('OHLCV_MIN_1H_BARS_FLOOR', 1, 20000),
+            ('OHLCV_MIN_1D_BARS_SLACK', 0, 500),
+            ('OHLCV_MIN_1D_BARS_FLOOR', 1, 2000),
             ('ARTIFACT_RETENTION_DAYS', 1, 3650),
             ('ALERT_COOLDOWN_HOURS', 0, 720),
             ('WATCHLIST_SCORE_BUFFER', 1, 30),
@@ -606,6 +616,26 @@ class Settings:
     @property
     def backtest_failure_samples_limit(self) -> int:
         return int(self._config.get('BACKTEST_FAILURE_SAMPLES_LIMIT', 200))
+
+    @property
+    def ohlcv_min_1h_bars_per_day(self) -> int:
+        return int(self._config.get('OHLCV_MIN_1H_BARS_PER_DAY', 24))
+
+    @property
+    def ohlcv_min_1h_bars_slack(self) -> int:
+        return int(self._config.get('OHLCV_MIN_1H_BARS_SLACK', 12))
+
+    @property
+    def ohlcv_min_1h_bars_floor(self) -> int:
+        return int(self._config.get('OHLCV_MIN_1H_BARS_FLOOR', 600))
+
+    @property
+    def ohlcv_min_1d_bars_slack(self) -> int:
+        return int(self._config.get('OHLCV_MIN_1D_BARS_SLACK', 2))
+
+    @property
+    def ohlcv_min_1d_bars_floor(self) -> int:
+        return int(self._config.get('OHLCV_MIN_1D_BARS_FLOOR', 25))
 
     @property
     def artifact_hygiene_enabled(self) -> bool:

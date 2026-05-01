@@ -112,13 +112,24 @@ class BacktestDataLoader:
         resampled = resampled.dropna(subset=["open", "high", "low", "close"])
         return resampled
 
+    def _hourly_min_bars_threshold(self, days: int) -> int:
+        """Minimum 1h rows required (legacy default: max(24 * days - 12, 600))."""
+        per = settings.ohlcv_min_1h_bars_per_day
+        slack = settings.ohlcv_min_1h_bars_slack
+        floor = settings.ohlcv_min_1h_bars_floor
+        return max(per * int(days) - int(slack), int(floor))
+
+    def _daily_min_bars_threshold(self, days: int) -> int:
+        """Minimum daily rows required (legacy default: max(days - 2, 25))."""
+        return max(int(days) - int(settings.ohlcv_min_1d_bars_slack), int(settings.ohlcv_min_1d_bars_floor))
+
     def _get_or_fetch_1h(
         self,
         symbol: str,
         gecko_id: Optional[str],
         days: int = 30,
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
-        expected_points = max(24 * days - 12, 600)
+        expected_points = self._hourly_min_bars_threshold(days)
 
         found, cached_rows = self.cache.get_ohlcv_rows("coingecko", symbol, "1h", max_age_hours=self.max_cache_age_hours)
         if found and cached_rows:
@@ -198,7 +209,7 @@ class BacktestDataLoader:
         gecko_id: Optional[str],
         days: int = 30,
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
-        expected_points = max(days - 2, 25)
+        expected_points = self._daily_min_bars_threshold(days)
 
         found, cached_rows = self.cache.get_ohlcv_rows("coingecko", symbol, "1d", max_age_hours=self.max_cache_age_hours)
         if found and cached_rows:

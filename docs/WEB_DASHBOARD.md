@@ -35,3 +35,7 @@ Implemented under `docs/dashboard/`:
 - **iOS Safari:** Web Notifications are limited; users often need **Add to Home Screen** and a user gesture. The dashboard shows a short hint if permission is not granted.
 
 Tier-B Web Push (**Q21**) still requires a separate subscription endpoint and is not covered here.
+
+## New / dropped since last visit (Q10)
+
+The dashboard compares the current snapshot symbol set to the previous successful load (`localStorage`). A status banner summarizes **new** and **dropped** symbols and any **`schema_version`** change; rows that are new since the last visit show a **New** badge. Clear site data for the origin to reset the baseline.

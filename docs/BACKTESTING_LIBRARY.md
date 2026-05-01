@@ -18,4 +18,4 @@ CI runs `python scripts/check_backtesting_imports.py`, which AST-scans `backtest
 
 ## Settings coupling
 
-Loaders read `config.settings.settings` today for API rate limits and keys. Milestone **P2** (constructor-injected config) is optional follow-up for a second host without the full scanner `config.json`.
+Loaders read `config.settings.settings` today for API rate limits, keys, and **minimum OHLCV bar counts** (Milestone **L1**): `OHLCV_MIN_1H_BARS_PER_DAY`, `OHLCV_MIN_1H_BARS_SLACK`, `OHLCV_MIN_1H_BARS_FLOOR`, `OHLCV_MIN_1D_BARS_SLACK`, `OHLCV_MIN_1D_BARS_FLOOR` — defaults reproduce the historical `max(24·days−12, 600)` hourly and `max(days−2, 25)` daily gates in `BacktestDataLoader`. Milestone **P2** (constructor-injected config) is optional follow-up for a second host without the full scanner `config.json`.

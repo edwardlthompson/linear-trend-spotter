@@ -54,6 +54,33 @@ button.secondary {
   margin-bottom: 0.75rem;
 }
 
+.diff-banner {
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #e0f2fe;
+  border: 1px solid #7dd3fc;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  vertical-align: middle;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-new {
+  background: #22c55e;
+  color: #fff;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

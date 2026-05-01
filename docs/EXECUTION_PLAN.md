@@ -346,8 +346,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Default config tightens 7d vs legacy (was no 7d floor); set **`GAIN_FILTER_MIN_7D_PERCENT`: 0** to approximate prior behavior on 7d only.  
   - **Notes:** Product intentionally **drops** coins whose **7d gain is below the minimum**; narrows qualified set vs pre-change (not a universe/API shrink—filter logic only).
 
-- [ ] **L1.** **Configurable OHLCV min bars** per timeframe in `config.json` with validation in `settings.py`; **defaults equal current hardcoded behavior.**  
+- [x] **L1.** **Configurable OHLCV min bars** per timeframe in `config.json` with validation in `settings.py`; **defaults equal current hardcoded behavior.**  
   - **Verification:** Default config → same skip/pass rates as before on `verify_backtest_*` sample.
+  - **Notes:** **`OHLCV_MIN_1H_BARS_PER_DAY`** (24), **`OHLCV_MIN_1H_BARS_SLACK`** (12), **`OHLCV_MIN_1H_BARS_FLOOR`** (600) → `max(per_day·days−slack, floor)` hourly threshold; **`OHLCV_MIN_1D_BARS_SLACK`** (2), **`OHLCV_MIN_1D_BARS_FLOOR`** (25) → daily. Wired in **`backtesting/data_loader.py`** (`BacktestDataLoader`).
 
 - [ ] **L2.** **Symbol quality score** line in notifications (data age, provider mix); additive field; can be hidden via config defaulting to current look.  
   - **Verification:** Default hides or matches “no extra line” per product choice; no dropped alerts.
@@ -515,8 +516,9 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 
 *Each task: snapshot JSON + browser UX only unless noted; no CoinGecko/CMC/Polygon from the client.*
 
-- [ ] **Q10.** **New / dropped since last visit:** persist last `schema_version` and symbol set in `localStorage`; show banner or row badges for **new** vs **dropped** coins vs previous snapshot.  
+- [x] **Q10.** **New / dropped since last visit:** persist last `schema_version` and symbol set in `localStorage`; show banner or row badges for **new** vs **dropped** coins vs previous snapshot.  
   - **Verification:** Simulated two JSON versions in dev; UI updates correctly; no network beyond snapshot URL.
+  - **Notes:** Keys **`qualified_dash_prev_symbols_json`**, **`qualified_dash_prev_schema_version`**; first visit shows no diff; **`#diffBanner`** + **New** row badge. Service worker **`CACHE_VERSION`** bumped with dashboard static edits.
 
 - [ ] **Q11.** **Sort & filter:** client-side sort on columns (e.g. rank, 30d gain, uniformity, health); optional filter chips (e.g. “health ≥ N”).  
   - **Verification:** Sort order toggles correctly on mobile width; no extra fetches.
@@ -610,7 +612,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L–O**, **P2**, **Q10–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L2–O**, **P2**, **Q11–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -629,12 +631,12 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
 | K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
-| L | Data & strategy | **L0** gain thresholds done; **L1–L4** pending |
+| L | Data & strategy | **L0–L1** done (OHLCV min-bar gates configurable); **L2–L4** pending |
 | M | Engineering quality | **M2** pre-commit; **M1/M3** pending |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
 | P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q9** done; **Q10–Q21** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q10** done; **Q11–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 
@@ -650,6 +652,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 |------|--------|
 | CI gate + CoinGecko H0 counters | `scripts/check_github_ci.py`, `utils/coingecko_usage.py`, `utils/metrics.py` (report section) |
 | Gain filter (L0) | `main.py` FILTER 1; `GAIN_FILTER_MIN_*` in `config/settings.py` |
+| OHLCV min bars (L1) | `OHLCV_MIN_*` in `config/settings.py`; `backtesting/data_loader.py` |
 | Telegram diagnostics (K1) | `telegram_bot.py`; **`SCANNER_DIAG_COMMANDS_ENABLED`** in `config.json` |
 | Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
