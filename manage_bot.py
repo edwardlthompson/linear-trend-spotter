@@ -13,6 +13,18 @@ import psutil
 PID_FILE = 'bot.pid'
 LOG_FILE = 'bot_output.log'
 
+
+def _print_last_log_lines(path: str, max_lines: int = 5) -> None:
+    """Print the last N lines of a log file without relying on Unix ``tail``."""
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as handle:
+            lines = handle.readlines()[-max_lines:]
+    except OSError:
+        return
+    for line in lines:
+        print(line.rstrip())
+
+
 def get_pid():
     """Get PID from file"""
     if os.path.exists(PID_FILE):
@@ -43,7 +55,7 @@ def start():
     print("🚀 Starting bot...")
     with open(LOG_FILE, 'a') as log:
         process = subprocess.Popen(
-            ['python3', 'telegram_bot.py'],
+            [sys.executable, 'telegram_bot.py'],
             stdout=log,
             stderr=log,
             start_new_session=True
@@ -53,7 +65,7 @@ def start():
         f.write(str(process.pid))
     
     print(f"✅ Bot started with PID {process.pid}")
-    print(f"📝 Logs: tail -f {LOG_FILE}")
+    print(f"📝 Logs: {LOG_FILE} (last lines: manage_bot.py status)")
 
 def stop():
     """Stop the bot"""
@@ -90,14 +102,7 @@ def status():
         # Show last few lines of log
         if os.path.exists(LOG_FILE):
             print("\n📝 Last 5 log lines:")
-            try:
-                subprocess.run(['tail', '-5', LOG_FILE], check=False)
-            except (FileNotFoundError, OSError):
-                # Fallback if tail is missing (e.g. Windows) or command fails
-                with open(LOG_FILE, 'r') as f:
-                    lines = f.readlines()[-5:]
-                    for line in lines:
-                        print(line.rstrip())
+            _print_last_log_lines(LOG_FILE, 5)
     else:
         print("❌ Bot is not running")
         if pid:

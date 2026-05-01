@@ -176,11 +176,11 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **E1.** `scheduler.py`: replace or guard `fcntl` (e.g. `portalocker` fallback on Windows) so import works on Windows dev machines.  
+- [x] **E1.** `scheduler.py`: replace or guard `fcntl` (e.g. `portalocker` fallback on Windows) so import works on Windows dev machines.  
   - **Verification:** `python -c "import scheduler"` on Windows **and** Linux/WSL or CI.
-- [ ] **E2.** `manage_bot.py`: replace `tail` with Python tail; use `sys.executable` instead of `python3` for subprocess.  
+- [x] **E2.** `manage_bot.py`: replace `tail` with Python tail; use `sys.executable` instead of `python3` for subprocess.  
   - **Verification:** Run `status` / `start` / `stop` smoke on target OS (or document Linux-only).
-- [ ] **E3.** `bot_watchdog.py`: `sys.executable` instead of `python3`.  
+- [x] **E3.** `bot_watchdog.py`: `sys.executable` instead of `python3`.  
   - **Verification:** `compileall`.
 
 ---

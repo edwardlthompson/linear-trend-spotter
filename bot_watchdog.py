@@ -18,7 +18,7 @@ def main():
     pid = get_pid()
     if not pid or not is_running(pid):
         print("Bot not running, starting...")
-        subprocess.run(['python3', 'manage_bot.py', 'start'])
+        subprocess.run([sys.executable, 'manage_bot.py', 'start'], check=False)
     else:
         print(f"Bot is running (PID {pid})")
 

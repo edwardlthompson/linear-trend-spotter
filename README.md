@@ -24,6 +24,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 - **Engineering roadmap:** `docs/EXECUTION_PLAN.md` tracks milestones, verification steps, and checkbox progress.
 - **Exception hygiene:** `scheduler.py`, `manage_bot.py`, and `bot_watchdog.py` use specific exception handling (no bare `except:`) where lock files, PIDs, and subprocess fallbacks are involved.
 - **Telegram safety (milestone C):** Long-polling and Bot API helpers check HTTP status before parsing JSON, handle `JSONDecodeError`, and escape user- or API-derived text in **HTML** captions (`html.escape` / formatter helpers).
+- **Cross-platform (milestone E):** The scan scheduler uses **`portalocker`** instead of `fcntl`, so imports work on Windows dev machines as well as Linux. `manage_bot.py` / `bot_watchdog.py` use **`sys.executable`** (no hard-coded `python3`); log tailing avoids a `tail` subprocess.
 
 ---
 

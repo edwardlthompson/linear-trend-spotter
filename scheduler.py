@@ -7,10 +7,8 @@ Run this via cron instead of running main.py directly
 import os
 import sys
 import time
-import fcntl
 import json
 import logging
-import gc
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +16,10 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import our modules - fix the import path
+import portalocker
+from portalocker.constants import LockFlags
+from portalocker.exceptions import LockException
+
 from config.settings import settings
 from utils.logger import setup_logger
 
@@ -38,15 +40,16 @@ class ScanLock:
         """Acquire the lock"""
         try:
             self.fp = open(self.lock_file, 'w')
-            # Try to acquire an exclusive lock without blocking
-            fcntl.flock(self.fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # Exclusive non-blocking lock (portalocker works on Windows and POSIX)
+            portalocker.lock(self.fp, LockFlags.EXCLUSIVE | LockFlags.NON_BLOCKING)
             self.logger.info(f"Lock acquired: {self.lock_file}")
             # Write PID to lock file for debugging
             self.fp.write(str(os.getpid()))
             self.fp.flush()
             return self
-        except IOError:
-            # Another process has the lock
+        except LockException:
+            self.fp.close()
+            self.fp = None
             raise RuntimeError(f"Another scan is already running (lock file exists: {self.lock_file})")
         except Exception as e:
             self.logger.error(f"Error acquiring lock: {e}")
@@ -56,7 +59,7 @@ class ScanLock:
         """Release the lock"""
         if self.fp:
             try:
-                fcntl.flock(self.fp, fcntl.LOCK_UN)
+                portalocker.unlock(self.fp)
                 self.fp.close()
                 # Try to remove the lock file
                 try:
