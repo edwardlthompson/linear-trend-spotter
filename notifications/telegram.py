@@ -3,7 +3,7 @@ import html
 import io
 import json
 import requests
-from typing import Optional, Dict
+from typing import Any, Dict, Optional
 import logging
 from notifications.formatter import MessageFormatter
 
@@ -44,9 +44,14 @@ class TelegramClient:
             self.logger.error(f"Telegram request error: {e}")
             return None
     
-    def send_message(self, text: str, parse_mode: str = 'HTML', reply_markup: dict = None) -> Optional[int]:
+    def send_message(
+        self,
+        text: str,
+        parse_mode: str = 'HTML',
+        reply_markup: Optional[dict] = None,
+    ) -> Optional[int]:
         """Send a text message"""
-        data = {
+        data: dict[str, Any] = {
             'chat_id': self.chat_id,
             'text': text,
             'parse_mode': parse_mode
@@ -59,9 +64,15 @@ class TelegramClient:
             return result['result']['message_id']
         return None
     
-    def edit_message_text(self, message_id: int, text: str, parse_mode: str = 'HTML', reply_markup: dict = None) -> bool:
+    def edit_message_text(
+        self,
+        message_id: int,
+        text: str,
+        parse_mode: str = 'HTML',
+        reply_markup: Optional[dict] = None,
+    ) -> bool:
         """Edit an existing message"""
-        data = {
+        data: dict[str, Any] = {
             'chat_id': self.chat_id,
             'message_id': message_id,
             'text': text,
@@ -73,7 +84,7 @@ class TelegramClient:
         result = self._request('editMessageText', data)
         return bool(result and result.get('ok'))
 
-    def answer_callback_query(self, callback_query_id: str, text: str = None) -> bool:
+    def answer_callback_query(self, callback_query_id: str, text: Optional[str] = None) -> bool:
         """Acknowledge callback query"""
         data = {'callback_query_id': callback_query_id}
         if text:
@@ -81,7 +92,12 @@ class TelegramClient:
         result = self._request('answerCallbackQuery', data)
         return bool(result and result.get('ok'))
     
-    def send_photo(self, photo: io.BytesIO, caption: str = None, reply_markup: dict = None) -> Optional[int]:
+    def send_photo(
+        self,
+        photo: io.BytesIO,
+        caption: Optional[str] = None,
+        reply_markup: Optional[dict] = None,
+    ) -> Optional[int]:
         """Send a photo with caption"""
         try:
             url = f"{self.base_url}sendPhoto"
@@ -145,7 +161,7 @@ class TelegramClient:
         """Inline keyboard for entry/exit messages (chart, CMC/CG, per-exchange links)."""
         return self._build_context_keyboard(coin)
 
-    def send_entry_notification(self, coin: Dict, chart_bytes: bytes = None) -> Optional[int]:
+    def send_entry_notification(self, coin: Dict, chart_bytes: Optional[bytes] = None) -> Optional[int]:
         """Send entry notification with chart and backtest details"""
         caption = MessageFormatter.format_entry(coin)
         markup = self._build_context_keyboard(coin)

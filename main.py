@@ -6,14 +6,12 @@ import json
 import io
 from html import escape as html_escape
 from dataclasses import replace
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
-from config.constants import STABLECOINS
-from processors.uniformity_filter import UniformityFilter
 from notifications.formatter import MessageFormatter
 from notifications.image_renderer import (
     build_combined_notification_image,
@@ -25,7 +23,6 @@ from backtesting.runner import run_backtests_for_final_results
 from backtesting.params import runner_params_from_settings
 from backtesting.report import notification_rows_for_symbol
 from utils.insights import (
-    compute_data_reliability,
     compute_health_score,
     compute_reentry_quality,
     update_scanner_insights,
@@ -44,16 +41,13 @@ from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.active_ranking import build_active_ranking_rows
-from scanner.anomaly_alerts import build_anomaly_messages
 from scanner.coin_enrichment import (
     attach_rank_movement,
     attach_signal_age,
     attach_volume_acceleration,
 )
-from scanner.market_processing import aggregate_daily_bars_from_hourly
 from scanner.quiet_hours import telegram_quiet_active
-from scanner.regime_filter import evaluate_regime_gate
-from scanner.top_coin_resolution import ensure_cmc_notify_urls, resolve_top_coin_data
+from scanner.top_coin_resolution import ensure_cmc_notify_urls
 from scanner.weekly_digest import (
     build_weekly_digest_message,
     iso_week_key,
@@ -71,6 +65,8 @@ from scanner.listings_and_volumes import (
     attach_target_exchange_listings,
     hydrate_exchange_volumes_from_coingecko,
 )
+from scanner.uniformity_stages import apply_uniformity_pass_and_regime, compute_uniformities_from_ohlcv
+from scanner.exit_pipeline import attach_exit_reasons_and_register
 
 # Import exchange database
 from exchange_data.exchange_fetcher import ExchangeFetcher
@@ -244,156 +240,27 @@ def run_scanner():
         )
 
         # ============================================================
-        # STEP 7: Calculate uniformity scores
+        # STEP 7–8: Uniformity scores (FILTER 2–3) + optional regime gate
         # ============================================================
-        app_logger.info("\n📐 FILTER 2: Calculating uniformity scores...")
-        
-        # Check cache first
-        cached_coins = []
-        uncached_coins = []
-        
-        for coin in coins_with_cg_ids:
-            found, cached = cache.get_price_data(coin['cg_id'])
-            if found and cached:
-                coin['uniformity_score'] = cached['uniformity_score']
-                coin['total_gain'] = cached['gains_30d']
-                coin['ohlcv_source'] = 'price_cache'
-                coin['quality_candles'] = 0
-                cached_coins.append(coin)
-                app_logger.info(f"   ✓ {coin['symbol']}: Using cached (score: {cached['uniformity_score']:.1f})")
-            else:
-                uncached_coins.append(coin)
-        
-        app_logger.info(f"\n   Cached: {len(cached_coins)}, Need fetching: {len(uncached_coins)}")
-        
-        # Process uncached coins (OHLCV-only uniformity)
-        uniformity_days = settings.uniformity_period
-        for i, coin in enumerate(uncached_coins, 1):
-            app_logger.info(f"\n   [{i}/{len(uncached_coins)}] {coin['symbol']}")
-
-            ohlcv_source = 'none'
-            found, cached_rows = cache.get_ohlcv_rows('coingecko', coin['symbol'], '1h', max_age_hours=settings.cache_price_hours)
-            hourly_rows = cached_rows if found and cached_rows else None
-            if hourly_rows:
-                ohlcv_source = 'coingecko_cache'
-            else:
-                api_rows = gecko.get_hourly_ohlcv(coin['cg_id'], days=max(30, uniformity_days))
-                if api_rows:
-                    cache.cache_ohlcv_rows('coingecko', coin['symbol'], '1h', api_rows, source='coingecko_api')
-                    hourly_rows = api_rows
-                    ohlcv_source = 'coingecko_api'
-
-            if not hourly_rows:
-                found_polygon, cached_polygon_rows = cache.get_ohlcv_rows('polygon', coin['symbol'], '1h', max_age_hours=settings.cache_price_hours)
-                if found_polygon and cached_polygon_rows:
-                    hourly_rows = cached_polygon_rows
-                    ohlcv_source = 'polygon_cache'
-                else:
-                    polygon_rows = history_fallback.get_polygon_30d_hourly_ohlcv(coin['symbol'])
-                    if polygon_rows:
-                        cache.cache_ohlcv_rows('polygon', coin['symbol'], '1h', polygon_rows, source='polygon_api')
-                        hourly_rows = polygon_rows
-                        ohlcv_source = 'polygon_api'
-
-            if not hourly_rows:
-                found_cmc, cached_cmc_rows = cache.get_ohlcv_rows(
-                    'cmc', coin['symbol'], '1h', max_age_hours=settings.cache_price_hours
-                )
-                if found_cmc and cached_cmc_rows:
-                    hourly_rows = cached_cmc_rows
-                    ohlcv_source = 'cmc_cache'
-                else:
-                    cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(coin['symbol'], days=max(30, uniformity_days))
-                    if cmc_hourly:
-                        cache.cache_ohlcv_rows('cmc', coin['symbol'], '1h', cmc_hourly, source='cmc_api')
-                        hourly_rows = cmc_hourly
-                        ohlcv_source = 'cmc_api'
-
-            if not hourly_rows:
-                app_logger.info("      ⏳ No OHLCV data available - will retry next scan")
-                continue
-
-            coin['quality_candles'] = len(hourly_rows)
-            coin['ohlcv_source'] = ohlcv_source
-
-            daily_bars = aggregate_daily_bars_from_hourly(hourly_rows)
-            if len(daily_bars) < uniformity_days:
-                app_logger.info("      ⚠️ Insufficient OHLCV history")
-                continue
-
-            score, gain = UniformityFilter.calculate_from_ohlcv(daily_bars, uniformity_days)
-            coin['uniformity_score'] = score
-            coin['total_gain'] = gain
-
-            closes_for_cache = [float(bar['close']) for bar in daily_bars[-uniformity_days:]]
-            cache.cache_price_data(coin['cg_id'], closes_for_cache, score, gain)
-            app_logger.info(f"      ✅ Score: {score:.1f}, Return: {gain:+.1f}% ({ohlcv_source})")
-        
-        # Combine all processed coins
-        all_processed = cached_coins + [c for c in uncached_coins if 'uniformity_score' in c]
-        all_processed_map = {c['symbol']: c for c in all_processed}
-        for coin in all_processed:
-            compute_data_reliability(coin)
-
-        anomaly_messages = build_anomaly_messages(
-            total_gain_qualified=len(gain_qualified),
-            missing_cg_count=len(coins_without_cg_ids),
+        all_processed, all_processed_map, anomaly_messages = compute_uniformities_from_ohlcv(
+            coins_with_cg_ids,
+            cache=cache,
+            gecko=gecko,
+            history_fallback=history_fallback,
+            settings=settings,
+            app_logger=app_logger,
+            gain_qualified_total=len(gain_qualified),
+            coins_without_cg_ids=coins_without_cg_ids,
             no_ticker_count=no_ticker_count,
-            cg_mapped_count=len(coins_with_cg_ids),
-            processed_ohlcv_count=len(all_processed),
-            max_missing_cg_ratio=settings.anomaly_max_missing_cg_ratio,
-            max_no_ticker_ratio=settings.anomaly_max_no_ticker_ratio,
-            min_ohlcv_success_ratio=settings.anomaly_min_ohlcv_success_ratio,
+            coins_with_cg_count=len(coins_with_cg_ids),
         )
-        if anomaly_messages:
-            app_logger.warning("⚠️ Anomaly detector triggered:")
-            for message in anomaly_messages:
-                app_logger.warning(f"   - {message}")
 
-        # ============================================================
-        # STEP 8: Apply uniformity filter
-        # ============================================================
-        app_logger.info(f"\n📐 FILTER 3: Applying uniformity filter (min: {settings.uniformity_min_score})...")
-        
-        uniformity_passed = []
-        
-        for coin in all_processed:
-            if (
-                'uniformity_score' in coin
-                and coin['uniformity_score'] >= settings.uniformity_min_score
-                and coin['total_gain'] > 0
-            ):
-                uniformity_passed.append(coin)
-                app_logger.info(
-                    f"   ✓ {coin['symbol']}: Score {coin['uniformity_score']:.1f}"
-                )
-            else:
-                app_logger.info(
-                    f"   ❌ {coin['symbol']}: Failed uniformity filter "
-                    f"(score={float(coin.get('uniformity_score', 0.0) or 0.0):.1f})"
-                )
-
-        uniformity_passed_symbols = {c['symbol'] for c in uniformity_passed}
-
-        if settings.regime_filter_enabled:
-            regime_ok, regime_reason, regime_ctx = evaluate_regime_gate(
-                all_cmc_coins,
-                btc_min_30d_gain=settings.regime_filter_btc_min_30d_gain,
-                btc_max_abs_7d_gain=settings.regime_filter_btc_max_abs_7d_gain,
-            )
-            if regime_ok:
-                if regime_ctx:
-                    app_logger.info(
-                        "🌦️ Regime filter pass: btc_7d=%.2f%% btc_30d=%.2f%%",
-                        float(regime_ctx.get("btc_7d", 0.0)),
-                        float(regime_ctx.get("btc_30d", 0.0)),
-                    )
-                else:
-                    app_logger.info("🌦️ Regime filter pass: %s", regime_reason)
-            else:
-                app_logger.warning("🌦️ Regime filter blocked qualification: %s", regime_reason)
-                uniformity_passed = []
-                uniformity_passed_symbols = set()
+        uniformity_passed, uniformity_passed_symbols = apply_uniformity_pass_and_regime(
+            all_processed,
+            all_cmc_coins,
+            settings=settings,
+            app_logger=app_logger,
+        )
 
         # ============================================================
         # STEP 9: Sort and process final results
@@ -583,100 +450,23 @@ def run_scanner():
                         coin['backtest_top_strategies'] = details.get('top_strategies', [])
                         coin['backtest_buy_hold'] = details.get('buy_hold')
 
-        # Attach precise exit reasons based on first failed pipeline stage
-        for coin in exited:
-            symbol = coin['symbol']
-            coin['exited_at'] = datetime.now(timezone.utc).isoformat()
-            coin['cooldown_until'] = (datetime.now(timezone.utc) + timedelta(hours=settings.alert_cooldown_hours)).isoformat()
-
-            if symbol in STABLECOINS:
-                coin['exit_reason'] = "Filtered as stablecoin"
-                continue
-
-            if symbol not in all_symbols_set:
-                coin['exit_reason'] = "No longer listed on target exchanges"
-                continue
-
-            cmc_data, _, _ = resolve_top_coin_data(
-                symbol,
-                top_coins_provider=top_coins_provider,
-                cmc_by_symbol=cmc_by_symbol,
-                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
-                cmc_symbol_aliases=cmc_symbol_aliases,
-                coingecko_id_aliases=coingecko_id_aliases,
-                gecko=gecko,
-                alias_markets_by_id=alias_markets_by_id,
-            )
-            if not cmc_data:
-                if top_coins_provider == 'coingecko':
-                    coin['exit_reason'] = "Missing from current CoinGecko top-coin provider snapshot"
-                else:
-                    coin['exit_reason'] = "Missing from current CoinMarketCap snapshot"
-                continue
-
-            gains = cmc_data['gains']
-            info = cmc_data['info']
-            coin['gain_7d'] = float(gains.get('7d', 0) or 0)
-            coin['gain_30d'] = float(gains.get('30d', 0) or 0)
-            coin['volume_24h'] = float(info.get('volume_24h', 0) or 0)
-
-            if info['volume_24h'] < settings.min_volume:
-                coin['exit_reason'] = (
-                    f"24h volume below threshold (${info['volume_24h']:,.0f} < ${settings.min_volume:,.0f})"
-                )
-                continue
-
-            gain_7d = float(gains.get('7d', 0) or 0)
-            gain_30d = float(gains.get('30d', 0) or 0)
-            min7 = float(settings.gain_filter_min_7d_percent)
-            min30 = float(settings.gain_filter_min_30d_percent)
-            if gain_7d < min7:
-                coin['exit_reason'] = f"7d gain below threshold ({gain_7d:.1f}% < {min7:g}%)"
-                continue
-            if gain_30d <= min30:
-                coin['exit_reason'] = f"30d gain below threshold ({gain_30d:.1f}% ≤ {min30:g}%)"
-                continue
-            if gain_30d <= gain_7d:
-                coin['exit_reason'] = f"30d gain not higher than 7d ({gain_30d:.1f}% ≤ {gain_7d:.1f}%)"
-                continue
-
-            if symbol not in gain_qualified_symbols:
-                coin['exit_reason'] = "Failed gain/volume filter"
-                continue
-
-            if symbol not in coins_with_cg_ids_symbols:
-                coin['exit_reason'] = "No CoinGecko ID mapping"
-                continue
-
-            if symbol not in all_processed_map:
-                coin['exit_reason'] = "Insufficient or missing 30d price history"
-                continue
-
-            processed_coin = all_processed_map[symbol]
-            coin['uniformity_score'] = float(processed_coin.get('uniformity_score', 0) or 0)
-            coin['health_score'] = processed_coin.get('health_score')
-            if processed_coin.get('uniformity_score', 0) < settings.uniformity_min_score:
-                coin['exit_reason'] = (
-                    f"Uniformity score below threshold ({processed_coin.get('uniformity_score', 0):.1f} < {settings.uniformity_min_score})"
-                )
-                continue
-
-            if processed_coin.get('total_gain', 0) <= 0:
-                coin['exit_reason'] = f"30d return non-positive ({processed_coin.get('total_gain', 0):.1f}%)"
-                continue
-
-            if symbol not in uniformity_passed_symbols:
-                coin['exit_reason'] = "Failed final uniformity qualification"
-                continue
-
-            coin['exit_reason'] = "No longer met qualification criteria"
-
-        for coin in exited:
-            active_db.register_exit(
-                coin['symbol'],
-                reason=str(coin.get('exit_reason', 'No longer qualified')),
-                cooldown_hours=settings.alert_cooldown_hours,
-            )
+        attach_exit_reasons_and_register(
+            exited,
+            active_db=active_db,
+            settings=settings,
+            all_symbols_set=all_symbols_set,
+            top_coins_provider=top_coins_provider,
+            cmc_by_symbol=cmc_by_symbol,
+            cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+            cmc_symbol_aliases=cmc_symbol_aliases,
+            coingecko_id_aliases=coingecko_id_aliases,
+            gecko=gecko,
+            alias_markets_by_id=alias_markets_by_id,
+            gain_qualified_symbols=gain_qualified_symbols,
+            coins_with_cg_ids_symbols=coins_with_cg_ids_symbols,
+            all_processed_map=all_processed_map,
+            uniformity_passed_symbols=uniformity_passed_symbols,
+        )
 
         try:
             analytics = update_exit_reason_analytics(settings.exit_analytics_file, exited)

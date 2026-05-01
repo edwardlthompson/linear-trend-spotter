@@ -36,3 +36,8 @@ ignore = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+# Milestone D3: incremental typing on config + notifications (CI: mypy config notifications …).
+[tool.mypy]
+python_version = "3.11"
+explicit_package_bases = true

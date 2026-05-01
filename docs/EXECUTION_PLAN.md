@@ -2,7 +2,7 @@
 
 **Purpose:** Single reference for engineering milestones (code quality, Render pipeline, Telegram links, API cost reduction, modular backtesting for a future web app, public qualified-coin dashboard + PWA + client-side UX).  
 **Living document:** Checkboxes are updated as work completes.  
-**Last reviewed:** 2026-04-30
+**Last reviewed:** 2026-05-01
 
 ---
 
@@ -134,7 +134,7 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** CI job passes.
 - [ ] **A4.** GitHub **branch protection** on `main`: require the CI check before merge.  
   - **Verification:** Repo settings documented in Notes.
-  - **Notes:** Requires org/repo admin in GitHub **Settings → Branches**; cannot be completed from this codebase alone.
+  - **Notes:** Requires org/repo admin in GitHub **Settings → Branches**; cannot be completed from this codebase alone. **Remaining manual step:** follow **Section 6.5** (same checklist as Milestone A4); enable required check matching **`verify`** from `.github/workflows/ci.yml`.
 
 ---
 
@@ -172,8 +172,9 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** `ruff check .` passes in CI/local.
 - [x] **D2.** Pin `requirements.txt` (via `pip freeze` from clean 3.11 env or `pip-tools`).  
   - **Verification:** Fresh venv `pip install -r requirements.txt` succeeds; CI passes.
-- [ ] **D3.** (Optional) `mypy` incremental on `config/` + `notifications/`.  
+- [x] **D3.** (Optional) `mypy` incremental on `config/` + `notifications/`.  
   - **Verification:** `mypy` passes on scoped paths.
+  - **Notes:** CI runs `python -m mypy config notifications --follow-imports=skip --ignore-missing-imports` after `requirements-ci.txt` install (`mypy`, `types-requests`). `[tool.mypy]` in `pyproject.toml` pins Python 3.11; scoped pass avoids pulling full repo graph.
 
 ---
 
@@ -282,9 +283,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 - [x] **I1.** Document `Database.execute` transaction semantics; consider `PRAGMA journal_mode=WAL` where missing for write-heavy DBs.  
   - **Verification:** Doc + optional stress note only.
   - **Notes:** `database/models.py`: class/method docstrings for `execute()` autocommit semantics; `get_connection()` enables **WAL** on `Database` subclasses (`PriceCache` already used WAL).
-- [ ] **I2.** Split `main.py` into modules (pipeline stages) in incremental PRs.  
+- [x] **I2.** Split `main.py` into modules (pipeline stages) in incremental PRs.  
   - **Verification:** CI + import smoke tests pass; behavior unchanged with default config (non-regression).
-  - **Notes:** First extraction: CMC symbol resolution helpers live in `scanner/cmc_resolve.py` (`build_cmc_normalized_lookup`, `resolve_cmc_data`); `main.py` imports them. **2026-04-30:** Tier-B worker notify hook moved to `scanner/web_push_notify.py` (`maybe_notify_web_push_scan`). **2026-05-01:** Event-summary active ranking rows extracted to `scanner/active_ranking.py` (`build_active_ranking_rows`); weekly digest helpers extracted to `scanner/weekly_digest.py` (`load/save state`, `iso_week_key`, `build_weekly_digest_message`); anomaly detector message builder extracted to `scanner/anomaly_alerts.py` (`build_anomaly_messages`); top-coin resolution + CMC notify URL helpers extracted to `scanner/top_coin_resolution.py` (`resolve_top_coin_data`, `ensure_cmc_notify_urls`); rank/signal/volume enrichment extracted to `scanner/coin_enrichment.py` (`attach_rank_movement`, `attach_signal_age`, `attach_volume_acceleration`); ticker/daily-bar processing extracted to `scanner/market_processing.py` (`process_tickers`, `aggregate_daily_bars_from_hourly`); quiet-window toggle helper extracted to `scanner/quiet_hours.py` (`telegram_quiet_active`); initialization/bootstrap block extracted to `scanner/runtime_init.py` (`initialize_runtime_components`). **2026-05-01 (batch 2):** early scan pipeline moved to `scanner/top_coins_stage.py` (`fetch_top_coins_dataset`), `scanner/exchange_universe.py` (`load_exchange_symbol_universe`), `scanner/coingecko_alias_prefetch.py` (`prefetch_alias_markets_by_gecko_id`), `scanner/gain_volume_filter.py` (`apply_gain_volume_filter`), `scanner/listings_and_volumes.py` (listings + CG IDs + exchange volume hydration). Uniformity through Telegram/artifacts remain in `main.py` for a later split.
+  - **Notes:** Pipeline helpers live under `scanner/` (see appendix row **I2 / pipeline**). **2026-05-01 (batch 3):** OHLCV uniformity + anomaly summary + uniformity/regime gate → `scanner/uniformity_stages.py` (`compute_uniformities_from_ohlcv`, `apply_uniformity_pass_and_regime`); exit reasons + `register_exit` → `scanner/exit_pipeline.py` (`attach_exit_reasons_and_register`). Remaining `main.py` body is orchestration (backtests, enrichment, Telegram, artifacts, metrics)—acceptable thin-shell entrypoint per Milestone I intent.
 
 ---
 
@@ -633,7 +634,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Code-deliverable milestones in this plan are complete except **A4** (branch protection), which requires a repo admin in GitHub **Settings → Branches** (see **Section 6.5**). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -644,12 +645,12 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | A | CI + Render guardrails | **A1–A2** done; **A4** needs GitHub admin (branch protection) |
 | B | Exceptions | Complete |
 | C | Telegram robustness | Complete |
-| D | Pins + Ruff/Mypy | Complete (**D3** mypy optional) |
+| D | Pins + Ruff/Mypy | Complete (**D3** mypy on `config/` + `notifications/`) |
 | E | Cross-platform | Complete |
 | F | Logging | Complete |
 | G | CMC links in Telegram | Complete (**G8** CG→CMC slug map + cache) |
 | H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
-| I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
+| I | DB docs / main split | **I1–I2** done (`main.py` orchestration + `scanner/` pipeline modules) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
 | K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
 | L | Data & strategy | **L0–L4** done |
@@ -673,12 +674,13 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 |------|--------|
 | CI gate + CoinGecko H0 counters | `scripts/check_github_ci.py`, `utils/coingecko_usage.py`, `utils/metrics.py` (report section) |
 | Gain filter (L0) | `scanner/gain_volume_filter.py` (`apply_gain_volume_filter`); `GAIN_FILTER_MIN_*` in `config/settings.py` |
+| Incremental mypy (D3) | `scripts/ci_verify.sh`; `mypy config notifications …`; `[tool.mypy]` in `pyproject.toml`; `requirements-ci.txt` (`mypy`, `types-requests`) |
 | OHLCV min bars (L1) | `OHLCV_MIN_*` in `config/settings.py`; `backtesting/data_loader.py` |
 | Symbol quality line (L2) | **`NOTIFICATION_SYMBOL_QUALITY_LINE`**; `notifications/formatter.py` |
 | Watchlist export (L3) | **`WATCHLIST_EXPORT_*`**; `utils/watchlist_export.py`; `main.py`; `scripts/export_watchlist.py` |
 | Telegram diagnostics (K1) | `telegram_bot.py`; **`SCANNER_DIAG_COMMANDS_ENABLED`** in `config.json` |
 | Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
-| OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
+| OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `scanner/uniformity_stages.py` (scanner uniformity OHLCV path), `database/cache.py` |
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
 | Backtest library surface | `backtesting/*` (incl. `params.py` P2), `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
@@ -688,5 +690,5 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Multi-portfolio simulation (O1) | `utils/portfolio_multi.py`, `main.py`, `PORTFOLIO_MULTI_SIM_*` in `config/settings.py` |
 | Regime filter (O2) | `scanner/regime_filter.py`, `main.py`, `REGIME_FILTER_*` in `config/settings.py` |
 | Alert backtest report (O3) | `utils/alert_backtest_report.py`, `main.py`, `ALERT_BACKTEST_REPORT_*` in `config/settings.py` |
-| CMC resolve + web push + early pipeline + active ranking + weekly digest + anomaly + enrichment + market/quiet/runtime init (I2 steps) | `scanner/cmc_resolve.py`, `scanner/top_coins_stage.py`, `scanner/exchange_universe.py`, `scanner/coingecko_alias_prefetch.py`, `scanner/gain_volume_filter.py`, `scanner/listings_and_volumes.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py`, `scanner/weekly_digest.py`, `scanner/anomaly_alerts.py`, `scanner/top_coin_resolution.py`, `scanner/coin_enrichment.py`, `scanner/market_processing.py`, `scanner/quiet_hours.py`, `scanner/runtime_init.py` |
+| CMC resolve + web push + early pipeline + uniformity + exits + active ranking + weekly digest + anomaly + enrichment + market/quiet/runtime init (I2) | `scanner/cmc_resolve.py`, `scanner/top_coins_stage.py`, `scanner/exchange_universe.py`, `scanner/coingecko_alias_prefetch.py`, `scanner/gain_volume_filter.py`, `scanner/listings_and_volumes.py`, `scanner/uniformity_stages.py`, `scanner/exit_pipeline.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py`, `scanner/weekly_digest.py`, `scanner/anomaly_alerts.py`, `scanner/top_coin_resolution.py`, `scanner/coin_enrichment.py`, `scanner/market_processing.py`, `scanner/quiet_hours.py`, `scanner/runtime_init.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |

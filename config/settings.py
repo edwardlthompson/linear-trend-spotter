@@ -296,14 +296,14 @@ class Settings:
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
-        for number_key, lower, upper in [
+        for number_key, num_lower, num_upper in [
             ('ANOMALY_MAX_MISSING_CG_RATIO', 0.0, 1.0),
             ('ANOMALY_MIN_OHLCV_SUCCESS_RATIO', 0.0, 1.0),
             ('ANOMALY_MAX_NO_TICKER_RATIO', 0.0, 1.0),
             ('REGIME_FILTER_BTC_MIN_30D_GAIN', -100.0, 500.0),
             ('REGIME_FILTER_BTC_MAX_ABS_7D_GAIN', 0.0, 500.0),
         ]:
-            require_number(number_key, min_value=lower, max_value=upper)
+            require_number(number_key, min_value=num_lower, max_value=num_upper)
 
         require_number('GAIN_FILTER_MIN_7D_PERCENT', min_value=-100.0, max_value=500.0)
         require_number('GAIN_FILTER_MIN_30D_PERCENT', min_value=-100.0, max_value=500.0)

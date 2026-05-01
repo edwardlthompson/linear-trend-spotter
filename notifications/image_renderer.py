@@ -7,7 +7,7 @@ import sqlite3
 import textwrap
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -65,6 +65,8 @@ def _format_money(value: Optional[float]) -> str:
 
 def _resolve_trailing_stop_pct(item: Dict) -> float:
     raw_value = item.get("trailing_stop_loss_pct", item.get("trailing_stop_pct"))
+    if raw_value is None:
+        return 1.0
     try:
         value = float(raw_value)
     except Exception:
@@ -517,11 +519,9 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
 
 
         # 3a. Pre-calculate Backtest Results to get Dynamic Display Window
-
-        # 3a. Pre-calculate Backtest Results to get Dynamic Display Window
-        start_idx = max(0, len(chart_points) - 144) 
-        buy_signals = []
-        sell_signals = []
+        start_idx = max(0, len(chart_points) - 144)
+        buy_signals: list[Any] = []
+        sell_signals: list[Any] = []
         run_result = None
         
         if top_strategies:

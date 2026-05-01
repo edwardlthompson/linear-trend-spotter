@@ -246,7 +246,8 @@ class MessageFormatter:
         if isinstance(current_rank, int):
             if isinstance(previous_rank, int) and rank_status in {'up', 'down', 'flat'}:
                 arrow = '↑' if rank_status == 'up' else '↓' if rank_status == 'down' else '→'
-                change_text = '' if rank_delta in (None, 0) else f" ({abs(int(rank_delta))})"
+                rd = rank_delta if isinstance(rank_delta, (int, float)) else 0
+                change_text = '' if rank_delta in (None, 0) else f" ({abs(int(rd))})"
                 caption += f"🏁 Rank: #{current_rank} {arrow} from #{previous_rank}{change_text}\n"
             else:
                 caption += f"🏁 Rank: #{current_rank} (new)\n"
