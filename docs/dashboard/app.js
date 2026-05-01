@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * expandable rows; stale banner; theme (Q15); export (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts. Snapshot: ?api=… or window.__SNAPSHOT_URL__.
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   const POLL_INTERVAL_MS = 15 * 60 * 1000;
@@ -80,6 +80,7 @@
   const elThemeCycle = document.getElementById("themeCycleBtn");
   const elExportCsv = document.getElementById("exportCsvBtn");
   const elExportJson = document.getElementById("exportJsonBtn");
+  const elPushTierB = document.getElementById("pushTierBBtn");
 
   let pollTimer = null;
   let notifyAlertsEnabled = false;
@@ -103,6 +104,106 @@
 
   function getSnapshotUrl() {
     return (elInput && elInput.value.trim()) || snapshotUrl || "";
+  }
+
+  function pushApiBase() {
+    return String(window.__PUSH_API_BASE__ || "")
+      .trim()
+      .replace(/\/+$/, "");
+  }
+
+  function vapidPublicKey() {
+    return String(window.__VAPID_PUBLIC_KEY__ || "").trim();
+  }
+
+  function pushSubscribeToken() {
+    return String(window.__PUSH_SUBSCRIBE_TOKEN__ || "").trim();
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  function pushTierBAvailable() {
+    return (
+      "serviceWorker" in navigator &&
+      "PushManager" in window &&
+      !!pushApiBase() &&
+      !!vapidPublicKey()
+    );
+  }
+
+  async function refreshPushTierBLabel() {
+    if (!elPushTierB || !pushTierBAvailable()) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      elPushTierB.textContent = sub ? "Disable remote scan push" : "Enable remote scan push";
+    } catch (e) {
+      console.warn("push tier-B state", e);
+    }
+  }
+
+  function syncPushTierBVisibility() {
+    if (!elPushTierB) return;
+    if (!pushTierBAvailable()) {
+      elPushTierB.hidden = true;
+      return;
+    }
+    elPushTierB.hidden = false;
+    void refreshPushTierBLabel();
+  }
+
+  async function tierBUnsubscribeRemote() {
+    const base = pushApiBase();
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    const ep = sub.endpoint;
+    await sub.unsubscribe();
+    const headers = { "Content-Type": "application/json" };
+    const t = pushSubscribeToken();
+    if (t) headers.Authorization = `Bearer ${t}`;
+    const body = { endpoint: ep };
+    if (t) body.token = t;
+    const res = await fetch(`${base}/v1/unsubscribe`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      credentials: "omit",
+    });
+    if (!res.ok) console.warn("push unsubscribe relay HTTP", res.status);
+  }
+
+  async function tierBSubscribeRemote() {
+    const base = pushApiBase();
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey()),
+    });
+    const headers = { "Content-Type": "application/json" };
+    const t = pushSubscribeToken();
+    if (t) headers.Authorization = `Bearer ${t}`;
+    const payload = { subscription: sub.toJSON() };
+    if (t) payload.token = t;
+    const res = await fetch(`${base}/v1/subscribe`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      credentials: "omit",
+    });
+    if (!res.ok) {
+      await sub.unsubscribe().catch(() => {});
+      throw new Error(`Push subscribe relay HTTP ${res.status}`);
+    }
   }
 
   function showError(msg) {
@@ -761,11 +862,52 @@
       startPoll();
       elMeta.textContent =
         (elMeta.textContent || "") + " · Update alerts on (poll every 15 min)";
+      syncPushTierBVisibility();
+      void refreshPushTierBLabel();
+    });
+  }
+
+  if (elPushTierB) {
+    elPushTierB.addEventListener("click", async () => {
+      if (!pushTierBAvailable()) return;
+      if (!("Notification" in window)) {
+        showError("Browser notifications are not supported here.");
+        return;
+      }
+      let perm = Notification.permission;
+      if (perm === "default") {
+        perm = await Notification.requestPermission();
+      }
+      if (perm !== "granted") {
+        showError(
+          "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
+        );
+        return;
+      }
+      await registerServiceWorker();
+      clearError();
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+          await tierBUnsubscribeRemote();
+        } else {
+          await tierBSubscribeRemote();
+        }
+        await refreshPushTierBLabel();
+      } catch (e) {
+        showError(String(e && e.message ? e.message : e));
+        await refreshPushTierBLabel();
+      }
     });
   }
 
   window.addEventListener("load", () => {
-    registerServiceWorker();
+    void (async () => {
+      await registerServiceWorker();
+      syncPushTierBVisibility();
+      await refreshPushTierBLabel();
+    })();
   });
 
   document.addEventListener("visibilitychange", () => {

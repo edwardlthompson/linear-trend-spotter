@@ -5,7 +5,9 @@ import sys
 import json
 import io
 from html import escape as html_escape
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
+from urllib.request import Request, urlopen
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -33,6 +35,43 @@ from notifications.image_renderer import (
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
+
+
+def _maybe_notify_web_push_scan() -> None:
+    """Q21 Tier-B: POST to optional push relay (no market HTTP; best-effort)."""
+    base = os.getenv("WEB_PUSH_NOTIFY_URL", "").strip().rstrip("/")
+    secret = os.getenv("WEB_PUSH_INTERNAL_SECRET", "").strip()
+    if not base or not secret:
+        return
+    dashboard_url = os.getenv("WEB_PUSH_DASHBOARD_URL", "").strip()
+    body = json.dumps(
+        {
+            "title": "Linear Trend Spotter",
+            "body": "Scan updated — open the qualified dashboard for the latest snapshot.",
+            "url": dashboard_url or "",
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    req = Request(
+        f"{base}/internal/notify-scan",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {secret}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urlopen(req, timeout=45) as resp:
+            _ = resp.read()
+        app_logger.info("🔔 Web push relay notified (Tier B)")
+    except HTTPError as he:
+        app_logger.warning("⚠️ Web push relay HTTP %s: %s", he.code, he.reason)
+    except URLError as ue:
+        app_logger.warning("⚠️ Web push relay failed: %s", ue)
+    except Exception as wp_err:
+        app_logger.warning("⚠️ Web push relay failed: %s", wp_err)
 from backtesting.signals import generate_indicator_signals
 from utils.insights import (
     compute_data_reliability,
@@ -1721,6 +1760,8 @@ def run_scanner():
                 app_logger.info("📤 Public qualified snapshot written")
             except Exception as snap_err:
                 app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+
+        _maybe_notify_web_push_scan()
 
         app_logger.info("\n✅ Scan complete")
         

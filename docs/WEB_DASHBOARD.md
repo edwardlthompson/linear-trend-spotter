@@ -34,7 +34,28 @@ Implemented under `docs/dashboard/`:
 - **Tier-A alerts:** **Enable update alerts** in the UI requests notification permission, registers the SW, then polls the snapshot URL every **15 minutes** (and on `visibilitychange` when the tab wakes). A **SHA-256** digest of the snapshot body is compared to the previous fetch (`localStorage` key `qualified_dash_last_snap_digest`); on change, **`registration.showNotification`** is used when the SW is active.
 - **iOS Safari:** Web Notifications are limited; users often need **Add to Home Screen** and a user gesture. The dashboard shows a short hint if permission is not granted.
 
-Tier-B Web Push (**Q21**) still requires a separate subscription endpoint and is not covered here.
+### Tier-B Web Push (Q21)
+
+Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere), **not** the scanner worker. The worker only does **one** `POST` per successful scan to `/internal/notify-scan` when `WEB_PUSH_NOTIFY_URL` and `WEB_PUSH_INTERNAL_SECRET` are set (**no** CoinGecko or other market calls on that path). The push **body** is fixed copy plus a **dashboard URL** from `WEB_PUSH_DASHBOARD_URL` — **no** market data or coin list in the notification payload.
+
+**Relay service**
+
+- Deploy from repo root `push_server/` (see root `render.yaml` blueprint fragment `linear-trend-spotter-push`).
+- Env on the relay: **`VAPID_PRIVATE_KEY`**, **`VAPID_CONTACT_EMAIL`** (mailto claim), **`WEB_PUSH_INTERNAL_SECRET`** (Bearer for internal notify), optional **`WEB_PUSH_SUBSCRIBE_TOKEN`** (Bearer or JSON `token` on subscribe/unsubscribe), **`WEB_PUSH_CORS_ORIGINS`** (e.g. `*` or your GitHub Pages origin), **`PUSH_SUBSCRIPTIONS_FILE`** (default JSON on disk — **ephemeral** on free web unless you add persistent disk).
+- Generate keys, for example: `npx web-push generate-vapid-keys` ([web-push-libs](https://github.com/web-push-libs/web-push)) — put **public** key in dashboard `config.js` as `window.__VAPID_PUBLIC_KEY__`, **private** only on the relay.
+
+**Worker**
+
+- Set **`WEB_PUSH_NOTIFY_URL`** to the relay origin (no path), **`WEB_PUSH_INTERNAL_SECRET`** to the same value as on the relay, and **`WEB_PUSH_DASHBOARD_URL`** to the page users should open (e.g. your GitHub Pages qualified dashboard URL).
+
+**Dashboard**
+
+- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **Enable remote scan push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits).
+
+**Privacy / rate**
+
+- Subscriptions are **endpoint URLs and keys** stored by your relay — disclose in your privacy policy if you ship this to users.
+- **Rate:** at most **one** relay request per completed scan per worker; the relay sends **at most one** push per stored subscription per notify call (no client-driven burst).
 
 ## New / dropped since last visit (Q10)
 

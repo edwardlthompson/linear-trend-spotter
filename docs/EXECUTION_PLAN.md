@@ -564,8 +564,9 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
   - **Verification:** Minimal snapshot still renders; extended snapshot shows strip.
   - **Notes:** `main.py` passes wall-clock duration, `len(all_symbols)`, and the sum of **`metrics.get_summary()` `errors`** counts into **`write_public_qualified_snapshot`**; dashboard **`#healthStrip`**; schema updated; SW **`CACHE_VERSION`** bumped.
 
-- [ ] **Q21.** **Tier-B Web Push:** minimal **Render** (or other) endpoint: store `pushSubscription` JSON per client (privacy policy required), VAPID keys in env, send **one** Web Push after each scan when subscriptions exist (payload: “Scan updated” + link to dashboard). Document rate limits and **no** market data in push body.  
+- [x] **Q21.** **Tier-B Web Push:** minimal **Render** (or other) endpoint: store `pushSubscription` JSON per client (privacy policy required), VAPID keys in env, send **one** Web Push after each scan when subscriptions exist (payload: “Scan updated” + link to dashboard). Document rate limits and **no** market data in push body.  
   - **Verification:** Test push received on at least one browser after scan hook; unsub flow works; **H0** confirms no extra CoinGecko calls from push path.
+  - **Notes:** `push_server/app.py` (Flask + `pywebpush`, `gunicorn`); `render.yaml` second web service + worker env `WEB_PUSH_*`; `main.py` `_maybe_notify_web_push_scan()`; dashboard **`#pushTierBBtn`** + `__PUSH_API_BASE__` / `__VAPID_PUBLIC_KEY__`; `docs/dashboard/sw.js` **`push`** / **`notificationclick`**, **`CACHE_VERSION`** v10; `docs/WEB_DASHBOARD.md` Tier-B section.
 
 ---
 
@@ -626,7 +627,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, **Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -650,7 +651,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
 | P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q20** done; **Q21** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 
@@ -675,7 +676,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
 | Backtest library surface | `backtesting/*`, `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
-| Public dashboard + PWA + UX | `main.py` (writer hook), `DATA_DIR/qualified_public_snapshot.json`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
+| Public dashboard + PWA + UX | `main.py` (writer + optional Tier-B notify), `DATA_DIR/qualified_public_snapshot.json`, `push_server/`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
 | Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
 | CMC resolve (I2 step) | `scanner/cmc_resolve.py` |

@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["tests*", "scripts*", "docs*", ".venv*", "venv*", "build*", "dist*"]
+exclude = ["tests*", "scripts*", "docs*", "push_server*", ".venv*", "venv*", "build*", "dist*"]
 
 [tool.ruff]
 target-version = "py311"

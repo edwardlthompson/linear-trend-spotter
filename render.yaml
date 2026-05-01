@@ -30,7 +30,40 @@ services:
         sync: false
       - key: CHART_IMG_API_KEY
         sync: false
+      - key: WEB_PUSH_NOTIFY_URL
+        sync: false
+      - key: WEB_PUSH_INTERNAL_SECRET
+        sync: false
+      - key: WEB_PUSH_DASHBOARD_URL
+        sync: false
     disk:
       name: app-data
       mountPath: /var/data
       sizeGB: 10
+
+  # Tier-B Web Push relay (Q21): deploy once, set VAPID_* and WEB_PUSH_INTERNAL_SECRET in dashboard.
+  - type: web
+    name: linear-trend-spotter-push
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: commit
+    rootDir: push_server
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: PUSH_SUBSCRIPTIONS_FILE
+        value: /tmp/push_subscriptions.json
+      - key: WEB_PUSH_CORS_ORIGINS
+        value: "*"
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_CONTACT_EMAIL
+        sync: false
+      - key: WEB_PUSH_INTERNAL_SECRET
+        sync: false
+      - key: WEB_PUSH_SUBSCRIBE_TOKEN
+        sync: false
