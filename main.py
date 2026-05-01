@@ -41,6 +41,7 @@ from utils.scan_artifacts import (
 )
 from utils.scan_costs import read_last_completed_coingecko_http_total, write_scan_costs_file
 from utils.watchlist_export import compute_watchlist_rows, write_watchlist_exports
+from utils.portfolio_multi import write_multi_portfolio_simulation
 from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
@@ -972,7 +973,7 @@ def run_scanner():
                 app_logger.info("📋 Watchlist export written (%s row(s))", len(watchlist_rows))
             except Exception as export_err:
                 app_logger.warning("⚠️ Watchlist export failed: %s", export_err)
-        update_scanner_insights(
+        insights_payload = update_scanner_insights(
             settings.scanner_insights_file,
             final_results=final_results,
             all_processed=all_processed,
@@ -988,6 +989,16 @@ def run_scanner():
             portfolio_starting_capital=settings.portfolio_sim_starting_capital,
         )
         app_logger.info("🧭 Insights updated")
+        if settings.portfolio_multi_sim_enabled:
+            try:
+                write_multi_portfolio_simulation(
+                    path=settings.portfolio_multi_sim_file,
+                    insights_payload=insights_payload,
+                    capitals=settings.portfolio_multi_sim_capitals,
+                )
+                app_logger.info("🧮 Multi-portfolio simulation updated")
+            except Exception as multi_sim_err:
+                app_logger.warning("⚠️ Multi-portfolio simulation update failed: %s", multi_sim_err)
         
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images

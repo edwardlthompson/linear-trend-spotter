@@ -47,8 +47,16 @@
     "NOTIFICATION_INCLUDE_QUALITY_PANEL": true,
     "ALERT_COOLDOWN_HOURS": 6,
     "EXIT_ANALYTICS_FILE": "exit_reason_analytics.json",
+    "PORTFOLIO_MULTI_SIM_ENABLED": false,
+    "PORTFOLIO_MULTI_SIM_FILE": "portfolio_multi_simulation.json",
+    "PORTFOLIO_MULTI_SIM_CAPITALS": [1000, 5000, 10000],
     "SCAN_HEARTBEAT_ENABLED": false,
     "SCAN_HEARTBEAT_FILE": "scan_heartbeat.json",
     "PUBLIC_QUALIFIED_SNAPSHOT_ENABLED": false,
-    "PUBLIC_QUALIFIED_SNAPSHOT_FILE": "qualified_public_snapshot.json"
+    "PUBLIC_QUALIFIED_SNAPSHOT_FILE": "qualified_public_snapshot.json",
+    "TELEGRAM_BOT_MODE": "polling",
+    "TELEGRAM_WEBHOOK_PORT": 8080,
+    "TELEGRAM_WEBHOOK_PATH": "/telegram/webhook",
+    "TELEGRAM_WEBHOOK_URL": "",
+    "TELEGRAM_WEBHOOK_SECRET_TOKEN": ""
 }

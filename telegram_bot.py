@@ -11,6 +11,7 @@ import html
 import time
 import requests
 from pathlib import Path
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -43,6 +44,7 @@ class TelegramBotHandler:
         
         # Polling interval (seconds)
         self.poll_interval = 2
+        self.bot_mode = settings.telegram_bot_mode
         
         self.logger.info("Telegram Bot Handler initialized")
 
@@ -205,10 +207,114 @@ class TelegramBotHandler:
                 ]
             ]
         }
+
+    def _set_webhook(self) -> None:
+        if not settings.telegram_webhook_url:
+            raise RuntimeError("TELEGRAM_WEBHOOK_URL is required when TELEGRAM_BOT_MODE=webhook")
+        url = f"https://api.telegram.org/bot{settings.telegram['bot_token']}/setWebhook"
+        params = {
+            "url": settings.telegram_webhook_url.rstrip("/") + settings.telegram_webhook_path,
+        }
+        if settings.telegram_webhook_secret_token:
+            params["secret_token"] = settings.telegram_webhook_secret_token
+        resp = requests.get(url, params=params, timeout=20)
+        resp.raise_for_status()
+        payload = resp.json()
+        if not payload.get("ok"):
+            raise RuntimeError(f"setWebhook failed: {payload.get('description')}")
+
+    def _clear_webhook(self) -> None:
+        url = f"https://api.telegram.org/bot{settings.telegram['bot_token']}/deleteWebhook"
+        try:
+            requests.get(url, params={"drop_pending_updates": "false"}, timeout=20)
+        except Exception:
+            pass
+
+    def _process_message(self, message: dict) -> None:
+        chat_id = message.get('chat', {}).get('id')
+
+        # Security check: verify sender
+        if str(chat_id) != str(settings.telegram['chat_id']):
+            self.logger.warning(f"Ignored message from unauthorized chat: {chat_id}")
+            return
+
+        text_raw = message.get('text', '')
+        cmd = text_raw.strip().split()[0].split("@", 1)[0].lower() if text_raw.strip() else ''
+
+        if cmd == '/start':
+            welcome = (
+                "🤖 <b>Welcome to Linear Trend Spotter Bot!</b>\n\n"
+                "Use the interactive buttons below to navigate."
+            )
+            self.telegram.send_message(welcome, reply_markup=self._get_main_keyboard())
+
+        elif cmd == '/status':
+            status_msg = self._get_status_text()
+            markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "status"}]]}
+            self.telegram.send_message(status_msg, reply_markup=markup)
+
+        elif cmd == '/list':
+            msg_text, markup = self._get_list_text_markup(0)
+            self.telegram.send_message(msg_text, reply_markup=markup)
+
+        elif settings.scanner_diag_commands_enabled and cmd in ('/health', '/last', '/cost'):
+            if cmd == '/health':
+                self.telegram.send_message(self._diag_health_text())
+            elif cmd == '/last':
+                self.telegram.send_message(self._diag_last_text())
+            else:
+                self.telegram.send_message(self._diag_cost_text())
+
+        elif cmd == '/help':
+            help_lines = [
+                "🤖 <b>Linear Trend Spotter Commands:</b>\n",
+                "/start - Welcome interactive menu",
+                "/status - Show current qualified coins",
+                "/list - List all tracked coins",
+                "/help - Show this help",
+            ]
+            if settings.scanner_diag_commands_enabled:
+                help_lines.extend(
+                    [
+                        "/health - Heartbeat + last metrics coins_processed",
+                        "/last - Last metrics.json row summary",
+                        "/cost - CoinGecko HTTP counters from last metrics row",
+                    ]
+                )
+            self.telegram.send_message("\n".join(help_lines))
+
+    def _process_callback_query(self, query: dict) -> None:
+        chat_id = query.get('message', {}).get('chat', {}).get('id')
+        if str(chat_id) != str(settings.telegram['chat_id']):
+            self.logger.warning(f"Ignored callback from unauthorized chat: {chat_id}")
+            return
+
+        cb_id = query['id']
+        cb_data = query.get('data', '')
+        msg_id = query.get('message', {}).get('message_id')
+
+        if cb_data == 'status':
+            status_msg = self._get_status_text()
+            markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "status"}]]}
+            self.telegram.edit_message_text(msg_id, status_msg, reply_markup=markup)
+            self.telegram.answer_callback_query(cb_id, text="Status Refreshed!")
+
+        elif cb_data.startswith('list_'):
+            page = int(cb_data.split('_')[1])
+            msg_text, markup = self._get_list_text_markup(page)
+            self.telegram.edit_message_text(msg_id, msg_text, reply_markup=markup)
+            self.telegram.answer_callback_query(cb_id)
+
+    def process_update(self, update: dict) -> None:
+        if 'message' in update and 'text' in update['message']:
+            self._process_message(update['message'])
+        elif 'callback_query' in update:
+            self._process_callback_query(update['callback_query'])
     
     def run_polling(self):
         """Run polling loop to handle commands"""
         self.logger.info("Starting Telegram bot polling...")
+        self._clear_webhook()
         last_update_id = 0
         
         while True:
@@ -218,85 +324,7 @@ class TelegramBotHandler:
                 for update in updates:
                     update_id = update['update_id']
                     last_update_id = update_id
-                    
-                    if 'message' in update and 'text' in update['message']:
-                        message = update['message']
-                        chat_id = message.get('chat', {}).get('id')
-                        
-                        # Security check: verify sender
-                        if str(chat_id) != str(settings.telegram['chat_id']):
-                            self.logger.warning(f"Ignored message from unauthorized chat: {chat_id}")
-                            continue
-                            
-                        text_raw = message['text']
-                        cmd = text_raw.strip().split()[0].split("@", 1)[0].lower()
-
-                        if cmd == '/start':
-                            welcome = (
-                                "🤖 <b>Welcome to Linear Trend Spotter Bot!</b>\n\n"
-                                "Use the interactive buttons below to navigate."
-                            )
-                            self.telegram.send_message(welcome, reply_markup=self._get_main_keyboard())
-                        
-                        elif cmd == '/status':
-                            status_msg = self._get_status_text()
-                            markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "status"}]]}
-                            self.telegram.send_message(status_msg, reply_markup=markup)
-                        
-                        elif cmd == '/list':
-                            msg_text, markup = self._get_list_text_markup(0)
-                            self.telegram.send_message(msg_text, reply_markup=markup)
-                        
-                        elif settings.scanner_diag_commands_enabled and cmd in ('/health', '/last', '/cost'):
-                            if cmd == '/health':
-                                self.telegram.send_message(self._diag_health_text())
-                            elif cmd == '/last':
-                                self.telegram.send_message(self._diag_last_text())
-                            else:
-                                self.telegram.send_message(self._diag_cost_text())
-
-                        elif cmd == '/help':
-                            help_lines = [
-                                "🤖 <b>Linear Trend Spotter Commands:</b>\n",
-                                "/start - Welcome interactive menu",
-                                "/status - Show current qualified coins",
-                                "/list - List all tracked coins",
-                                "/help - Show this help",
-                            ]
-                            if settings.scanner_diag_commands_enabled:
-                                help_lines.extend(
-                                    [
-                                        "/health - Heartbeat + last metrics coins_processed",
-                                        "/last - Last metrics.json row summary",
-                                        "/cost - CoinGecko HTTP counters from last metrics row",
-                                    ]
-                                )
-                            self.telegram.send_message("\n".join(help_lines))
-                    
-                    elif 'callback_query' in update:
-                        query = update['callback_query']
-                        chat_id = query.get('message', {}).get('chat', {}).get('id')
-                        
-                        # Security check: verify sender
-                        if str(chat_id) != str(settings.telegram['chat_id']):
-                            self.logger.warning(f"Ignored callback from unauthorized chat: {chat_id}")
-                            continue
-                            
-                        cb_id = query['id']
-                        cb_data = query.get('data', '')
-                        msg_id = query.get('message', {}).get('message_id')
-                        
-                        if cb_data == 'status':
-                            status_msg = self._get_status_text()
-                            markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "status"}]]}
-                            self.telegram.edit_message_text(msg_id, status_msg, reply_markup=markup)
-                            self.telegram.answer_callback_query(cb_id, text="Status Refreshed!")
-                            
-                        elif cb_data.startswith('list_'):
-                            page = int(cb_data.split('_')[1])
-                            msg_text, markup = self._get_list_text_markup(page)
-                            self.telegram.edit_message_text(msg_id, msg_text, reply_markup=markup)
-                            self.telegram.answer_callback_query(cb_id)
+                    self.process_update(update)
                 
                 time.sleep(self.poll_interval)
                 
@@ -307,9 +335,69 @@ class TelegramBotHandler:
                 self.logger.error(f"Error in polling loop: {e}")
                 time.sleep(10)
 
+    def run_webhook(self):
+        """Run webhook mode (optional)."""
+        self._set_webhook()
+        self.logger.info(
+            "Starting Telegram webhook server on 0.0.0.0:%s%s",
+            settings.telegram_webhook_port,
+            settings.telegram_webhook_path,
+        )
+
+        parent = self
+        expected_path = settings.telegram_webhook_path
+        expected_secret = settings.telegram_webhook_secret_token
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                if self.path == "/health":
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def do_POST(self):  # noqa: N802
+                if self.path != expected_path:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                if expected_secret:
+                    got = self.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+                    if got != expected_secret:
+                        self.send_response(403)
+                        self.end_headers()
+                        return
+                length = int(self.headers.get("Content-Length", "0") or 0)
+                raw = self.rfile.read(length) if length > 0 else b"{}"
+                try:
+                    update = json.loads(raw.decode("utf-8"))
+                    if isinstance(update, dict):
+                        parent.process_update(update)
+                except Exception as exc:
+                    parent.logger.error("Webhook update parse/process error: %s", exc)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            def log_message(self, format, *args):  # noqa: A003
+                return
+
+        server = ThreadingHTTPServer(("0.0.0.0", settings.telegram_webhook_port), Handler)
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            self.logger.info("Stopping webhook server...")
+        finally:
+            server.server_close()
+
 def main():
     handler = TelegramBotHandler()
-    handler.run_polling()
+    if handler.bot_mode == "webhook":
+        handler.run_webhook()
+    else:
+        handler.run_polling()
 
 if __name__ == "__main__":
     main()

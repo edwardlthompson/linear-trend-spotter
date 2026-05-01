@@ -407,6 +407,16 @@ Useful operational scripts in this repo:
 - `update_exchanges.py` — exchange listing refresh
 - `update_mappings.py` — mapping refresh
 
+Telegram bot runtime mode (`telegram_bot.py`):
+
+- Default **polling** mode (Render-friendly): set `TELEGRAM_BOT_MODE` to `polling` (or leave unset).
+- Optional **webhook** mode: set `TELEGRAM_BOT_MODE` to `webhook` and configure:
+  - `TELEGRAM_WEBHOOK_URL` (public HTTPS base, no trailing path, e.g. `https://example.com`)
+  - `TELEGRAM_WEBHOOK_PATH` (default `/telegram/webhook`)
+  - `TELEGRAM_WEBHOOK_PORT` (default `8080`)
+  - `TELEGRAM_WEBHOOK_SECRET_TOKEN` (optional, validated from `X-Telegram-Bot-Api-Secret-Token`)
+- Polling mode automatically calls Telegram `deleteWebhook` to preserve legacy behavior.
+
 Suggested cadence:
 
 - Scanner: hourly

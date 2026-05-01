@@ -394,8 +394,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** CI job passes on clean repo; documented false positives.
   - **Notes:** `.github/workflows/ci.yml` job **`gitleaks`** (`gitleaks/gitleaks-action@v2`, `fetch-depth: 0`). **Push protection** for secrets is still **repo/org admin** in GitHub **Settings → Code security** (not automatable from this repo).
 
-- [ ] **N2.** **Telegram webhook mode (optional):** config to use webhook instead of long polling; **default remains long polling** (Render-compatible).  
+- [x] **N2.** **Telegram webhook mode (optional):** config to use webhook instead of long polling; **default remains long polling** (Render-compatible).  
   - **Verification:** Default: existing worker behavior; webhook path documented separately if not used on Render.
+  - **Notes:** `telegram_bot.py` supports `TELEGRAM_BOT_MODE` = `polling` (default) or `webhook`; webhook mode sets Telegram webhook on startup, serves `POST` updates via built-in `ThreadingHTTPServer`, and checks optional `X-Telegram-Bot-Api-Secret-Token`. Added config keys in `config/settings.py` + `config.json.example`: `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_PATH`, `TELEGRAM_WEBHOOK_PORT`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`. Polling mode explicitly clears webhook to preserve previous behavior.
 
 ---
 
@@ -405,8 +406,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ### Tasks
 
-- [ ] **O1.** **Multi-portfolio simulation** in insights layer (additional metrics file); default off.  
+- [x] **O1.** **Multi-portfolio simulation** in insights layer (additional metrics file); default off.  
   - **Verification:** Off → no extra IO; on → file written; scan interval/universe unchanged.
+  - **Notes:** Added optional artifact writer `utils/portfolio_multi.py` (`write_multi_portfolio_simulation`) driven by the existing `scanner_insights` portfolio simulation growth factor. New config in `config/settings.py` + `config.json.example`: `PORTFOLIO_MULTI_SIM_ENABLED` (default false), `PORTFOLIO_MULTI_SIM_FILE`, `PORTFOLIO_MULTI_SIM_CAPITALS`. `main.py` writes the additional file only when enabled; no Telegram side effects.
 
 - [ ] **O2.** **Regime filter** (e.g. BTC dominance / vol) as **optional** qualification gate; `config` default **false**.  
   - **Verification:** Default false → bit-for-bit same qualification as baseline on sample run.
@@ -650,8 +652,8 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
 | L | Data & strategy | **L0–L4** done |
 | M | Engineering quality | **M1** pytest, **M2** pre-commit, **M3** compose smoke |
-| N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
-| O | Product & research | Not started |
+| N | Security & compliance | **N1–N2** done (**push protection** still admin) |
+| O | Product & research | **O1** done; **O2–O3** pending |
 | P | Backtesting modularization (web reuse) | **P1–P4** done |
 | Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
 
@@ -681,5 +683,6 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Public dashboard + PWA + UX | `main.py` (writer + optional Tier-B notify), `DATA_DIR/qualified_public_snapshot.json`, `push_server/`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
 | Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
+| Multi-portfolio simulation (O1) | `utils/portfolio_multi.py`, `main.py`, `PORTFOLIO_MULTI_SIM_*` in `config/settings.py` |
 | CMC resolve + web push + active ranking + weekly digest + anomaly + enrichment + market/quiet/runtime init (I2 steps) | `scanner/cmc_resolve.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py`, `scanner/weekly_digest.py`, `scanner/anomaly_alerts.py`, `scanner/top_coin_resolution.py`, `scanner/coin_enrichment.py`, `scanner/market_processing.py`, `scanner/quiet_hours.py`, `scanner/runtime_init.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |

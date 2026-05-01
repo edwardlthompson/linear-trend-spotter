@@ -118,6 +118,9 @@ class Settings:
             'WATCHLIST_EXPORT_JSON_FILE': 'watchlist_export.json',
             'PORTFOLIO_SIM_ENABLED': True,
             'PORTFOLIO_SIM_STARTING_CAPITAL': 10000,
+            'PORTFOLIO_MULTI_SIM_ENABLED': False,
+            'PORTFOLIO_MULTI_SIM_FILE': 'portfolio_multi_simulation.json',
+            'PORTFOLIO_MULTI_SIM_CAPITALS': [1000, 5000, 10000],
             'SCANNER_INSIGHTS_FILE': 'scanner_insights.json',
             'WEEKLY_DIGEST_ENABLED': True,
             'WEEKLY_DIGEST_WEEKDAY_UTC': 0,
@@ -131,6 +134,11 @@ class Settings:
             'SCAN_INTERVAL_SECONDS': 3600,
             'SCAN_COSTS_ENABLED': False,
             'SCAN_COSTS_FILE': 'scan_costs.json',
+            'TELEGRAM_BOT_MODE': 'polling',
+            'TELEGRAM_WEBHOOK_PORT': 8080,
+            'TELEGRAM_WEBHOOK_PATH': '/telegram/webhook',
+            'TELEGRAM_WEBHOOK_URL': '',
+            'TELEGRAM_WEBHOOK_SECRET_TOKEN': '',
             'DEGRADE_SKIP_BACKTEST_ENABLED': False,
             'DEGRADE_PRIOR_CG_HTTP_SKIP_GE': 0,
             'CMC_SLUG_MAP_ENABLED': True,
@@ -217,6 +225,7 @@ class Settings:
             'WATCHLIST_ENABLED',
             'WATCHLIST_EXPORT_ENABLED',
             'PORTFOLIO_SIM_ENABLED',
+            'PORTFOLIO_MULTI_SIM_ENABLED',
             'WEEKLY_DIGEST_ENABLED',
             'SCAN_HEARTBEAT_ENABLED',
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
@@ -274,6 +283,7 @@ class Settings:
             ('SCAN_INTERVAL_SECONDS', 60, 604800),
             ('QUIET_HOURS_START_HOUR_UTC', 0, 23),
             ('QUIET_HOURS_END_HOUR_UTC', 0, 23),
+            ('TELEGRAM_WEBHOOK_PORT', 1, 65535),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
@@ -323,6 +333,27 @@ class Settings:
 
         require_number('BACKTEST_STARTING_CAPITAL', min_value=1.0)
         require_number('BACKTEST_FEE_BPS_ROUND_TRIP', min_value=0.0, max_value=1000.0)
+        require_number('PORTFOLIO_SIM_STARTING_CAPITAL', min_value=1.0)
+
+        multi_caps = normalized.get('PORTFOLIO_MULTI_SIM_CAPITALS', [])
+        if not isinstance(multi_caps, list) or not multi_caps:
+            errors.append('PORTFOLIO_MULTI_SIM_CAPITALS must be a non-empty list')
+        else:
+            cleaned_caps: list[float] = []
+            for raw in multi_caps:
+                try:
+                    v = float(raw)
+                except Exception:
+                    errors.append('PORTFOLIO_MULTI_SIM_CAPITALS must contain numbers only')
+                    cleaned_caps = []
+                    break
+                if v <= 0:
+                    errors.append('PORTFOLIO_MULTI_SIM_CAPITALS must contain values > 0')
+                    cleaned_caps = []
+                    break
+                cleaned_caps.append(v)
+            if cleaned_caps:
+                normalized['PORTFOLIO_MULTI_SIM_CAPITALS'] = cleaned_caps
 
         exchanges = normalized.get('TARGET_EXCHANGES')
         if not isinstance(exchanges, list) or not exchanges:
@@ -352,6 +383,20 @@ class Settings:
                 errors.append('BACKTEST_TIMEFRAMES supports only: 1h, 4h, 1d')
             else:
                 normalized['BACKTEST_TIMEFRAMES'] = normalized_tfs
+
+        bot_mode = str(normalized.get('TELEGRAM_BOT_MODE', 'polling')).strip().lower()
+        if bot_mode not in {'polling', 'webhook'}:
+            errors.append('TELEGRAM_BOT_MODE supports only: polling, webhook')
+        else:
+            normalized['TELEGRAM_BOT_MODE'] = bot_mode
+
+        webhook_path = str(normalized.get('TELEGRAM_WEBHOOK_PATH', '/telegram/webhook')).strip()
+        if not webhook_path:
+            errors.append('TELEGRAM_WEBHOOK_PATH cannot be empty')
+        elif not webhook_path.startswith('/'):
+            errors.append('TELEGRAM_WEBHOOK_PATH must start with "/"')
+        else:
+            normalized['TELEGRAM_WEBHOOK_PATH'] = webhook_path
 
         indicators = normalized.get('BACKTEST_INDICATORS', [])
         if not isinstance(indicators, list):
@@ -486,6 +531,27 @@ class Settings:
                 'chat_id': chat_id
             }
         return None
+
+    @property
+    def telegram_bot_mode(self) -> str:
+        return str(self._config.get('TELEGRAM_BOT_MODE', 'polling')).strip().lower() or 'polling'
+
+    @property
+    def telegram_webhook_port(self) -> int:
+        return int(self._config.get('TELEGRAM_WEBHOOK_PORT', 8080))
+
+    @property
+    def telegram_webhook_path(self) -> str:
+        raw = str(self._config.get('TELEGRAM_WEBHOOK_PATH', '/telegram/webhook')).strip()
+        return raw if raw.startswith('/') else f"/{raw}"
+
+    @property
+    def telegram_webhook_url(self) -> str:
+        return str(self._config.get('TELEGRAM_WEBHOOK_URL', '')).strip()
+
+    @property
+    def telegram_webhook_secret_token(self) -> str:
+        return str(self._config.get('TELEGRAM_WEBHOOK_SECRET_TOKEN', '')).strip()
     
     @property
     def chart_img_api_key(self) -> str:
@@ -523,6 +589,31 @@ class Settings:
     @property
     def no_change_notifications(self) -> bool:
         return self._config.get('NO_CHANGE_NOTIFICATIONS', False)
+
+    @property
+    def portfolio_multi_sim_enabled(self) -> bool:
+        return bool(self._config.get('PORTFOLIO_MULTI_SIM_ENABLED', False))
+
+    @property
+    def portfolio_multi_sim_file(self) -> Path:
+        raw_path = str(self._config.get('PORTFOLIO_MULTI_SIM_FILE', 'portfolio_multi_simulation.json')).strip()
+        return self.DATA_DIR / (raw_path or 'portfolio_multi_simulation.json')
+
+    @property
+    def portfolio_multi_sim_capitals(self) -> list[float]:
+        values = self._config.get('PORTFOLIO_MULTI_SIM_CAPITALS', [1000, 5000, 10000])
+        if isinstance(values, list) and values:
+            out: list[float] = []
+            for item in values:
+                try:
+                    v = float(item)
+                except Exception:
+                    continue
+                if v > 0:
+                    out.append(v)
+            if out:
+                return out
+        return [1000.0, 5000.0, 10000.0]
     
     @property
     def coingecko_calls_per_minute(self) -> int:
