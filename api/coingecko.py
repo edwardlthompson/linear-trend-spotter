@@ -11,6 +11,25 @@ import logging
 
 from utils.coingecko_usage import record_coingecko_http
 
+# CoinGecko `/coins/*/tickers` `exchange_ids` uses exchange **identifier** strings.
+# Map config `TARGET_EXCHANGES` tokens to CG identifiers when they differ.
+_COINGECKO_TICKER_EXCHANGE_IDS: dict[str, str] = {
+    "mexc": "mxc",
+}
+
+
+def coingecko_ticker_exchange_ids_csv(target_exchanges: List[str]) -> Optional[str]:
+    """Comma-separated CoinGecko exchange identifiers for ticker filtering."""
+    parts: List[str] = []
+    for raw in target_exchanges or []:
+        key = str(raw or "").strip().lower()
+        if not key:
+            continue
+        parts.append(_COINGECKO_TICKER_EXCHANGE_IDS.get(key, key))
+    if not parts:
+        return None
+    return ",".join(parts)
+
 
 class RateLimiter:
     """Simple rate limiter with queuing"""
@@ -139,15 +158,112 @@ class CoinGeckoClient:
         
         return None
     
-    def get_tickers(self, coin_id: str) -> Optional[Dict]:
-        """Get tickers for a coin (exchange volume data)"""
-        self.logger.debug(f"Fetching tickers for {coin_id}")
+    def get_tickers(
+        self,
+        coin_id: str,
+        *,
+        exchange_ids: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Get tickers for a coin (exchange volume data).
+
+        When ``exchange_ids`` is set (comma-separated CG exchange identifiers),
+        CoinGecko returns only those venues—smaller payloads, same HTTP cost as
+        an unfiltered call.
+        """
+        self.logger.debug("Fetching tickers for %s", coin_id)
+        params: Optional[dict[str, str]] = None
+        if exchange_ids and str(exchange_ids).strip():
+            params = {"exchange_ids": str(exchange_ids).strip()}
         # Non-critical endpoint in this pipeline: fail fast to avoid scan stalls
         return self._make_request(
             f"{self.base_url}/coins/{coin_id}/tickers",
+            params=params,
             max_retries=1,
-            max_backoff_seconds=10
+            max_backoff_seconds=10,
         )
+
+    def get_markets_rows_for_ids(
+        self,
+        coin_ids: List[str],
+        *,
+        chunk_size: int = 250,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Fetch ``/coins/markets`` for explicit CoinGecko ids (one request per chunk).
+
+        Used to batch-resolve ``COINGECKO_ID_ALIASES`` instead of one
+        ``/coins/{id}`` call per symbol.
+        """
+        out: Dict[str, Dict[str, Any]] = {}
+        normalized: List[str] = []
+        seen: set[str] = set()
+        for raw in coin_ids:
+            cid = str(raw or "").strip().lower()
+            if cid and cid not in seen:
+                seen.add(cid)
+                normalized.append(cid)
+        if not normalized:
+            return out
+
+        cs = max(1, min(int(chunk_size), 250))
+        for offset in range(0, len(normalized), cs):
+            chunk = normalized[offset : offset + cs]
+            params = {
+                "vs_currency": "usd",
+                "ids": ",".join(chunk),
+                "per_page": len(chunk),
+                "page": 1,
+                "sparkline": "false",
+                "price_change_percentage": "7d,30d",
+            }
+            payload = self._make_request(
+                f"{self.base_url}/coins/markets",
+                params=params,
+                max_retries=3,
+                max_backoff_seconds=30,
+            )
+            if not isinstance(payload, list):
+                self.logger.warning(
+                    "get_markets_rows_for_ids: expected list for chunk starting %s",
+                    chunk[:1],
+                )
+                continue
+            for row in payload:
+                if isinstance(row, dict):
+                    rid = str(row.get("id") or "").strip().lower()
+                    if rid:
+                        out[rid] = row
+        return out
+
+    def snapshot_from_markets_row(
+        self,
+        row: Dict[str, Any],
+        *,
+        symbol_override: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Build the same structure as ``get_coin_market_snapshot`` from a /coins/markets row."""
+        if not isinstance(row, dict):
+            return None
+        gecko_id = str(row.get("id", "")).strip().lower()
+        if not gecko_id:
+            return None
+        gains = {
+            "7d": float(row.get("price_change_percentage_7d_in_currency", 0) or 0),
+            "30d": float(row.get("price_change_percentage_30d_in_currency", 0) or 0),
+            "60d": 0.0,
+            "90d": 0.0,
+        }
+        sym = (symbol_override or str(row.get("symbol", ""))).upper()
+        info = {
+            "symbol": sym,
+            "name": str(row.get("name", "")).strip(),
+            "slug": gecko_id,
+            "gecko_id": gecko_id,
+            "rank": int(row.get("market_cap_rank") or 999999),
+            "price": float(row.get("current_price", 0) or 0),
+            "volume_24h": float(row.get("total_volume", 0) or 0),
+            "source_url": f"https://www.coingecko.com/en/coins/{gecko_id}",
+        }
+        return {"data": row, "gains": gains, "info": info}
 
     def get_top_coins_with_gains(self, limit: int = 4000, per_page: int = 250) -> Optional[List[Dict[str, Any]]]:
         """Fetch top-ranked market coins with 7d/30d gains and 24h volume.

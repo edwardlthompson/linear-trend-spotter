@@ -5,6 +5,7 @@ import sys
 import json
 import io
 from datetime import datetime, timezone, timedelta
+from collections import defaultdict
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,7 +15,7 @@ from config.constants import STABLECOINS
 from database.models import HistoryDatabase, ActiveCoinsDatabase
 from database.cache import PriceCache
 from api.coinmarketcap import CoinMarketCapClient
-from api.coingecko import CoinGeckoClient
+from api.coingecko import CoinGeckoClient, coingecko_ticker_exchange_ids_csv
 from api.coingecko_mapper import CoinGeckoMapper
 from api.price_history_fallback import PriceHistoryFallbackClient
 from api.chart_img import ChartIMGClient
@@ -204,6 +205,7 @@ def _resolve_top_coin_data(
     cmc_symbol_aliases: dict[str, str],
     coingecko_id_aliases: dict[str, str],
     gecko: CoinGeckoClient,
+    alias_markets_by_id: dict[str, dict] | None = None,
 ) -> tuple[dict | None, str | None, str]:
     resolved_data, resolved_symbol, resolution_type = _resolve_cmc_data(
         symbol,
@@ -219,7 +221,12 @@ def _resolve_top_coin_data(
     if not alias_gecko_id:
         return None, None, 'missing'
 
-    alias_snapshot = gecko.get_coin_market_snapshot(alias_gecko_id)
+    alias_key = str(alias_gecko_id).strip().lower()
+    row = (alias_markets_by_id or {}).get(alias_key)
+    if row:
+        alias_snapshot = gecko.snapshot_from_markets_row(row, symbol_override=symbol_upper)
+    else:
+        alias_snapshot = gecko.get_coin_market_snapshot(alias_gecko_id)
     if not alias_snapshot:
         return None, None, 'missing'
 
@@ -744,6 +751,23 @@ def run_scanner():
         all_symbols = list(all_symbols)
         app_logger.info(f"   ✓ Scanning ALL {len(all_symbols)} coins from exchange listings")
 
+        alias_markets_by_id: dict[str, dict] = {}
+        if top_coins_provider == "coingecko" and coingecko_id_aliases:
+            prefetch_ids = sorted(
+                {
+                    str(coingecko_id_aliases[str(sym or "").strip().upper()]).strip().lower()
+                    for sym in all_symbols
+                    if str(sym or "").strip().upper() in coingecko_id_aliases
+                }
+            )
+            if prefetch_ids:
+                alias_markets_by_id = gecko.get_markets_rows_for_ids(prefetch_ids)
+                if alias_markets_by_id:
+                    app_logger.info(
+                        "📦 Prefetched CoinGecko /coins/markets for %s id-alias row(s)",
+                        len(alias_markets_by_id),
+                    )
+
         # ============================================================
         # STEP 3: Match with top-coin provider data and apply volume/gain filters
         # ============================================================
@@ -784,6 +808,7 @@ def run_scanner():
                 cmc_symbol_aliases=cmc_symbol_aliases,
                 coingecko_id_aliases=coingecko_id_aliases,
                 gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
             )
 
             if cmc_data:
@@ -881,7 +906,13 @@ def run_scanner():
         coins_without_cg_ids = []
         
         for coin in gain_qualified:
-            cg_id = cg_mapper.get_coin_id(coin['symbol'])
+            cg_id: str | None = None
+            if top_coins_provider == "coingecko":
+                pref = str(coin.get("slug") or "").strip().lower()
+                if pref:
+                    cg_id = pref
+            if not cg_id:
+                cg_id = cg_mapper.get_coin_id(coin['symbol'])
             if not cg_id and coin.get('cmc_symbol'):
                 cg_id = cg_mapper.get_coin_id(str(coin['cmc_symbol']))
                 if cg_id:
@@ -911,7 +942,9 @@ def run_scanner():
         # ============================================================
         app_logger.info(f"\n💱 Fetching exchange volume data for {len(coins_with_cg_ids)} coins...")
         no_ticker_count = 0
-        
+        ticker_exchange_csv = coingecko_ticker_exchange_ids_csv(settings.target_exchanges)
+
+        by_gid: dict[str, list] = defaultdict(list)
         for i, coin in enumerate(coins_with_cg_ids, 1):
             app_logger.info(f"   [{i}/{len(coins_with_cg_ids)}] {coin['symbol']}")
 
@@ -920,18 +953,32 @@ def run_scanner():
                 coin['exchange_volumes'] = cached_volumes
                 app_logger.info("      ✓ Using cached exchange volumes")
                 continue
-            
-            tickers = gecko.get_tickers(coin['cg_id'])
-            
+
+            gid_key = str(coin["cg_id"]).strip().lower()
+            by_gid[gid_key].append(coin)
+
+        for gid_key, group in by_gid.items():
+            tickers = gecko.get_tickers(gid_key, exchange_ids=ticker_exchange_csv)
             if tickers:
                 volumes = process_tickers(tickers, settings.target_exchanges)
-                coin['exchange_volumes'] = volumes
-                cache.cache_exchange_volumes(coin['cg_id'], volumes)
-                app_logger.info("      ✓ Got exchange volumes")
+                for c in group:
+                    c["exchange_volumes"] = volumes
+                    cache.cache_exchange_volumes(c["cg_id"], volumes)
+                app_logger.info(
+                    "      ✓ Got exchange volumes for %s coin(s) (cg_id=%s)",
+                    len(group),
+                    gid_key,
+                )
             else:
-                coin['exchange_volumes'] = {ex: "N/A" for ex in settings.target_exchanges}
-                app_logger.info("      ⚠️ No ticker data")
-                no_ticker_count += 1
+                na_vols = {ex: "N/A" for ex in settings.target_exchanges}
+                for c in group:
+                    c["exchange_volumes"] = na_vols
+                app_logger.info(
+                    "      ⚠️ No ticker data for %s coin(s) (cg_id=%s)",
+                    len(group),
+                    gid_key,
+                )
+                no_ticker_count += len(group)
 
 
         # ============================================================
@@ -1191,6 +1238,7 @@ def run_scanner():
                 cmc_symbol_aliases=cmc_symbol_aliases,
                 coingecko_id_aliases=coingecko_id_aliases,
                 gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
             )
             if not cmc_data:
                 if top_coins_provider == 'coingecko':

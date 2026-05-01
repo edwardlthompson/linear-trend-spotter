@@ -237,9 +237,10 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** H0 metrics improve; qualified-coin counts / alert cardinality within agreed tolerance vs baseline (document in Notes).
   - **Notes:** Default **`CACHE_PRICE_HOURS` 6 → 12** so hourly workers reuse SQLite OHLCV / price rows across consecutive scans (fewer CoinGecko `market_chart` / related hits for the same symbol within 12h). **`CACHE_GECKO_ID_DAYS`** is now enforced: `/coins/list` runs when mappings are **empty** or metadata **`last_update`** is older than this setting (default 30d)—replacing “only refresh when empty” so new listings age in on schedule without per-scan list pulls. `BACKTEST_RESUME_ENABLED` unchanged (still avoids duplicate heavy backtest work). **Post-merge:** capture one **H0** counter block before/after on the same `config.json` and paste baseline deltas here if product wants a signed-off %.
 
-- [ ] **H2. Bulk vs per-coin**  
+- [x] **H2. Bulk vs per-coin**  
   - Audit `api/coingecko.py` and `main.py` for redundant per-coin calls; consolidate to list/markets endpoints where possible.  
   - **Verification:** H0 metrics show fewer calls for same universe size.
+  - **Notes:** **(1)** `COINGECKO_ID_ALIASES` now prefetches via batched `/coins/markets?ids=…` (chunked) instead of one `/coins/{id}` per aliased symbol; misses still fall back to `get_coin_market_snapshot`. **(2)** STEP 6 dedupes `/coins/{id}/tickers` by `cg_id` (one HTTP call per distinct id among uncached coins). **(3)** Tickers requests pass `exchange_ids` (config `TARGET_EXCHANGES` mapped to CG identifiers, e.g. `mexc`→`mxc`) for smaller payloads. **(4)** When `TOP_COINS_PROVIDER=coingecko`, STEP 5 uses `slug` from the markets row as CoinGecko id (avoids redundant mapper lookups; same id as `/coins/markets` universe).
 
 - [ ] **H3. Provider mix (universe vs OHLCV)**  
   - Document and test Render env: e.g. `TOP_COINS_PROVIDER=cmc` for **top-coin / listing** pulls while **OHLCV remains CG → Polygon → CMC** per canonical chain.  
@@ -523,7 +524,7 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 | E | Cross-platform | Complete |
 | F | Logging | Complete |
 | G | CMC links in Telegram | Complete |
-| H | CoinGecko usage reduction | **H0–H1** complete; **H2–H6** pending |
+| H | CoinGecko usage reduction | **H0–H2** complete; **H3–H6** pending |
 | I | DB docs / main split | Not started |
 | J | Observability & operations | Not started |
 | K | Telegram & UX | Not started |
