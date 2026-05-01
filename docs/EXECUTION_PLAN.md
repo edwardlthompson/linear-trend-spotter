@@ -421,7 +421,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ### Design rules
 
-- **Allowed imports (library tier):** `pandas`/`numpy`/`vectorbt` as today, `config.settings` only if refactored behind a **narrow interface** (prefer passing a `BacktestConfig` / plain dict from the host app).
+- **Allowed imports (library tier):** `pandas`/`numpy`/`vectorbt` as today; prefer **`BacktestLoaderParams` / `BacktestRunnerParams`** from the host instead of `config.settings` (optional `*_from_settings()` helpers for the integrated worker).
 - **Forbidden in library tier:** `notifications/*`, `telegram_bot.py`, `main.run_scanner` circular paths. Add a CI guard (import smoke or `ruff`/custom script) that fails if violated.
 - **Outputs:** Typed or documented dicts / dataclasses consumable by HTTP layer later; optional thin `to_public_dict()` for API stability.
 
@@ -430,8 +430,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 - [x] **P1.** Document **`backtesting` public API** in `docs/BACKTESTING_LIBRARY.md`: entry points (`BacktestDataLoader`, `run_backtests_for_final_results`, `BacktestConfig`, `notification_rows_for_symbol`, engine/optimizer boundaries).  
   - **Verification:** Doc reviewed; list matches actual exports used by `main.py` today.
 
-- [ ] **P2.** **Decouple settings:** replace or wrap direct `settings` singleton usage inside `backtesting/` where practical with **constructor-injected** limits (timeouts, workers, fee bps) so a web worker can construct loaders without full scanner config.  
-  - **Verification:** `python -c "from backtesting.data_loader import BacktestDataLoader"` with a minimal test double or real `PriceCache` path unchanged for scanner.
+- [x] **P2.** **Decouple settings:** replace or wrap direct `settings` singleton usage inside `backtesting/` where practical with **constructor-injected** limits (timeouts, workers, fee bps) so a web worker can construct loaders without full scanner config.  
+  - **Verification:** `tests/test_backtesting_params.py` (params import + subprocess smoke; injected OHLCV gates with `pytest.importorskip("pandas")`); scanner call sites unchanged when `params` / `loader_params` omitted; `python -m ruff check .` + `scripts/check_backtesting_imports.py`.
+  - **Notes:** `backtesting/params.py` — `BacktestLoaderParams`, `BacktestRunnerParams`, `loader_params_from_settings`, `runner_params_from_settings`; `BacktestDataLoader(..., loader_params=…)`; `run_backtests_for_final_results(..., params=…)`; lazy `backtesting/__getattr__` so `import backtesting` avoids pulling `pandas` until heavy symbols are used.
 
 - [x] **P3.** **CI import guard:** script or test that imports `backtesting` package subtree and asserts no transitive import of `notifications`, `telegram_bot`, `main`.  
   - **Verification:** CI job fails if a forbidden import is introduced.
@@ -627,7 +628,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -650,7 +651,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | M | Engineering quality | **M1** pytest, **M2** pre-commit, **M3** compose smoke |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
-| P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
+| P | Backtesting modularization (web reuse) | **P1–P4** done |
 | Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
@@ -675,7 +676,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
-| Backtest library surface | `backtesting/*`, `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
+| Backtest library surface | `backtesting/*` (incl. `params.py` P2), `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
 | Public dashboard + PWA + UX | `main.py` (writer + optional Tier-B notify), `DATA_DIR/qualified_public_snapshot.json`, `push_server/`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
 | Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |

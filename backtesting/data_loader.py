@@ -12,8 +12,9 @@ import pandas as pd
 
 from api.coingecko import CoinGeckoClient
 from api.price_history_fallback import PriceHistoryFallbackClient
-from config.settings import settings
 from database.cache import PriceCache
+
+from .params import BacktestLoaderParams, loader_params_from_settings
 
 
 @dataclass
@@ -28,12 +29,19 @@ class LoadResult:
 class BacktestDataLoader:
     """Loads 1h OHLCV: CoinGecko first, then Polygon, then CoinMarketCap (when configured)."""
 
-    def __init__(self, cache: PriceCache, max_cache_age_hours: int = 6):
+    def __init__(
+        self,
+        cache: PriceCache,
+        max_cache_age_hours: int = 6,
+        *,
+        loader_params: BacktestLoaderParams | None = None,
+    ):
+        self._lp = loader_params if loader_params is not None else loader_params_from_settings()
         self.cache = cache
-        self.coingecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
+        self.coingecko = CoinGeckoClient(calls_per_minute=self._lp.coingecko_calls_per_minute)
         self.price_fallback = PriceHistoryFallbackClient(
             polygon_api_key=os.getenv("POLYGON_API_KEY", ""),
-            cmc_api_key=settings.cmc_api_key or "",
+            cmc_api_key=self._lp.cmc_api_key or "",
         )
         self.max_cache_age_hours = max_cache_age_hours
         self.ram_cache: OrderedDict[str, LoadResult] = OrderedDict()
@@ -114,14 +122,14 @@ class BacktestDataLoader:
 
     def _hourly_min_bars_threshold(self, days: int) -> int:
         """Minimum 1h rows required (legacy default: max(24 * days - 12, 600))."""
-        per = settings.ohlcv_min_1h_bars_per_day
-        slack = settings.ohlcv_min_1h_bars_slack
-        floor = settings.ohlcv_min_1h_bars_floor
+        per = self._lp.ohlcv_min_1h_bars_per_day
+        slack = self._lp.ohlcv_min_1h_bars_slack
+        floor = self._lp.ohlcv_min_1h_bars_floor
         return max(per * int(days) - int(slack), int(floor))
 
     def _daily_min_bars_threshold(self, days: int) -> int:
         """Minimum daily rows required (legacy default: max(days - 2, 25))."""
-        return max(int(days) - int(settings.ohlcv_min_1d_bars_slack), int(settings.ohlcv_min_1d_bars_floor))
+        return max(int(days) - int(self._lp.ohlcv_min_1d_bars_slack), int(self._lp.ohlcv_min_1d_bars_floor))
 
     def _get_or_fetch_1h(
         self,

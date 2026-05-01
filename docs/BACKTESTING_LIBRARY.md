@@ -11,11 +11,16 @@ This folder is the **import-safe** quantitative layer for hourly/4h/daily backte
 | `run_backtests_for_final_results` | `backtesting/runner.py` — orchestrates vectorbt runs for qualified coins. |
 | `notification_rows_for_symbol` | `backtesting/report.py` — shapes strategy rows for Telegram text. |
 | `BacktestDataLoader.validate_ohlcv_frame` | Static validation helper. |
+| `BacktestLoaderParams` | `backtesting/params.py` — frozen knobs for `BacktestDataLoader` (CG rate limit, CMC key string, L1 OHLCV min-bar gates). |
+| `BacktestRunnerParams` | Same module — orchestration fields for `run_backtests_for_final_results` (includes nested `loader`). |
+| `loader_params_from_settings` / `runner_params_from_settings` | Map the integrated worker’s `config.settings` when the host omits explicit params. |
 
 ## Import boundaries (P3)
 
 CI runs `python scripts/check_backtesting_imports.py`, which AST-scans `backtesting/**/*.py` and fails on imports of `notifications`, `telegram_bot`, or top-level `main`.
 
-## Settings coupling
+## Settings coupling (P2)
 
-Loaders read `config.settings.settings` today for API rate limits, keys, and **minimum OHLCV bar counts** (Milestone **L1**): `OHLCV_MIN_1H_BARS_PER_DAY`, `OHLCV_MIN_1H_BARS_SLACK`, `OHLCV_MIN_1H_BARS_FLOOR`, `OHLCV_MIN_1D_BARS_SLACK`, `OHLCV_MIN_1D_BARS_FLOOR` — defaults reproduce the historical `max(24·days−12, 600)` hourly and `max(days−2, 25)` daily gates in `BacktestDataLoader`. Milestone **P2** (constructor-injected config) is optional follow-up for a second host without the full scanner `config.json`.
+- **`BacktestDataLoader(..., loader_params=…)`** — pass `BacktestLoaderParams` so a second host does not need the scanner `config.json`. If omitted, `loader_params_from_settings()` runs once inside `__init__` (imports `config.settings`).
+- **`run_backtests_for_final_results(..., params=…)`** — pass `BacktestRunnerParams` (with its nested `loader`) for the same reason. If omitted, `runner_params_from_settings()` fills paths, workers, timeouts, and fee/capital from `config.settings`.
+- Importing **`backtesting.params`** does **not** import `config.settings` until you call `loader_params_from_settings()` / `runner_params_from_settings()`. **`backtesting.data_loader`** pulls `pandas` and API clients on import, but still avoids `config.settings` until `BacktestDataLoader` is constructed without an explicit `loader_params`.

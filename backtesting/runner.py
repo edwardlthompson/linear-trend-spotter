@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config.settings import settings
 from database.cache import PriceCache
 
 from .data_loader import BacktestDataLoader
+from .params import BacktestLoaderParams, BacktestRunnerParams, runner_params_from_settings
 from .engine import compute_buy_and_hold
 from .models import BacktestConfig
 from .optimizer import optimize_indicator
@@ -142,9 +142,14 @@ def _optimize_coin_task(
     trailing_stop_min: int,
     trailing_stop_max: int,
     trailing_stop_step: int,
+    loader_params: BacktestLoaderParams,
 ) -> dict[str, Any]:
     cache = PriceCache(Path(db_path))
-    loader = BacktestDataLoader(cache=cache, max_cache_age_hours=cache_age_hours)
+    loader = BacktestDataLoader(
+        cache=cache,
+        max_cache_age_hours=cache_age_hours,
+        loader_params=loader_params,
+    )
 
     strategy_rows: list[dict[str, Any]] = []
     skipped: list[dict[str, str]] = []
@@ -239,18 +244,27 @@ def _optimize_coin_task(
         cache.close()
 
 
-def run_backtests_for_final_results(final_results: list[dict], output_path: Path | None = None) -> dict[str, Any]:
+def run_backtests_for_final_results(
+    final_results: list[dict],
+    output_path: Path | None = None,
+    *,
+    params: BacktestRunnerParams | None = None,
+) -> dict[str, Any]:
     """Run optimizer for final-stage coins and persist JSON artifact.
 
     Default behavior backtests all final-stage coins. Optional exchange gating is
     controlled by BACKTEST_REQUIRE_TARGET_EXCHANGE with BACKTEST_EXCHANGES.
+
+    Pass ``params`` from a host that does not load ``config.settings``; otherwise
+    defaults mirror the integrated scanner via ``runner_params_from_settings()``.
     """
+    rp = params if params is not None else runner_params_from_settings()
     target_exchanges = {
         str(exchange).strip().lower()
-        for exchange in settings.backtest_exchanges
+        for exchange in rp.backtest_exchanges
         if str(exchange).strip()
     }
-    exchange_gate_enabled = settings.backtest_require_target_exchange
+    exchange_gate_enabled = rp.backtest_require_target_exchange
 
     eligible = []
     preflight_skipped: list[dict[str, Any]] = []
@@ -290,7 +304,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                 }
             )
 
-    max_coins = settings.backtest_max_coins_per_run
+    max_coins = rp.backtest_max_coins_per_run
     if max_coins > 0:
         eligible = eligible[:max_coins]
 
@@ -303,29 +317,29 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
         eligible_coins.append({"symbol": symbol, "gecko_id": gecko_id})
 
     if output_path is None:
-        output_path = settings.base_dir / "backtest_results.json"
+        output_path = rp.base_dir / "backtest_results.json"
 
-    checkpoint_path = settings.backtest_checkpoint_file
-    telemetry_path = settings.backtest_telemetry_file
+    checkpoint_path = rp.backtest_checkpoint_file
+    telemetry_path = rp.backtest_telemetry_file
 
-    timeframes = settings.backtest_timeframes
-    configured_indicators = settings.backtest_indicators
+    timeframes = list(rp.backtest_timeframes)
+    configured_indicators = list(rp.backtest_indicators)
     indicators = [name for name in configured_indicators if name in SIGNAL_REGISTRY] if configured_indicators else list(SIGNAL_REGISTRY.keys())
     if not indicators:
         indicators = list(SIGNAL_REGISTRY.keys())
-    stop_min = int(settings.backtest_trailing_stop_min)
-    stop_max = int(settings.backtest_trailing_stop_max)
-    stop_step = int(settings.backtest_trailing_stop_step)
+    stop_min = int(rp.backtest_trailing_stop_min)
+    stop_max = int(rp.backtest_trailing_stop_max)
+    stop_step = int(rp.backtest_trailing_stop_step)
     stop_count = len(range(stop_min, stop_max + 1, stop_step))
-    max_failure_samples = int(settings.backtest_failure_samples_limit)
+    max_failure_samples = int(rp.backtest_failure_samples_limit)
 
     summary: dict[str, Any] = {
         "generated_at": _iso_now(),
-        "backtest_enabled": settings.backtest_enabled,
+        "backtest_enabled": rp.backtest_enabled,
         "exchange_gate_enabled": exchange_gate_enabled,
         "target_exchanges": sorted(target_exchanges),
         "timeframes": timeframes,
-        "resume_enabled": settings.backtest_resume_enabled,
+        "resume_enabled": rp.backtest_resume_enabled,
         "checkpoint_file": str(checkpoint_path),
         "telemetry_file": str(telemetry_path),
         "coins_considered": len(final_results),
@@ -347,7 +361,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
             "run_start",
             eligible=len(eligible_coins),
             considered=len(final_results),
-            worker_cap=settings.backtest_parallel_workers,
+            worker_cap=rp.backtest_parallel_workers,
             timeframes=timeframes,
             indicators=indicators,
             trailing_stop_min=stop_min,
@@ -382,7 +396,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
     completed_symbols: list[str] = []
     failure_counter: Counter[str] = Counter()
 
-    if settings.backtest_resume_enabled:
+    if rp.backtest_resume_enabled:
         checkpoint = _load_checkpoint(checkpoint_path)
         if checkpoint:
             prior_eligible = {
@@ -442,16 +456,16 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
     pending_coins = [coin for coin in eligible_coins if coin["symbol"] not in resumed_symbols]
     completed_symbols.extend(sorted(resumed_symbols))
 
-    worker_count = max(1, min(settings.backtest_parallel_workers, len(pending_coins)))
+    worker_count = max(1, min(rp.backtest_parallel_workers, len(pending_coins)))
 
     expected_runs_per_coin = (
-        len(timeframes) * (1 + (len(indicators) * int(settings.backtest_max_param_combos) * stop_count))
+        len(timeframes) * (1 + (len(indicators) * int(rp.backtest_max_param_combos) * stop_count))
     )
     print(
         "[BACKTEST] "
         f"starting run | eligible={len(eligible_symbols)} pending={len(pending_coins)} "
         f"workers={worker_count} timeframes={timeframes} indicators={len(indicators)} "
-        f"max_param_combos={int(settings.backtest_max_param_combos)} "
+        f"max_param_combos={int(rp.backtest_max_param_combos)} "
         f"trailing_stops={stop_count} ({stop_min}-{stop_max} step {stop_step}) "
         f"est_max_runs_per_coin={expected_runs_per_coin}",
         flush=True,
@@ -499,14 +513,15 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     coin.get("gecko_id"),
                     timeframes,
                     indicators,
-                    str(settings.db_paths["scanner"]),
-                    int(settings.cache_price_hours),
-                    int(settings.backtest_max_param_combos),
-                    float(settings.backtest_starting_capital),
-                    float(settings.backtest_fee_bps_round_trip),
+                    rp.scanner_db_path,
+                    rp.cache_price_hours,
+                    rp.backtest_max_param_combos,
+                    rp.backtest_starting_capital,
+                    rp.backtest_fee_bps_round_trip,
                     stop_min,
                     stop_max,
                     stop_step,
+                    rp.loader,
                 )
                 summary["coins_processed"] += 1
                 summary["results"].extend(result.get("rows", []))
@@ -591,7 +606,7 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
         progress_started_at = time.monotonic()
         total_to_process = len(pending_coins)
         completed_count = 0
-        timeout_seconds = int(settings.backtest_per_coin_timeout_seconds)
+        timeout_seconds = int(rp.backtest_per_coin_timeout_seconds)
         symbol_to_index = {
             coin["symbol"]: index
             for index, coin in enumerate(pending_coins, start=1)
@@ -615,14 +630,15 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                     coin.get("gecko_id"),
                     timeframes,
                     indicators,
-                    str(settings.db_paths["scanner"]),
-                    int(settings.cache_price_hours),
-                    int(settings.backtest_max_param_combos),
-                    float(settings.backtest_starting_capital),
-                    float(settings.backtest_fee_bps_round_trip),
+                    rp.scanner_db_path,
+                    rp.cache_price_hours,
+                    rp.backtest_max_param_combos,
+                    rp.backtest_starting_capital,
+                    rp.backtest_fee_bps_round_trip,
                     stop_min,
                     stop_max,
                     stop_step,
+                    rp.loader,
                 ): coin["symbol"]
                 for coin in pending_coins
             }
@@ -823,14 +839,15 @@ def run_backtests_for_final_results(final_results: list[dict], output_path: Path
                         coin.get("gecko_id"),
                         timeframes,
                         indicators,
-                        str(settings.db_paths["scanner"]),
-                        int(settings.cache_price_hours),
-                        int(settings.backtest_max_param_combos),
-                        float(settings.backtest_starting_capital),
-                        float(settings.backtest_fee_bps_round_trip),
+                        rp.scanner_db_path,
+                        rp.cache_price_hours,
+                        rp.backtest_max_param_combos,
+                        rp.backtest_starting_capital,
+                        rp.backtest_fee_bps_round_trip,
                         stop_min,
                         stop_max,
                         stop_step,
+                        rp.loader,
                     )
                     summary["coins_processed"] += 1
                     summary["results"].extend(result.get("rows", []))
