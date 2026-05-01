@@ -50,6 +50,10 @@
           },
           "backtest_buy_hold": {
             "description": "Optional buy-and-hold summary object when field_set full"
+          },
+          "chart_image_url": {
+            "type": "string",
+            "description": "Optional HTTPS URL to a chart image; shown in dashboard expanded row when field_set full (Q19)"
           }
         }
       }

@@ -24,6 +24,38 @@ def test_full_field_set_includes_scan_interval_and_backtest() -> None:
     assert payload["coins"][0]["backtest_buy_hold"] == {"return_pct": 1.2}
 
 
+def test_full_includes_https_chart_image_url_only() -> None:
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 0.0, "30d": 0.0},
+            "uniformity_score": 1.0,
+            "health_score": 50,
+            "chart_image_url": "https://example.com/c.png",
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    assert payload["coins"][0].get("chart_image_url") == "https://example.com/c.png"
+
+
+def test_full_strips_non_https_chart_url() -> None:
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 0.0, "30d": 0.0},
+            "uniformity_score": 1.0,
+            "health_score": 50,
+            "chart_image_url": "http://insecure.example/x.png",
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    assert "chart_image_url" not in payload["coins"][0]
+
+
 def test_minimal_field_set_omits_backtest_and_exchange_fields() -> None:
     rows = [
         {

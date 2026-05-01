@@ -1,15 +1,67 @@
 /**
- * Qualified-coin dashboard (Milestones Q4, Q7–Q14): snapshot JSON; sort/filter/search; expandable rows;
- * stale snapshot banner; optional alerts. Snapshot URL: ?api=… or window.__SNAPSHOT_URL__ from config.js.
+ * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
+ * expandable rows; stale banner; theme (Q15); export (Q16); deep links (Q17); a11y (Q18);
+ * optional chart thumb (Q19); tier-A alerts. Snapshot: ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   const POLL_INTERVAL_MS = 15 * 60 * 1000;
   const LS_DIGEST = "qualified_dash_last_snap_digest";
   const LS_PREV_SYMBOLS = "qualified_dash_prev_symbols_json";
   const LS_PREV_SCHEMA = "qualified_dash_prev_schema_version";
+  const LS_THEME = "qualified_dash_theme";
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
+
+  function getSavedThemeMode() {
+    const v = localStorage.getItem(LS_THEME);
+    if (v === "light" || v === "dark" || v === "system") return v;
+    return "system";
+  }
+
+  function effectiveTheme() {
+    const m = getSavedThemeMode();
+    if (m === "light" || m === "dark") return m;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function applyDomTheme() {
+    const eff = effectiveTheme();
+    document.documentElement.setAttribute("data-theme", eff);
+    const meta = document.getElementById("themeColorMeta") || document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", eff === "dark" ? "#0f172a" : "#f8fafc");
+  }
+
+  function themeModeLabel() {
+    return getSavedThemeMode();
+  }
+
+  function updateThemeButtonLabel() {
+    const el = document.getElementById("themeCycleBtn");
+    if (el) el.textContent = `Theme: ${themeModeLabel()}`;
+  }
+
+  function cycleThemeMode() {
+    const order = ["system", "light", "dark"];
+    const cur = getSavedThemeMode();
+    const ix = Math.max(0, order.indexOf(cur));
+    const next = order[(ix + 1) % order.length];
+    localStorage.setItem(LS_THEME, next);
+    applyDomTheme();
+    updateThemeButtonLabel();
+  }
+
+  const mqlScheme = window.matchMedia("(prefers-color-scheme: dark)");
+  if (typeof mqlScheme.addEventListener === "function") {
+    mqlScheme.addEventListener("change", () => {
+      if (getSavedThemeMode() === "system") applyDomTheme();
+    });
+  } else if (typeof mqlScheme.addListener === "function") {
+    mqlScheme.addListener(() => {
+      if (getSavedThemeMode() === "system") applyDomTheme();
+    });
+  }
+  applyDomTheme();
 
   const params = new URLSearchParams(window.location.search);
   const fromQuery = params.get("api");
@@ -24,6 +76,9 @@
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
   const elSearch = document.getElementById("searchInput");
+  const elThemeCycle = document.getElementById("themeCycleBtn");
+  const elExportCsv = document.getElementById("exportCsvBtn");
+  const elExportJson = document.getElementById("exportJsonBtn");
 
   let pollTimer = null;
   let notifyAlertsEnabled = false;
@@ -36,6 +91,10 @@
   let filterHealthMin = null;
   let searchQuery = "";
   let searchDebounceTimer = null;
+  /** @type {number | null} */
+  let hashHighlightTimer = null;
+
+  updateThemeButtonLabel();
 
   if (elInput) {
     elInput.value = snapshotUrl;
@@ -165,8 +224,10 @@
   function updateSortHeaderClasses() {
     document.querySelectorAll("th[data-sort-key]").forEach((th) => {
       th.classList.remove("sort-asc", "sort-desc");
+      th.setAttribute("aria-sort", "none");
       if (th.getAttribute("data-sort-key") === sortKey) {
         th.classList.add(sortDir > 0 ? "sort-asc" : "sort-desc");
+        th.setAttribute("aria-sort", sortDir > 0 ? "ascending" : "descending");
       }
     });
   }
@@ -188,6 +249,47 @@
       });
     }
     return rows;
+  }
+
+  function getFilteredSortedCoins() {
+    if (!lastPayload) return [];
+    const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
+    const filtered = applyFilters(coins);
+    const copy = filtered.slice();
+    sortCoinsInPlace(copy);
+    return copy;
+  }
+
+  function prefersReducedMotion() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function getSymbolFromUrl() {
+    const h = window.location.hash.replace(/^#/, "");
+    if (h.startsWith("symbol=")) {
+      const v = h.slice("symbol=".length).trim();
+      return v ? v.toUpperCase() : "";
+    }
+    const q = new URLSearchParams(window.location.search).get("symbol");
+    return q ? String(q).trim().toUpperCase() : "";
+  }
+
+  function applyHashHighlight() {
+    window.clearTimeout(hashHighlightTimer);
+    document.querySelectorAll("tr.coin-row.row-highlight").forEach((r) => r.classList.remove("row-highlight"));
+    if (!elTbody) return;
+    const want = getSymbolFromUrl();
+    if (!want) return;
+    let row = null;
+    elTbody.querySelectorAll("tr.coin-row").forEach((r) => {
+      if ((r.getAttribute("data-symbol") || "").toUpperCase() === want) row = r;
+    });
+    if (!row) return;
+    row.classList.add("row-highlight");
+    row.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    hashHighlightTimer = window.setTimeout(() => {
+      row.classList.remove("row-highlight");
+    }, 4000);
   }
 
   function formatUpdatedHuman(iso) {
@@ -247,6 +349,18 @@
     elStaleBanner.textContent = `Snapshot looks stale (${ageMin} min old). Expected refresh about every ${nomMin} min — check the worker or snapshot URL.`;
   }
 
+  function escapeHtml(s) {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
   function detailBlockHtml(c) {
     const parts = [];
     const u = c.uniformity_score;
@@ -255,6 +369,15 @@
       `<div class="detail-grid"><div><strong>Uniformity</strong> ${escapeHtml(u != null ? String(u) : "—")}</div>` +
         `<div><strong>Health</strong> ${escapeHtml(h != null && h !== "" ? String(h) : "—")}</div></div>`,
     );
+    const chartRaw = c.chart_image_url;
+    if (typeof chartRaw === "string" && /^https:\/\//i.test(chartRaw.trim())) {
+      const chartUrl = chartRaw.trim();
+      const symLabel = escapeAttr(String(c.symbol || "coin"));
+      parts.push('<div class="detail-heading">Chart</div>');
+      parts.push(
+        `<p class="detail-chart"><img class="chart-thumb" src="${escapeAttr(chartUrl)}" alt="${symLabel} chart thumbnail" loading="lazy" width="320" height="180" /></p>`,
+      );
+    }
     const bt = c.backtest_top_strategies;
     if (Array.isArray(bt) && bt.length) {
       parts.push('<div class="detail-heading">Backtest top strategies</div>');
@@ -307,12 +430,12 @@
         const detailId = `coin-detail-${idx}`;
         const detail = detailBlockHtml(c);
         return `<tr class="coin-row" role="button" tabindex="0" aria-expanded="false" aria-controls="${detailId}" data-symbol="${escapeAttr(rawSym)}">
-          <td><strong>${sym}</strong>${badge}</td>
-          <td>${name}</td>
-          <td class="num">${g30}%</td>
-          <td class="num">${u}</td>
-          <td class="num">${h}</td>
-          <td>${link}</td>
+          <td headers="col-symbol"><strong>${sym}</strong>${badge}</td>
+          <td headers="col-name">${name}</td>
+          <td headers="col-g30" class="num"><span class="visually-hidden">30-day gain </span>${g30}%</td>
+          <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span>${u}</td>
+          <td headers="col-health" class="num"><span class="visually-hidden">Health </span>${h}</td>
+          <td headers="col-link">${link}</td>
         </tr><tr class="coin-detail" id="${detailId}" hidden><td colspan="6" class="detail-cell">${detail}</td></tr>`;
       })
       .join("");
@@ -320,11 +443,52 @@
 
   function applyTableView() {
     if (!lastPayload) return;
-    const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
-    const filtered = applyFilters(coins);
-    sortCoinsInPlace(filtered);
+    const filtered = getFilteredSortedCoins();
     elTbody.innerHTML = renderRowsHtml(filtered);
     updateSortHeaderClasses();
+    applyHashHighlight();
+  }
+
+  function downloadBlob(filename, mime, body) {
+    const blob = new Blob([body], { type: mime });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.rel = "noopener";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function escapeCsvCell(v) {
+    const s = v == null ? "" : String(v);
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }
+
+  function exportViewCsv() {
+    const rows = getFilteredSortedCoins();
+    const header = ["symbol", "name", "gain_30d_pct", "uniformity", "health", "source_url"];
+    const lines = [header.join(",")];
+    for (const c of rows) {
+      const g = c.gains || {};
+      const g30 = typeof g["30d"] === "number" ? g["30d"] : "";
+      const u = typeof c.uniformity_score === "number" ? c.uniformity_score : "";
+      const h = c.health_score != null && c.health_score !== "" ? c.health_score : "";
+      const url = c.source_url ? String(c.source_url) : "";
+      lines.push([c.symbol, c.name, g30, u, h, url].map(escapeCsvCell).join(","));
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadBlob(`qualified_export_${stamp}.csv`, "text/csv;charset=utf-8", lines.join("\r\n"));
+  }
+
+  function exportViewJson() {
+    const rows = getFilteredSortedCoins();
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    downloadBlob(
+      `qualified_export_${stamp}.json`,
+      "application/json;charset=utf-8",
+      JSON.stringify({ exported_at: new Date().toISOString(), count: rows.length, coins: rows }, null, 2),
+    );
   }
 
   function render(data) {
@@ -367,18 +531,6 @@
     writeSnapshotVisitState(data);
   }
 
-  function escapeHtml(s) {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
-  function escapeAttr(s) {
-    return escapeHtml(s).replace(/'/g, "&#39;");
-  }
-
   if (elTbody) {
     elTbody.addEventListener("click", (ev) => {
       const row = ev.target.closest("tr.coin-row");
@@ -392,7 +544,20 @@
       ev.preventDefault();
       toggleRowDetail(row);
     });
+    elTbody.addEventListener("focusin", (ev) => {
+      const row = ev.target.closest("tr.coin-row");
+      if (!row) return;
+      const sym = row.getAttribute("data-symbol");
+      if (!sym) return;
+      const nextHash = `#symbol=${encodeURIComponent(sym)}`;
+      const path = window.location.pathname + window.location.search;
+      if (window.location.hash !== nextHash) {
+        history.replaceState(null, "", path + nextHash);
+      }
+    });
   }
+
+  window.addEventListener("hashchange", () => applyHashHighlight());
 
   async function digestHex(text) {
     if (window.crypto && crypto.subtle) {
@@ -526,6 +691,24 @@
 
   if (elLoad) {
     elLoad.addEventListener("click", () => loadSnapshot({ showErrors: true, forNotify: false }));
+  }
+
+  if (elThemeCycle) {
+    elThemeCycle.addEventListener("click", () => cycleThemeMode());
+  }
+
+  if (elExportCsv) {
+    elExportCsv.addEventListener("click", () => {
+      if (!lastPayload) return;
+      exportViewCsv();
+    });
+  }
+
+  if (elExportJson) {
+    elExportJson.addEventListener("click", () => {
+      if (!lastPayload) return;
+      exportViewJson();
+    });
   }
 
   if (elNotify) {

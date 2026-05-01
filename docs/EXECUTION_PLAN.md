@@ -540,20 +540,25 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
   - **Verification:** Mock old `updated_at` shows warning; fresh snapshot clears it.
   - **Notes:** Top-level **`scan_interval_seconds`** on snapshot (from `Settings.scan_interval_seconds` / env override); dashboard `#staleBanner` + humanized meta line; older JSON without the field uses **3600s** fallback.
 
-- [ ] **Q15.** **Dark / light theme:** respect `prefers-color-scheme`; optional toggle with `localStorage` persistence.  
+- [x] **Q15.** **Dark / light theme:** respect `prefers-color-scheme`; optional toggle with `localStorage` persistence.  
   - **Verification:** Toggle survives reload; contrast acceptable on OLED.
+  - **Notes:** `docs/dashboard/` — CSS variables on `html[data-theme]`; **`qualified_dash_theme`** values **`system` \| `light` \| `dark`**; **`#themeCycleBtn`** cycles; **`#themeColorMeta`** updates for toolbar tint; SW cache bumped with static edits.
 
-- [ ] **Q16.** **Export current view:** button downloads **CSV** and/or **JSON** of filtered in-memory rows (client-generated).  
+- [x] **Q16.** **Export current view:** button downloads **CSV** and/or **JSON** of filtered in-memory rows (client-generated).  
   - **Verification:** File opens in spreadsheet app; no server upload.
+  - **Notes:** **`#exportCsvBtn`** / **`#exportJsonBtn`**; same filtered+sorted order as the table.
 
-- [ ] **Q17.** **Deep links:** support `#symbol=BTC` (or query param) to scroll/highlight row on load; update hash on row focus if product-appropriate.  
+- [x] **Q17.** **Deep links:** support `#symbol=BTC` (or query param) to scroll/highlight row on load; update hash on row focus if product-appropriate.  
   - **Verification:** Shared URL focuses correct row after load.
+  - **Notes:** **`?symbol=`** and **`#symbol=`**; **`history.replaceState`** on row focus; temporary **`.row-highlight`**; **`hashchange`** refreshes highlight.
 
-- [ ] **Q18.** **Reduced motion & accessibility:** `prefers-reduced-motion` respected; visible focus; semantic `<table>` or equivalent roles; labels for rank/gain cells for screen readers.  
+- [x] **Q18.** **Reduced motion & accessibility:** `prefers-reduced-motion` respected; visible focus; semantic `<table>` or equivalent roles; labels for rank/gain cells for screen readers.  
   - **Verification:** Keyboard-only navigation through list; spot-check with axe or Lighthouse a11y.
+  - **Notes:** **`prefers-reduced-motion`** in **`styles.css`**; **`caption.visually-hidden`**; **`th scope="col"`** + **`headers`** on cells; **`aria-sort`** on sortable headers; **`aria-label`** on sort buttons; focus rings on interactive controls.
 
-- [ ] **Q19.** **Optional chart thumbnail:** if snapshot row includes optional `chart_image_url` (HTTPS, worker-generated in **Q2** schema extension), show small image in expanded row; **hide** when field absent.  
+- [x] **Q19.** **Optional chart thumbnail:** if snapshot row includes optional `chart_image_url` (HTTPS, worker-generated in **Q2** schema extension), show small image in expanded row; **hide** when field absent.  
   - **Verification:** Without URL field, no broken images; with mock URL, image loads (CORS on image host documented).
+  - **Notes:** **`build_public_qualified_snapshot`** copies **`chart_image_url`** when **`https://`** ( **`field_set` full** ); dashboard detail block renders **`<img loading="lazy">`**; host must send **CORS** if cross-origin image.
 
 - [ ] **Q20.** **Scan health strip:** if snapshot includes optional `scan_duration_s`, `coins_evaluated`, `errors_count` (from worker in **Q2**), show read-only strip; **hide** when fields absent.  
   - **Verification:** Minimal snapshot still renders; extended snapshot shows strip.
@@ -620,7 +625,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, **Q15–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, **Q20–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -644,7 +649,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
 | P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q14** done; **Q15–Q21** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q19** done; **Q20–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 

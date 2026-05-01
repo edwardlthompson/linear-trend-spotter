@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#1a1f2e" />
+    <meta name="theme-color" content="#f8fafc" id="themeColorMeta" />
     <meta name="description" content="Qualified-coin snapshot dashboard (read-only JSON)." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
@@ -21,6 +21,15 @@
       </label>
       <button id="loadBtn" type="button">Load</button>
       <button id="notifyBtn" type="button" class="secondary">Enable update alerts</button>
+      <button id="themeCycleBtn" type="button" class="secondary" title="Cycle theme: system, light, dark">
+        Theme: system
+      </button>
+      <button id="exportCsvBtn" type="button" class="secondary" title="Download current filtered table as CSV">
+        Export CSV
+      </button>
+      <button id="exportJsonBtn" type="button" class="secondary" title="Download current filtered rows as JSON">
+        Export JSON
+      </button>
     </p>
     <p class="toolbar filters">
       <label>
@@ -39,14 +48,36 @@
     <div id="staleBanner" class="stale-banner" role="status" hidden></div>
     <div id="diffBanner" class="diff-banner" role="status" hidden></div>
     <table>
+      <caption class="visually-hidden">
+        Qualified coins from the scanner snapshot. Sort with column header buttons; expand a row for
+        backtest JSON. To focus a coin, add a hash like #symbol=BTC (or ?symbol=BTC) to the page URL.
+      </caption>
       <thead>
         <tr>
-          <th><button type="button" class="sort-btn" data-sort="symbol">Symbol</button></th>
-          <th><button type="button" class="sort-btn" data-sort="name">Name</button></th>
-          <th><button type="button" class="sort-btn" data-sort="g30">30d</button></th>
-          <th><button type="button" class="sort-btn" data-sort="uniformity">Uniformity</button></th>
-          <th><button type="button" class="sort-btn" data-sort="health">Health</button></th>
-          <th>Link</th>
+          <th scope="col" id="col-symbol">
+            <button type="button" class="sort-btn" data-sort="symbol" aria-label="Sort by symbol">
+              Symbol
+            </button>
+          </th>
+          <th scope="col" id="col-name">
+            <button type="button" class="sort-btn" data-sort="name" aria-label="Sort by name">Name</button>
+          </th>
+          <th scope="col" id="col-g30">
+            <button type="button" class="sort-btn" data-sort="g30" aria-label="Sort by 30-day gain">
+              30d
+            </button>
+          </th>
+          <th scope="col" id="col-uniformity">
+            <button type="button" class="sort-btn" data-sort="uniformity" aria-label="Sort by uniformity">
+              Uniformity
+            </button>
+          </th>
+          <th scope="col" id="col-health">
+            <button type="button" class="sort-btn" data-sort="health" aria-label="Sort by health score">
+              Health
+            </button>
+          </th>
+          <th scope="col" id="col-link">Link</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>

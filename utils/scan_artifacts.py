@@ -90,6 +90,9 @@ def build_public_qualified_snapshot(
                 coin["backtest_top_strategies"] = strategies
             if row.get("backtest_buy_hold") is not None:
                 coin["backtest_buy_hold"] = row.get("backtest_buy_hold")
+            chart_url = row.get("chart_image_url")
+            if isinstance(chart_url, str) and chart_url.strip().lower().startswith("https://"):
+                coin["chart_image_url"] = chart_url.strip()
         coins_out.append(coin)
     interval = max(60, int(scan_interval_seconds or 3600))
     return {

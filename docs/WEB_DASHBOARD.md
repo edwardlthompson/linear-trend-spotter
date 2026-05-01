@@ -43,3 +43,11 @@ The dashboard compares the current snapshot symbol set to the previous successfu
 ## Sort, health filter, and search (Q11–Q12)
 
 Column headers sort the in-memory table (toggle direction on repeat clicks). **Health ≥** chips filter by `health_score`. The search box filters symbols and names (substring, debounced). All are client-side only; the snapshot JSON is still fetched on the same cadence as before (Load button + optional 15-minute alerts).
+
+## Theme, export, deep links, a11y, chart thumb (Q15–Q19)
+
+- **Theme:** **Theme** cycles **system** (follows `prefers-color-scheme`), **light**, and **dark**; choice is stored as `qualified_dash_theme` in `localStorage`. The `<meta name="theme-color" id="themeColorMeta">` tag updates for mobile browser chrome.
+- **Export:** **Export CSV** / **Export JSON** download the **current filtered and sorted** row set only; nothing is uploaded.
+- **Deep links:** Append **`#symbol=BTC`** or **`?symbol=BTC`** (symbol only) to focus and briefly highlight a row after data loads; focusing a coin row updates the hash via **`replaceState`** (no extra history entries).
+- **Accessibility:** Table **`caption`** (visually hidden), sortable **`aria-sort`**, header **`scope`/`id`** and cell **`headers`**, **`prefers-reduced-motion`** in CSS, visible **`:focus-visible`** on controls.
+- **Chart image:** If a coin includes **`chart_image_url`** (`https://` only, optional in **`field_set: full`** snapshot), the expanded row shows a lazy-loaded image. Cross-origin images must allow this origin (**`Access-Control-Allow-Origin`**) or the image may fail to paint in the browser.
