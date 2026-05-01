@@ -138,6 +138,16 @@ class MetricsCollector:
         
         for service, count in summary['api_calls'].items():
             lines.append(f"   • {service}: {count}")
+
+        cg = {k: v for k, v in summary['counts'].items() if k.startswith('coingecko_http_')}
+        if cg:
+            lines.extend(["", "🦎 CoinGecko HTTP (H0 counters):"])
+            total_cg = cg.get('coingecko_http_total', 0)
+            lines.append(f"   • total: {total_cg}")
+            for key in sorted(cg):
+                if key == 'coingecko_http_total':
+                    continue
+                lines.append(f"   • {key.removeprefix('coingecko_http_')}: {cg[key]}")
         
         lines.extend([
             "",

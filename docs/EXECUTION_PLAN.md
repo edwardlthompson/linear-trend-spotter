@@ -2,7 +2,7 @@
 
 **Purpose:** Single reference for engineering milestones (code quality, Render pipeline, Telegram links, API cost reduction, modular backtesting for a future web app, public qualified-coin dashboard + PWA + client-side UX).  
 **Living document:** Checkboxes are updated as work completes.  
-**Last reviewed:** 2026-04-30
+**Last reviewed:** 2026-05-01
 
 ---
 
@@ -25,8 +25,9 @@ These rules apply to **every** milestone unless a task explicitly says otherwise
 2. **Same scan interval:** Do **not** change `SCAN_INTERVAL_SECONDS` (Render), cron schedule, or worker timing as part of this plan. Cadence stays **identical** unless a dedicated ops/product change is approved outside this document.
 3. **Additive by default:** New features (Milestones **J–Q**) must be **disabled or no-op** until opt-in via config/env, **or** must reproduce current outputs when the flag is off. No silent removal of notifications, backtests, or qualification stages in default configuration.
 4. **No regression gate:** After each milestone, existing **verify** scripts in CI (Milestone A) and any milestone-specific verification must pass. For scan-touching work, document in Notes: same key counts as baseline (e.g. symbols loaded, final qualified count within expected variance for a fixed seed run if applicable).
-5. **OHLCV chain unchanged in priority:** Per **Authoritative OHLCV policy** (Technical reference)—never swap provider order to save cost.
-6. **Public dashboard (Milestone Q):** Snapshot serialization must **not** add provider HTTP calls; it only mirrors data already computed in the scan.
+5. **GitHub CI green before advancing:** Do **not** mark a milestone’s tasks complete in this file and do **not** start the **next** milestone in **Master execution order** until **`main`**’s latest run of [`.github/workflows/ci.yml`](https://github.com/edwardlthompson/linear-trend-spotter/blob/main/.github/workflows/ci.yml) has **`conclusion: success`**. Locally or before pushing milestone work, run `python scripts/check_github_ci.py` (requires authenticated **`gh`** CLI, or **`GITHUB_TOKEN`** / **`GH_TOKEN`** with Actions read access). Exit `2` means the latest run is still in progress—wait and re-run. On GitHub itself, rely on branch protection + required checks when enabled (**A4**).
+6. **OHLCV chain unchanged in priority:** Per **Authoritative OHLCV policy** (Technical reference)—never swap provider order to save cost.
+7. **Public dashboard (Milestone Q):** Snapshot serialization must **not** add provider HTTP calls; it only mirrors data already computed in the scan.
 
 ---
 
@@ -42,6 +43,7 @@ Complete milestones in the order defined in **Master execution order** (default:
 3. **Do not** mark a checkbox `[x]` until verification passes.
 4. **Update this file** in the same change set (or immediately after merge) by changing `- [ ]` to `- [x]` for completed tasks only. Add a short **Notes** line under the task if you discovered follow-up work (optional sub-bullet).
 5. If verification fails, **fix or revert**, re-run verification, then check the box.
+5a. **GitHub CI on `main`:** Before checking milestone boxes or starting the **next** milestone, confirm the latest **`CI` / `ci.yml`** run on `main` is **success** (see Non-regression guardrail **5**). Run `python scripts/check_github_ci.py` from the repo root when working locally; if it fails, fix CI first, then continue milestone work.
 6. **Render:** After changes merge to the branch Render tracks (usually `main`), confirm the dashboard shows a successful deploy when applicable. Do not mark deploy-dependent tasks complete if the build failed on Render.
 
 **Checkbox format:** Use exactly `- [ ]` (incomplete) and `- [x]` (complete) so searches and parsers stay consistent.
@@ -54,7 +56,7 @@ Follow this order unless a task explicitly allows parallel work. **Prerequisite:
 
 | Phase | Milestones | Purpose |
 |-------|------------|---------|
-| **1 — CI & core hardening** | **A → B → C → D → E → F** | Automated checks, exceptions, Telegram HTTP safety, pins/ruff, cross-platform dev, logging. **A2** CI should exist before broad refactors (**I2**, **M1**). |
+| **1 — CI & core hardening** | **A → B → C → D → E → F** | Automated checks, exceptions, Telegram HTTP safety, pins/ruff, cross-platform dev, logging. **A2** CI should exist before broad refactors (**I2**, **M1**). After phase 1, keep **`main` CI green** before each later milestone (`python scripts/check_github_ci.py` + required checks). |
 | **2 — Product-facing scanner** | **G → H** | CMC links in Telegram, then CoinGecko measurement (**H0** first) and savings / OHLCV alignment **without** shrinking universe or interval. |
 | **3 — Maintainability** | **I** | DB docs / `main.py` split; can start late in phase 2 if careful, but prefer after **F**. |
 | **4 — Extended ops & features** | **J → K → L → M → N → O** | Observability, Telegram extras, data/strategy, pytest/pre-commit/docker, security, research flags (all additive defaults). |
@@ -225,9 +227,10 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **H0. Measurement (do first)**  
+- [x] **H0. Measurement (do first)**  
   - Add lightweight **counters or structured logs** (per scan): CoinGecko requests by endpoint family (markets, OHLCV, mapper, tickers). Log to existing metrics file or `app_logger` summary line at scan end.  
   - **Verification:** One scan produces a numeric summary; baseline saved in Notes.
+  - **Notes:** Implemented via `utils/coingecko_usage.py` (`record_coingecko_http`) from `api/coingecko.py` (`_make_request` + `/coins/markets` pages) and `api/coingecko_mapper.py` (`/coins/list`). Counters live in `metrics.counts` as `coingecko_http_*`, appear in `metrics.report()` / persisted `metrics.json` history. Save your first post-deploy **totals** here as baseline when tuning **H1–H6**: _e.g. `coingecko_http_total`, `markets`, `market_chart`, `coin_detail`, `tickers`, `ohlc`, `coins_list`._
 
 - [ ] **H1. Cache & config tuning (low risk, no universe/interval change)**  
   - Tune `CACHE_PRICE_HOURS` / `CACHE_GECKO_ID_DAYS` only with **before/after qualification comparison** on a fixed config (same `TOP_COINS_LIMIT`, same exchanges, same `SCAN_INTERVAL_SECONDS`); ensure `BACKTEST_RESUME_ENABLED` avoids duplicate heavy fetches. **Do not** reduce coin universe or interval.  
@@ -512,14 +515,14 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 
 | Milestone | Theme | Status |
 |-----------|--------|--------|
-| A | CI + Render guardrails | Not started |
-| B | Exceptions | Not started |
-| C | Telegram robustness | Not started |
-| D | Pins + Ruff/Mypy | Not started |
-| E | Cross-platform | Not started |
-| F | Logging | Not started |
-| G | CMC links in Telegram | Not started |
-| H | CoinGecko usage reduction | Not started |
+| A | CI + Render guardrails | **A2** CI green; **A1/A4** manual |
+| B | Exceptions | Complete |
+| C | Telegram robustness | Complete |
+| D | Pins + Ruff/Mypy | Complete (**D3** mypy optional) |
+| E | Cross-platform | Complete |
+| F | Logging | Complete |
+| G | CMC links in Telegram | Complete |
+| H | CoinGecko usage reduction | **H0** complete; **H1–H6** pending |
 | I | DB docs / main split | Not started |
 | J | Observability & operations | Not started |
 | K | Telegram & UX | Not started |
@@ -542,6 +545,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 
 | Area | Files |
 |------|--------|
+| CI gate + CoinGecko H0 counters | `scripts/check_github_ci.py`, `utils/coingecko_usage.py`, `utils/metrics.py` (report section) |
 | Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py` |
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |

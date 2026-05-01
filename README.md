@@ -19,6 +19,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 ## CI and deployment
 
 - **GitHub Actions:** On every push and pull request to `main`, the [CI workflow](https://github.com/edwardlthompson/linear-trend-spotter/blob/main/.github/workflows/ci.yml) installs **`requirements-ci.txt`** on Ubuntu with **Python 3.11** (same as `requirements.txt` but **no `TA-Lib`**, and **`numpy<2`** so vectorbt’s smoke test stays stable on fresh pip resolves). It runs **`ruff check .`**, `python scripts/verify_backtest_env.py`, and `python -m compileall -q .`. Production / Render should keep **`requirements.txt`** (including **TA-Lib**), e.g. via Docker or an image with `libta-lib0-dev` if the sdist must compile.
+- **Milestone gate:** Before treating a milestone as done (per `docs/EXECUTION_PLAN.md`), confirm **`main`** CI is green; locally run `python scripts/check_github_ci.py` (needs `gh auth login` or `GITHUB_TOKEN` with Actions read).
 - **Render:** The worker uses `render.yaml` with `autoDeployTrigger: commit` so merges to the connected branch trigger a deploy. In the Render dashboard, confirm the service is linked to this repository, the correct **branch**, and **Auto-Deploy** is on (see execution plan milestone **A1**).
 - **Branch protection:** After CI is green, enable required status checks on `main` so merges cannot bypass the workflow (milestone **A4** in `docs/EXECUTION_PLAN.md`).
 - **Engineering roadmap:** `docs/EXECUTION_PLAN.md` tracks milestones, verification steps, and checkbox progress.

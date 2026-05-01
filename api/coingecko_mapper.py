@@ -12,6 +12,9 @@ import threading
 import logging
 import requests
 
+from utils.coingecko_usage import record_coingecko_http
+
+
 class CoinGeckoMapper:
     """
     Maintains a local database of CoinGecko IDs mapped to symbols
@@ -101,6 +104,7 @@ class CoinGeckoMapper:
             response = self.session.get(url, timeout=15)
             
             if response.status_code == 200:
+                record_coingecko_http(response.url)
                 data = response.json()
                 self.logger.info(f"✅ Fetched {len(data)} coins from CoinGecko")
                 return data

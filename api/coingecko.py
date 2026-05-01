@@ -9,6 +9,9 @@ from typing import Optional, List, Dict, Any
 import threading
 import logging
 
+from utils.coingecko_usage import record_coingecko_http
+
+
 class RateLimiter:
     """Simple rate limiter with queuing"""
     
@@ -79,6 +82,7 @@ class CoinGeckoClient:
                 response = self.session.get(url, params=params, timeout=15)
                 
                 if response.status_code == 200:
+                    record_coingecko_http(url)
                     return response.json()
                 elif response.status_code == 429:
                     if attempt >= max_retries - 1:
@@ -176,6 +180,7 @@ class CoinGeckoClient:
                             timeout=20,
                         )
                         if response.status_code == 200:
+                            record_coingecko_http(response.url)
                             parsed = response.json()
                             if isinstance(parsed, list):
                                 page_data = parsed
