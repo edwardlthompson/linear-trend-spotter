@@ -1698,12 +1698,25 @@ def run_scanner():
 
         if settings.public_qualified_snapshot_enabled and final_results:
             try:
+                finished_at = datetime.now(timezone.utc)
+                wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
+                err_map = metrics.get_summary().get("errors") or {}
+                err_total = 0
+                for v in err_map.values():
+                    if isinstance(v, bool) or not isinstance(v, (int, float)):
+                        continue
+                    err_total += int(v)
                 write_public_qualified_snapshot(
                     settings.DATA_DIR,
                     settings.public_qualified_snapshot_file,
                     final_results,
                     field_set=settings.public_qualified_snapshot_field_set,
                     scan_interval_seconds=settings.scan_interval_seconds,
+                    scan_health={
+                        "scan_duration_s": round(wall_s, 2),
+                        "coins_evaluated": len(all_symbols),
+                        "errors_count": int(err_total),
+                    },
                 )
                 app_logger.info("📤 Public qualified snapshot written")
             except Exception as snap_err:

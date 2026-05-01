@@ -229,6 +229,16 @@ th.sort-desc .sort-btn::after {
   margin-bottom: 0.75rem;
 }
 
+.health-strip {
+  font-size: 0.8rem;
+  color: var(--color-text);
+  background: var(--diff-bg);
+  border: 1px solid var(--diff-border);
+  border-radius: 8px;
+  padding: 0.4rem 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
 tr.coin-row {
   cursor: pointer;
 }

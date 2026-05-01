@@ -56,6 +56,50 @@ def test_full_strips_non_https_chart_url() -> None:
     assert "chart_image_url" not in payload["coins"][0]
 
 
+def test_scan_health_fields_optional() -> None:
+    rows = [
+        {
+            "symbol": "ada",
+            "name": "Cardano",
+            "slug": "cardano",
+            "gains": {"7d": 1.0, "30d": 2.0},
+            "uniformity_score": 50.0,
+            "health_score": 60,
+        },
+    ]
+    health = {"scan_duration_s": 123.456, "coins_evaluated": 4000, "errors_count": 2}
+    payload = build_public_qualified_snapshot(
+        rows,
+        field_set="minimal",
+        scan_interval_seconds=3600,
+        scan_health=health,
+    )
+    assert payload["scan_duration_s"] == 123.46
+    assert payload["coins_evaluated"] == 4000
+    assert payload["errors_count"] == 2
+
+
+def test_scan_health_omits_invalid_values() -> None:
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 0.0, "30d": 0.0},
+            "uniformity_score": 1.0,
+            "health_score": 1,
+        },
+    ]
+    payload = build_public_qualified_snapshot(
+        rows,
+        field_set="minimal",
+        scan_health={"scan_duration_s": float("nan"), "coins_evaluated": -1, "errors_count": "x"},
+    )
+    assert "scan_duration_s" not in payload
+    assert "coins_evaluated" not in payload
+    assert "errors_count" not in payload
+
+
 def test_minimal_field_set_omits_backtest_and_exchange_fields() -> None:
     rows = [
         {

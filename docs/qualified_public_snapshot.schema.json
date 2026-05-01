@@ -16,6 +16,21 @@
       "enum": ["full", "minimal"],
       "description": "Q3: full rows match Telegram-oriented fields; minimal omits per-exchange volumes and ohlcv_source"
     },
+    "scan_duration_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Q20: optional wall-clock scan duration in seconds when worker attaches scan health"
+    },
+    "coins_evaluated": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Q20: optional count of exchange symbols considered in the scan"
+    },
+    "errors_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Q20: optional sum of metrics error counters for the scan"
+    },
     "coins": {
       "type": "array",
       "items": {

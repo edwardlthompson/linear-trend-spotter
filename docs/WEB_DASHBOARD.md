@@ -51,3 +51,7 @@ Column headers sort the in-memory table (toggle direction on repeat clicks). **H
 - **Deep links:** Append **`#symbol=BTC`** or **`?symbol=BTC`** (symbol only) to focus and briefly highlight a row after data loads; focusing a coin row updates the hash via **`replaceState`** (no extra history entries).
 - **Accessibility:** Table **`caption`** (visually hidden), sortable **`aria-sort`**, header **`scope`/`id`** and cell **`headers`**, **`prefers-reduced-motion`** in CSS, visible **`:focus-visible`** on controls.
 - **Chart image:** If a coin includes **`chart_image_url`** (`https://` only, optional in **`field_set: full`** snapshot), the expanded row shows a lazy-loaded image. Cross-origin images must allow this origin (**`Access-Control-Allow-Origin`**) or the image may fail to paint in the browser.
+
+## Scan health strip (Q20)
+
+When the worker writes **`scan_duration_s`**, **`coins_evaluated`**, and/or **`errors_count`** on the snapshot (enabled with **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** and a non-empty qualified list), the dashboard shows a read-only **`#healthStrip`** below the stale banner. Older or hand-made JSON without these keys leaves the strip hidden.

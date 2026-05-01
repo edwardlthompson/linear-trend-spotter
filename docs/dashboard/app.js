@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * expandable rows; stale banner; theme (Q15); export (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); tier-A alerts. Snapshot: ?api=… or window.__SNAPSHOT_URL__.
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts. Snapshot: ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   const POLL_INTERVAL_MS = 15 * 60 * 1000;
@@ -72,6 +72,7 @@
   const elTbody = document.getElementById("tbody");
   const elDiffBanner = document.getElementById("diffBanner");
   const elStaleBanner = document.getElementById("staleBanner");
+  const elHealthStrip = document.getElementById("healthStrip");
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
@@ -115,6 +116,10 @@
     if (elStaleBanner) {
       elStaleBanner.hidden = true;
       elStaleBanner.textContent = "";
+    }
+    if (elHealthStrip) {
+      elHealthStrip.hidden = true;
+      elHealthStrip.textContent = "";
     }
   }
 
@@ -349,6 +354,27 @@
     elStaleBanner.textContent = `Snapshot looks stale (${ageMin} min old). Expected refresh about every ${nomMin} min — check the worker or snapshot URL.`;
   }
 
+  function updateHealthStrip(data) {
+    if (!elHealthStrip) return;
+    const dur = data.scan_duration_s;
+    const ev = data.coins_evaluated;
+    const err = data.errors_count;
+    const hasDur = typeof dur === "number" && Number.isFinite(dur);
+    const hasEv = typeof ev === "number" && Number.isFinite(ev);
+    const hasErr = typeof err === "number" && Number.isFinite(err);
+    if (!hasDur && !hasEv && !hasErr) {
+      elHealthStrip.hidden = true;
+      elHealthStrip.textContent = "";
+      return;
+    }
+    const parts = [];
+    if (hasDur) parts.push(`Last scan wall time: ${dur.toFixed(1)}s`);
+    if (hasEv) parts.push(`Symbols evaluated: ${Math.round(ev)}`);
+    if (hasErr) parts.push(`Metric errors: ${Math.round(err)}`);
+    elHealthStrip.textContent = parts.join(" · ");
+    elHealthStrip.hidden = false;
+  }
+
   function escapeHtml(s) {
     return s
       .replace(/&/g, "&amp;")
@@ -526,6 +552,7 @@
 
     updateDiffBanner(data, added, dropped, prevSchema);
     updateStaleBanner(data);
+    updateHealthStrip(data);
 
     applyTableView();
     writeSnapshotVisitState(data);

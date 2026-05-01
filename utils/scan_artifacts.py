@@ -51,11 +51,35 @@ def write_scan_heartbeat(
     _atomic_write_json(data_dir / filename, body)
 
 
+def _optional_scan_health_fields(scan_health: dict[str, Any] | None) -> dict[str, Any]:
+    """Q20: optional top-level snapshot fields for dashboard strip (no secrets)."""
+    if not scan_health:
+        return {}
+    out: dict[str, Any] = {}
+    raw_dur = scan_health.get("scan_duration_s")
+    if isinstance(raw_dur, (int, float)):
+        fd = float(raw_dur)
+        if fd >= 0 and fd == fd:  # finite, non-NaN
+            out["scan_duration_s"] = round(fd, 2)
+    raw_ev = scan_health.get("coins_evaluated")
+    if isinstance(raw_ev, int) and raw_ev >= 0:
+        out["coins_evaluated"] = raw_ev
+    elif isinstance(raw_ev, float) and raw_ev >= 0 and raw_ev == raw_ev:
+        out["coins_evaluated"] = int(raw_ev)
+    raw_err = scan_health.get("errors_count")
+    if isinstance(raw_err, int) and raw_err >= 0:
+        out["errors_count"] = raw_err
+    elif isinstance(raw_err, float) and raw_err >= 0 and raw_err == raw_err:
+        out["errors_count"] = int(raw_err)
+    return out
+
+
 def build_public_qualified_snapshot(
     final_results: list[dict[str, Any]],
     *,
     field_set: str = "full",
     scan_interval_seconds: int = 3600,
+    scan_health: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Notification-parity subset for public JSON (Q1/Q2). No secrets.
 
@@ -95,13 +119,15 @@ def build_public_qualified_snapshot(
                 coin["chart_image_url"] = chart_url.strip()
         coins_out.append(coin)
     interval = max(60, int(scan_interval_seconds or 3600))
-    return {
+    body: dict[str, Any] = {
         "schema_version": 1,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "field_set": "minimal" if minimal else "full",
         "scan_interval_seconds": interval,
         "coins": coins_out,
     }
+    body.update(_optional_scan_health_fields(scan_health))
+    return body
 
 
 def write_public_qualified_snapshot(
@@ -111,10 +137,12 @@ def write_public_qualified_snapshot(
     *,
     field_set: str = "full",
     scan_interval_seconds: int = 3600,
+    scan_health: dict[str, Any] | None = None,
 ) -> None:
     payload = build_public_qualified_snapshot(
         final_results,
         field_set=field_set,
         scan_interval_seconds=scan_interval_seconds,
+        scan_health=scan_health,
     )
     _atomic_write_json(data_dir / filename, payload)
