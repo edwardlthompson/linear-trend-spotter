@@ -14,16 +14,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
 from config.constants import STABLECOINS
-from database.models import HistoryDatabase, ActiveCoinsDatabase
-from database.cache import PriceCache
-from api.coinmarketcap import CoinMarketCapClient
-from api.coingecko import CoinGeckoClient, coingecko_ticker_exchange_ids_csv
-from api.coingecko_mapper import CoinGeckoMapper
-from api.price_history_fallback import PriceHistoryFallbackClient
-from api.chart_img import ChartIMGClient
-from api.tradingview_mapper import TradingViewMapper
+from api.coingecko import coingecko_ticker_exchange_ids_csv
 from processors.uniformity_filter import UniformityFilter
-from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
 from notifications.image_renderer import (
     build_combined_notification_image,
@@ -33,7 +25,6 @@ from notifications.image_renderer import (
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.report import notification_rows_for_symbol
-from backtesting.signals import generate_indicator_signals
 from utils.insights import (
     compute_data_reliability,
     compute_health_score,
@@ -53,7 +44,15 @@ from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.active_ranking import build_active_ranking_rows
 from scanner.anomaly_alerts import build_anomaly_messages
-from scanner.cmc_resolve import build_cmc_normalized_lookup, resolve_cmc_data
+from scanner.cmc_resolve import build_cmc_normalized_lookup
+from scanner.coin_enrichment import (
+    attach_rank_movement,
+    attach_signal_age,
+    attach_volume_acceleration,
+)
+from scanner.market_processing import aggregate_daily_bars_from_hourly, process_tickers
+from scanner.quiet_hours import telegram_quiet_active
+from scanner.top_coin_resolution import ensure_cmc_notify_urls, resolve_top_coin_data
 from scanner.weekly_digest import (
     build_weekly_digest_message,
     iso_week_key,
@@ -61,276 +60,10 @@ from scanner.weekly_digest import (
     save_weekly_digest_state,
 )
 from scanner.web_push_notify import maybe_notify_web_push_scan
+from scanner.runtime_init import initialize_runtime_components
 
 # Import exchange database
-from exchange_data.exchange_db import ExchangeDatabase
 from exchange_data.exchange_fetcher import ExchangeFetcher
-
-
-def _telegram_quiet_active() -> bool:
-    if not settings.quiet_hours_enabled:
-        return False
-    return is_within_utc_quiet_window(
-        datetime.now(timezone.utc),
-        settings.quiet_hours_start_hour_utc,
-        settings.quiet_hours_end_hour_utc,
-    )
-
-
-def _ensure_cmc_notify_urls(coin: dict, cmc_slug_resolver) -> None:
-    """Prefer ``/currencies/{slug}/`` for Telegram; clear CMC search URLs; resolve slug from map when missing."""
-    for key in ("cmc_url", "source_url"):
-        raw = str(coin.get(key) or "").strip()
-        if "coinmarketcap.com/search" in raw.lower():
-            coin[key] = ""
-    if str(coin.get("cmc_slug") or "").strip():
-        return
-    if not cmc_slug_resolver:
-        return
-    gid = str(coin.get("gecko_id") or coin.get("cg_id") or "").strip().lower()
-    if not gid:
-        return
-    slug = cmc_slug_resolver.resolve(
-        symbol=str(coin.get("symbol") or ""),
-        name=str(coin.get("name") or ""),
-        gecko_id=gid,
-    )
-    if not slug:
-        return
-    cu = f"https://coinmarketcap.com/currencies/{quote(str(slug).strip().lower(), safe='')}/"
-    coin["cmc_slug"] = str(slug).strip().lower()
-    coin["cmc_url"] = cu
-    if not str(coin.get("source_url") or "").strip():
-        coin["source_url"] = cu
-
-
-def process_tickers(tickers_data, target_exchanges):
-    """Process ticker data to extract exchange volumes"""
-    volumes = {ex: "N/A" for ex in target_exchanges}
-    
-    if not tickers_data or 'tickers' not in tickers_data:
-        return volumes
-    
-    for ticker in tickers_data.get('tickers', []):
-        exchange_id = ticker.get('market', {}).get('identifier', '').lower()
-        exchange_name = ticker.get('market', {}).get('name', '').lower()
-        volume = float(ticker.get('converted_volume', {}).get('usd', 0))
-        
-        for target in target_exchanges:
-            if target in exchange_id or target in exchange_name:
-                if volumes[target] == "N/A" or volume > volumes[target]:
-                    volumes[target] = volume
-    
-    return volumes
-
-
-def aggregate_daily_bars_from_hourly(hourly_rows):
-    """Aggregate hourly OHLCV rows into daily bars for OHLCV uniformity scoring."""
-    buckets = {}
-    for row in hourly_rows:
-        ts = int(row['ts'])
-        day_key = ts // 86400
-        buckets.setdefault(day_key, []).append(row)
-
-    daily_bars = []
-    for day_key in sorted(buckets.keys()):
-        day_rows = sorted(buckets[day_key], key=lambda item: int(item['ts']))
-        if not day_rows:
-            continue
-        daily_bars.append(
-            {
-                'open': float(day_rows[0]['open']),
-                'high': max(float(item['high']) for item in day_rows),
-                'low': min(float(item['low']) for item in day_rows),
-                'close': float(day_rows[-1]['close']),
-                'volume': sum(float(item.get('volume', 0.0) or 0.0) for item in day_rows),
-            }
-        )
-
-    return daily_bars
-
-
-def _attach_rank_movement(final_results: list[dict], previous_rank_map: dict[str, int]) -> None:
-    for rank, coin in enumerate(final_results, start=1):
-        symbol = str(coin.get('symbol', '')).upper()
-        previous_rank = previous_rank_map.get(symbol)
-        coin['current_rank'] = rank
-        coin['previous_rank'] = previous_rank
-        if previous_rank is None:
-            coin['rank_status'] = 'new'
-            coin['rank_delta'] = None
-        else:
-            delta = previous_rank - rank
-            coin['rank_delta'] = delta
-            if delta > 0:
-                coin['rank_status'] = 'up'
-            elif delta < 0:
-                coin['rank_status'] = 'down'
-            else:
-                coin['rank_status'] = 'flat'
-
-
-def _resolve_top_coin_data(
-    symbol: str,
-    *,
-    top_coins_provider: str,
-    cmc_by_symbol: dict[str, dict],
-    cmc_by_normalized_symbol: dict[str, list[tuple[str, dict]]],
-    cmc_symbol_aliases: dict[str, str],
-    coingecko_id_aliases: dict[str, str],
-    gecko: CoinGeckoClient,
-    alias_markets_by_id: dict[str, dict] | None = None,
-) -> tuple[dict | None, str | None, str]:
-    resolved_data, resolved_symbol, resolution_type = resolve_cmc_data(
-        symbol,
-        cmc_by_symbol,
-        cmc_by_normalized_symbol,
-        cmc_symbol_aliases,
-    )
-    if resolved_data or top_coins_provider != 'coingecko':
-        return resolved_data, resolved_symbol, resolution_type
-
-    symbol_upper = str(symbol or '').upper()
-    alias_gecko_id = coingecko_id_aliases.get(symbol_upper)
-    if not alias_gecko_id:
-        return None, None, 'missing'
-
-    alias_key = str(alias_gecko_id).strip().lower()
-    row = (alias_markets_by_id or {}).get(alias_key)
-    if row:
-        alias_snapshot = gecko.snapshot_from_markets_row(row, symbol_override=symbol_upper)
-    else:
-        alias_snapshot = gecko.get_coin_market_snapshot(alias_gecko_id)
-    if not alias_snapshot:
-        return None, None, 'missing'
-
-    alias_info = dict(alias_snapshot.get('info') or {})
-    alias_info['symbol'] = symbol_upper
-    alias_info.setdefault('source_url', f"https://www.coingecko.com/en/coins/{alias_gecko_id}")
-    resolved_data = {
-        'data': alias_snapshot.get('data', {}),
-        'gains': alias_snapshot.get('gains', {}),
-        'info': alias_info,
-    }
-    cmc_by_symbol[symbol_upper] = resolved_data
-    return resolved_data, alias_gecko_id, 'coingecko_id_alias'
-
-
-def _format_signal_age_label(bars_ago: int, timeframe: str) -> str:
-    normalized = str(timeframe or '1h').lower()
-    hours_per_bar = {
-        '1h': 1,
-        '4h': 4,
-        '1d': 24,
-        'daily': 24,
-    }.get(normalized, 1)
-
-    if bars_ago <= 0:
-        return f"current candle ({normalized})"
-
-    approx_hours = bars_ago * hours_per_bar
-    if approx_hours < 24:
-        approx_label = f"~{approx_hours}h"
-    else:
-        approx_days = approx_hours / 24
-        approx_label = f"~{approx_days:.1f}d" if approx_days % 1 else f"~{int(approx_days)}d"
-
-    candle_label = 'candle' if bars_ago == 1 else 'candles'
-    return f"{bars_ago} {candle_label} ago on {normalized} ({approx_label})"
-
-
-def _attach_signal_age(coin: dict, loader: BacktestDataLoader) -> None:
-    strategies = coin.get('backtest_top_strategies') or []
-    if not strategies:
-        return
-
-    best_strategy = strategies[0]
-    indicator = str(best_strategy.get('indicator', '')).strip()
-    timeframe = str(best_strategy.get('timeframe', '1h')).strip().lower()
-    params = best_strategy.get('params') or {}
-
-    if not indicator or indicator == 'B&H':
-        return
-
-    loaded = loader.load(
-        symbol=str(coin.get('symbol', '')).upper(),
-        timeframe=timeframe,
-        days=30,
-        gecko_id=coin.get('gecko_id') or coin.get('cg_id'),
-    )
-    if loaded.frame is None or loaded.frame.empty:
-        return
-
-    try:
-        buy_signals, sell_signals = generate_indicator_signals(indicator=indicator, frame=loaded.frame, params=params)
-    except Exception as signal_error:
-        app_logger.warning(f"⚠️ Signal age skipped for {coin.get('symbol', '?')}: {signal_error}")
-        return
-
-    recent_buy_index = buy_signals[buy_signals].index
-    if len(recent_buy_index) == 0:
-        return
-
-    last_buy_ts = recent_buy_index[-1]
-    location = loaded.frame.index.get_indexer([last_buy_ts])
-    if len(location) == 0 or int(location[0]) < 0:
-        return
-
-    bars_ago = max(0, len(loaded.frame.index) - 1 - int(location[0]))
-    last_sell_index = sell_signals[sell_signals].index
-    signal_is_active = True
-    if len(last_sell_index) > 0:
-        signal_is_active = bool(last_sell_index[-1] < last_buy_ts)
-
-    coin['signal_age_bars'] = bars_ago
-    coin['signal_age_timeframe'] = timeframe
-    coin['signal_age_label'] = _format_signal_age_label(bars_ago, timeframe)
-    coin['signal_age_indicator'] = indicator
-    coin['signal_age_active'] = signal_is_active
-
-
-def _attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
-    loaded = loader.load(
-        symbol=str(coin.get('symbol', '')).upper(),
-        timeframe='1h',
-        days=10,
-        gecko_id=coin.get('gecko_id') or coin.get('cg_id'),
-    )
-    if loaded.frame is None or loaded.frame.empty:
-        return
-
-    volume = loaded.frame['volume'].astype(float)
-    if len(volume) < 48:
-        return
-
-    current_window = volume.iloc[-24:] if len(volume) >= 24 else volume
-    previous_volume = volume.iloc[:-24]
-    prior_window_count = min(7, len(previous_volume) // 24)
-    if prior_window_count <= 0:
-        return
-
-    baseline_hours = previous_volume.iloc[-(prior_window_count * 24):]
-    baseline_daily_totals = [
-        float(baseline_hours.iloc[start:start + 24].sum())
-        for start in range(0, len(baseline_hours), 24)
-        if len(baseline_hours.iloc[start:start + 24]) == 24
-    ]
-    if not baseline_daily_totals:
-        return
-
-    current_24h_volume = float(current_window.sum())
-    baseline_avg = float(sum(baseline_daily_totals) / len(baseline_daily_totals))
-    if baseline_avg <= 0:
-        return
-
-    acceleration_pct = ((current_24h_volume - baseline_avg) / baseline_avg) * 100.0
-    coin['volume_acceleration_pct'] = acceleration_pct
-    coin['volume_acceleration_window_days'] = len(baseline_daily_totals)
-    coin['volume_recent_24h'] = current_24h_volume
-    coin['volume_baseline_24h'] = baseline_avg
-
-
-
 
 
 def run_scanner():
@@ -366,98 +99,19 @@ def run_scanner():
         scan_started_at = datetime.now(timezone.utc)
         # Initialize components
         with timed_block('initialization'):
-            history_db = HistoryDatabase(settings.db_paths['scanner'])
-            active_db = ActiveCoinsDatabase(settings.db_paths['scanner'])
-            cache = PriceCache(settings.db_paths['scanner'])
-            
-            exchange_db_path = settings.db_paths['exchanges']
-            exchange_db = ExchangeDatabase(exchange_db_path)
-            
-            tv_mapper_db_path = settings.db_paths['tv_mappings']
-            tv_mapper = TradingViewMapper(tv_mapper_db_path)
-            
-            # Initialize CoinMarketCap client (for gains)
-            cmc = CoinMarketCapClient(settings.cmc_api_key)
-            app_logger.info("✅ CoinMarketCap client initialized")
-            
-            # Initialize CoinGecko client (for exchange volumes only)
-            gecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
-            app_logger.info("✅ CoinGecko client initialized")
-
-            # Initialize fallback providers for OHLCV reliability chain
-            history_fallback = PriceHistoryFallbackClient(
-                polygon_api_key=os.getenv('POLYGON_API_KEY', ''),
-                cmc_api_key=settings.cmc_api_key
-            )
-            app_logger.info("✅ OHLCV fallback chain initialized (Polygon + CMC hourly/daily tertiary)")
-            
-            # Initialize CoinGecko Mapper
-            cg_mapper_db_path = settings.db_paths['mappings']
-            cg_mapper = CoinGeckoMapper(cg_mapper_db_path)
-            
-            stats = cg_mapper.get_stats()
-            max_list_age_days = settings.cache_gecko_id_days
-            if cg_mapper.should_refresh_list(max_list_age_days):
-                app_logger.info(
-                    "📡 CoinGecko mappings %s — fetching /coins/list (refresh if empty or older than %sd)...",
-                    "empty" if int(stats.get("total_mappings") or 0) == 0 else "stale",
-                    max_list_age_days,
-                )
-                cg_mapper.update_mappings()
-            else:
-                app_logger.info(
-                    "✅ CoinGecko mapper ready with %s mappings (list fresh within %sd; skipping /coins/list)",
-                    stats["total_mappings"],
-                    max_list_age_days,
-                )
-            
-            # Initialize Chart-IMG client (construct to validate config; charts use client where needed downstream)
-            if settings.chart_img_api_key:
-                ChartIMGClient(settings.chart_img_api_key, mapper=tv_mapper)
-                app_logger.info("✅ Chart-IMG client initialized")
-            else:
-                app_logger.warning("⚠️ No Chart-IMG API key - charts disabled")
-            
-            # Initialize Telegram
-            telegram = None
-            if settings.telegram:
-                telegram = TelegramClient(
-                    settings.telegram['bot_token'],
-                    settings.telegram['chat_id']
-                )
-                app_logger.info("✅ Telegram client initialized")
-            else:
-                app_logger.warning("⚠️ Telegram credentials missing - notifications disabled")
-
-            cmc_slug_resolver = None
-            if settings.cmc_slug_map_enabled and settings.cmc_api_key and str(settings.cmc_api_key).strip():
-                from utils.cmc_slug_resolver import CmcSlugResolver
-
-                cmc_slug_resolver = CmcSlugResolver(
-                    settings.DATA_DIR,
-                    map_cache_file=settings.cmc_slug_map_cache_file,
-                    learn_file=settings.cmc_slug_learn_file,
-                )
-                try:
-                    cmc_slug_resolver.load()
-                    if (
-                        not cmc_slug_resolver.by_symbol
-                        or cmc_slug_resolver.map_cache_is_stale(settings.cmc_slug_map_max_age_hours)
-                    ):
-                        app_logger.info("📥 Refreshing CMC cryptocurrency map cache (Telegram CMC deep links)...")
-                        if not cmc_slug_resolver.refresh_map_from_api(cmc):
-                            app_logger.warning(
-                                "⚠️ CMC map refresh failed or empty; CMC deep links may fall back to CoinGecko until the map loads"
-                            )
-                    else:
-                        app_logger.info(
-                            "✅ CMC slug map cache loaded (%s symbols indexed, max age %sh)",
-                            len(cmc_slug_resolver.by_symbol),
-                            settings.cmc_slug_map_max_age_hours,
-                        )
-                except Exception as slug_exc:
-                    app_logger.warning("⚠️ CMC slug resolver unavailable: %s", slug_exc)
-                    cmc_slug_resolver = None
+            runtime = initialize_runtime_components(settings)
+            history_db = runtime["history_db"]
+            active_db = runtime["active_db"]
+            cache = runtime["cache"]
+            exchange_db = runtime["exchange_db"]
+            tv_mapper = runtime["tv_mapper"]
+            cmc = runtime["cmc"]
+            gecko = runtime["gecko"]
+            history_fallback = runtime["history_fallback"]
+            cg_mapper = runtime["cg_mapper"]
+            telegram = runtime["telegram"]
+            cmc_slug_resolver = runtime["cmc_slug_resolver"]
+            exchange_db_path = settings.db_paths["exchanges"]
         
         # ============================================================
         # STEP 1: Get top configured coins with gains from provider
@@ -650,7 +304,7 @@ def run_scanner():
                 _log_filter_line(f"   ⏭️ {symbol}: Skipped (stablecoin)")
                 continue
                 
-            cmc_data, resolved_cmc_symbol, resolution_type = _resolve_top_coin_data(
+            cmc_data, resolved_cmc_symbol, resolution_type = resolve_top_coin_data(
                 symbol,
                 top_coins_provider=top_coins_provider,
                 cmc_by_symbol=cmc_by_symbol,
@@ -1014,7 +668,7 @@ def run_scanner():
                 str(x.get('symbol', '')).upper(),
             ),
         )
-        _attach_rank_movement(final_results, history_db.get_latest_rank_map())
+        attach_rank_movement(final_results, history_db.get_latest_rank_map())
 
 
         # ============================================================
@@ -1091,8 +745,8 @@ def run_scanner():
         notification_loader = BacktestDataLoader(cache=cache, max_cache_age_hours=settings.cache_price_hours)
         for coin in final_results:
             coin.update(compute_reentry_quality(str(coin.get('symbol', '')), recent_exits_30d))
-            _attach_signal_age(coin, notification_loader)
-            _attach_volume_acceleration(coin, notification_loader)
+            attach_signal_age(coin, notification_loader, app_logger)
+            attach_volume_acceleration(coin, notification_loader)
             compute_health_score(coin)
 
         final_results = sorted(
@@ -1104,7 +758,7 @@ def run_scanner():
                 str(x.get('symbol', '')).upper(),
             ),
         )
-        _attach_rank_movement(final_results, history_db.get_latest_rank_map())
+        attach_rank_movement(final_results, history_db.get_latest_rank_map())
         
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
@@ -1170,7 +824,7 @@ def run_scanner():
                 coin['exit_reason'] = "No longer listed on target exchanges"
                 continue
 
-            cmc_data, _, _ = _resolve_top_coin_data(
+            cmc_data, _, _ = resolve_top_coin_data(
                 symbol,
                 top_coins_provider=top_coins_provider,
                 cmc_by_symbol=cmc_by_symbol,
@@ -1301,14 +955,19 @@ def run_scanner():
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
         # ============================================================
-        quiet = _telegram_quiet_active()
+        quiet = telegram_quiet_active(
+            quiet_hours_enabled=settings.quiet_hours_enabled,
+            quiet_hours_start_hour_utc=settings.quiet_hours_start_hour_utc,
+            quiet_hours_end_hour_utc=settings.quiet_hours_end_hour_utc,
+            is_within_utc_quiet_window=is_within_utc_quiet_window,
+        )
         if telegram and entered and settings.entry_notifications:
             with timed_block('notifications'):
                 app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
                 
                 for coin in entered:
                     app_logger.info(f"   🟢 {coin['symbol']}")
-                    _ensure_cmc_notify_urls(coin, cmc_slug_resolver)
+                    ensure_cmc_notify_urls(coin, cmc_slug_resolver)
 
                     # Get chart image from Chart-IMG (external service)
                     caption = MessageFormatter.format_entry(coin)
@@ -1346,7 +1005,7 @@ def run_scanner():
             app_logger.info(f"\n📱 Sending exit notifications for {len(exited)} coins...")
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
-                _ensure_cmc_notify_urls(coin, cmc_slug_resolver)
+                ensure_cmc_notify_urls(coin, cmc_slug_resolver)
                 message = MessageFormatter.format_exit(coin)
                 exit_markup = telegram.coin_link_reply_markup(coin)
                 try:
