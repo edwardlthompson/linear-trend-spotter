@@ -1,0 +1,21 @@
+# Local smoke / CI parity (Milestone M3). Not used by Render.
+services:
+  app:
+    image: docker.io/library/python:3.11-bookworm
+    working_dir: /app
+    volumes:
+      - ./:/app
+    environment:
+      PYTHON_VERSION: "3.11"
+      DATA_DIR: /tmp/lts-data
+      TELEGRAM_BOT_TOKEN: ""
+      TELEGRAM_CHAT_ID: ""
+      CMC_API_KEY: ""
+      POLYGON_API_KEY: ""
+      CHART_IMG_API_KEY: ""
+    command: >
+      bash -lc "pip install --no-cache-dir -q -r requirements-ci.txt ruff &&
+      ruff check . &&
+      python scripts/check_backtesting_imports.py &&
+      python scripts/verify_backtest_env.py &&
+      python -m compileall -q ."

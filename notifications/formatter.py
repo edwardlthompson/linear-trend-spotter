@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 from urllib.parse import quote
 
 from config.constants import EXCHANGE_EMOJIS
+from config.settings import settings
 
 
 class MessageFormatter:
@@ -130,6 +131,29 @@ class MessageFormatter:
         return "n/a"
 
     @staticmethod
+    def _symbol_quality_line_html(coin: Dict) -> str:
+        """Optional Telegram HTML line: reliability, OHLCV provider, signal age (Milestone L2)."""
+        if not settings.notification_symbol_quality_line:
+            return ""
+        parts: list[str] = []
+        rel = coin.get("data_reliability_score")
+        if isinstance(rel, (int, float)):
+            label = coin.get("data_reliability_label")
+            lab = MessageFormatter._tg_html_text(label) if label else ""
+            suffix = f" ({lab})" if lab else ""
+            parts.append(f"reliability {float(rel):.0f}/100{suffix}")
+        src = coin.get("ohlcv_source")
+        if src:
+            parts.append(f"OHLCV {MessageFormatter._tg_html_text(src)}")
+        sig = coin.get("signal_age_label")
+        if sig:
+            parts.append(f"signal {MessageFormatter._tg_html_text(sig)}")
+        if not parts:
+            return ""
+        joined = " · ".join(parts)
+        return f"📡 <b>Data quality</b>: {joined}\n"
+
+    @staticmethod
     def _format_key_settings(params: Dict) -> str:
         if not params:
             return "none"
@@ -211,6 +235,10 @@ class MessageFormatter:
                 caption += f" ({MessageFormatter._tg_html_text(coin.get('health_label'))})"
             caption += "\n"
 
+        sq = MessageFormatter._symbol_quality_line_html(coin)
+        if sq:
+            caption += sq
+
         caption += "\n"
 
         current_rank = coin.get('current_rank')
@@ -283,6 +311,10 @@ class MessageFormatter:
         message += f"🔗 {MessageFormatter._tg_html_text(market_url)}\n"
         message += "has left the qualified list\n"
         message += f"Reason: {reason}"
+
+        sq = MessageFormatter._symbol_quality_line_html(coin)
+        if sq:
+            message += "\n" + sq.rstrip("\n")
 
         lifecycle_pnl_pct = coin.get('lifecycle_pnl_pct')
         max_runup_pct = coin.get('max_runup_pct')

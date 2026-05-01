@@ -94,6 +94,7 @@ class Settings:
             'ARTIFACT_RETENTION_DAYS': 7,
             'ARTIFACT_ARCHIVE_DIR': '.archive/auto',
             'NOTIFICATION_INCLUDE_QUALITY_PANEL': True,
+            'NOTIFICATION_SYMBOL_QUALITY_LINE': False,
             'EXIT_ANALYTICS_FILE': 'exit_reason_analytics.json',
             'USE_14D_FILTER': False,
             'ALERT_COOLDOWN_HOURS': 6,
@@ -103,6 +104,9 @@ class Settings:
             'ANOMALY_MAX_NO_TICKER_RATIO': 0.50,
             'WATCHLIST_ENABLED': True,
             'WATCHLIST_SCORE_BUFFER': 8,
+            'WATCHLIST_EXPORT_ENABLED': False,
+            'WATCHLIST_EXPORT_CSV_FILE': 'watchlist_export.csv',
+            'WATCHLIST_EXPORT_JSON_FILE': 'watchlist_export.json',
             'PORTFOLIO_SIM_ENABLED': True,
             'PORTFOLIO_SIM_STARTING_CAPITAL': 10000,
             'SCANNER_INSIGHTS_FILE': 'scanner_insights.json',
@@ -197,9 +201,11 @@ class Settings:
             'BACKTEST_RESUME_ENABLED',
             'ARTIFACT_HYGIENE_ENABLED',
             'NOTIFICATION_INCLUDE_QUALITY_PANEL',
+            'NOTIFICATION_SYMBOL_QUALITY_LINE',
             'USE_14D_FILTER',
             'ANOMALY_ALERTS_ENABLED',
             'WATCHLIST_ENABLED',
+            'WATCHLIST_EXPORT_ENABLED',
             'PORTFOLIO_SIM_ENABLED',
             'WEEKLY_DIGEST_ENABLED',
             'SCAN_HEARTBEAT_ENABLED',
@@ -350,6 +356,8 @@ class Settings:
             'CMC_SLUG_MAP_CACHE_FILE',
             'CMC_SLUG_LEARN_FILE',
             'STILL_QUALIFYING_STATE_FILE',
+            'WATCHLIST_EXPORT_CSV_FILE',
+            'WATCHLIST_EXPORT_JSON_FILE',
         ]:
             value = normalized.get(path_key)
             if not isinstance(value, str) or not value.strip():
@@ -655,6 +663,10 @@ class Settings:
         return bool(self._config.get('NOTIFICATION_INCLUDE_QUALITY_PANEL', True))
 
     @property
+    def notification_symbol_quality_line(self) -> bool:
+        return bool(self._config.get('NOTIFICATION_SYMBOL_QUALITY_LINE', False))
+
+    @property
     def exit_analytics_file(self) -> Path:
         raw_path = str(self._config.get('EXIT_ANALYTICS_FILE', 'exit_reason_analytics.json')).strip()
         return self.DATA_DIR / raw_path
@@ -686,6 +698,20 @@ class Settings:
     @property
     def watchlist_score_buffer(self) -> int:
         return int(self._config.get('WATCHLIST_SCORE_BUFFER', 8))
+
+    @property
+    def watchlist_export_enabled(self) -> bool:
+        return bool(self._config.get('WATCHLIST_EXPORT_ENABLED', False))
+
+    @property
+    def watchlist_export_csv_file(self) -> str:
+        name = str(self._config.get('WATCHLIST_EXPORT_CSV_FILE', 'watchlist_export.csv')).strip()
+        return name or 'watchlist_export.csv'
+
+    @property
+    def watchlist_export_json_file(self) -> str:
+        name = str(self._config.get('WATCHLIST_EXPORT_JSON_FILE', 'watchlist_export.json')).strip()
+        return name or 'watchlist_export.json'
 
     @property
     def portfolio_sim_enabled(self) -> bool:

@@ -48,6 +48,72 @@ button.secondary {
   background: #f1f5f9;
 }
 
+.filters {
+  align-items: center;
+}
+
+.filters input[type="search"] {
+  min-width: 10rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.chip-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+}
+
+.chip-label {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+button.chip {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  border: 1px solid #94a3b8;
+  background: #fff;
+}
+
+button.chip.is-active {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #1e293b;
+}
+
+.sort-btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: #0f172a;
+  text-decoration: underline dotted;
+}
+
+.sort-btn:hover {
+  color: #2563eb;
+}
+
+th.sort-asc .sort-btn::after {
+  content: " ▲";
+  text-decoration: none;
+}
+
+th.sort-desc .sort-btn::after {
+  content: " ▼";
+  text-decoration: none;
+}
+
 .meta {
   font-size: 0.85rem;
   color: #475569;

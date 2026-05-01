@@ -47,6 +47,7 @@ from utils.scan_artifacts import (
     write_scan_heartbeat,
 )
 from utils.scan_costs import read_last_completed_coingecko_http_total, write_scan_costs_file
+from utils.watchlist_export import compute_watchlist_rows, write_watchlist_exports
 from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
@@ -1417,7 +1418,24 @@ def run_scanner():
             app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
 
         active_after_update = active_db.get_active()
-        watchlist_rows = []
+        final_symbol_set = {str(c.get("symbol", "")).upper() for c in final_results if c.get("symbol")}
+        watchlist_rows = compute_watchlist_rows(
+            all_processed,
+            final_symbol_set,
+            uniformity_min_score=settings.uniformity_min_score,
+            watchlist_score_buffer=settings.watchlist_score_buffer,
+        )
+        if settings.watchlist_export_enabled:
+            try:
+                write_watchlist_exports(
+                    settings.base_dir,
+                    settings.watchlist_export_csv_file,
+                    settings.watchlist_export_json_file,
+                    watchlist_rows,
+                )
+                app_logger.info("📋 Watchlist export written (%s row(s))", len(watchlist_rows))
+            except Exception as export_err:
+                app_logger.warning("⚠️ Watchlist export failed: %s", export_err)
         update_scanner_insights(
             settings.scanner_insights_file,
             final_results=final_results,

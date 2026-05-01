@@ -39,3 +39,7 @@ Tier-B Web Push (**Q21**) still requires a separate subscription endpoint and is
 ## New / dropped since last visit (Q10)
 
 The dashboard compares the current snapshot symbol set to the previous successful load (`localStorage`). A status banner summarizes **new** and **dropped** symbols and any **`schema_version`** change; rows that are new since the last visit show a **New** badge. Clear site data for the origin to reset the baseline.
+
+## Sort, health filter, and search (Q11–Q12)
+
+Column headers sort the in-memory table (toggle direction on repeat clicks). **Health ≥** chips filter by `health_score`. The search box filters symbols and names (substring, debounced). All are client-side only; the snapshot JSON is still fetched on the same cadence as before (Load button + optional 15-minute alerts).

@@ -1,5 +1,5 @@
 /**
- * Qualified-coin dashboard (Milestones Q4, Q7–Q10): snapshot JSON only; optional tier-A alerts.
+ * Qualified-coin dashboard (Milestones Q4, Q7–Q12): snapshot JSON; sort/filter/search; optional alerts.
  * Snapshot URL: ?api=<encoded-url> or window.__SNAPSHOT_URL__ from config.js.
  */
 (function () {
@@ -7,6 +7,7 @@
   const LS_DIGEST = "qualified_dash_last_snap_digest";
   const LS_PREV_SYMBOLS = "qualified_dash_prev_symbols_json";
   const LS_PREV_SCHEMA = "qualified_dash_prev_schema_version";
+  const SEARCH_DEBOUNCE_MS = 250;
 
   const params = new URLSearchParams(window.location.search);
   const fromQuery = params.get("api");
@@ -19,9 +20,19 @@
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
+  const elSearch = document.getElementById("searchInput");
 
   let pollTimer = null;
   let notifyAlertsEnabled = false;
+  let lastPayload = null;
+  /** @type {Set<string>} */
+  let lastAddedSet = new Set();
+  let sortKey = "health";
+  let sortDir = -1;
+  /** @type {number | null} */
+  let filterHealthMin = null;
+  let searchQuery = "";
+  let searchDebounceTimer = null;
 
   if (elInput) {
     elInput.value = snapshotUrl;
@@ -94,34 +105,89 @@
     elDiffBanner.textContent = parts.join(" · ");
   }
 
-  function render(data) {
-    clearError();
-    const coins = Array.isArray(data.coins) ? data.coins : [];
-    const updated = data.updated_at || "—";
-    const fieldSet = data.field_set || "full";
-    elMeta.textContent = `Updated ${updated} · field_set=${fieldSet} · ${coins.length} coin(s)`;
+  function coinG30(c) {
+    const g = c.gains || {};
+    return typeof g["30d"] === "number" ? g["30d"] : null;
+  }
 
-    const prevSyms = readPrevSymbolSet();
-    const prevSchema = localStorage.getItem(LS_PREV_SCHEMA) ?? "";
-    const currSet = new Set(
-      coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
-    );
-    const added =
-      prevSyms.size === 0 ? [] : [...currSet].filter((s) => !prevSyms.has(s)).sort();
-    const dropped =
-      prevSyms.size === 0 ? [] : [...prevSyms].filter((s) => !currSet.has(s)).sort();
-    const addedSet = new Set(added);
+  function coinHealth(c) {
+    if (c.health_score == null || c.health_score === "") return null;
+    const n = Number(c.health_score);
+    return Number.isFinite(n) ? n : null;
+  }
 
-    updateDiffBanner(data, added, dropped, prevSchema);
+  function sortCoinsInPlace(rows) {
+    const dir = sortDir;
+    const mult = dir;
+    rows.sort((a, b) => {
+      let va;
+      let vb;
+      switch (sortKey) {
+        case "symbol":
+          va = String(a.symbol || "").toUpperCase();
+          vb = String(b.symbol || "").toUpperCase();
+          return mult * va.localeCompare(vb);
+        case "name":
+          va = String(a.name || "").toLowerCase();
+          vb = String(b.name || "").toLowerCase();
+          return mult * va.localeCompare(vb);
+        case "g30": {
+          const na = coinG30(a);
+          const nb = coinG30(b);
+          const fa = na != null ? na : -1e9;
+          const fb = nb != null ? nb : -1e9;
+          return mult * (fa - fb);
+        }
+        case "uniformity": {
+          const ua = typeof a.uniformity_score === "number" ? a.uniformity_score : -1e9;
+          const ub = typeof b.uniformity_score === "number" ? b.uniformity_score : -1e9;
+          return mult * (ua - ub);
+        }
+        case "health":
+        default: {
+          const ha = coinHealth(a);
+          const hb = coinHealth(b);
+          const fa = ha != null ? ha : -1e9;
+          const fb = hb != null ? hb : -1e9;
+          return mult * (fa - fb);
+        }
+      }
+    });
+  }
 
-    if (!coins.length) {
-      elTbody.innerHTML =
-        '<tr><td colspan="6" class="empty">No qualified coins in this snapshot.</td></tr>';
-      writeSnapshotVisitState(data);
-      return;
+  function updateSortHeaderClasses() {
+    document.querySelectorAll("th[data-sort-key]").forEach((th) => {
+      th.classList.remove("sort-asc", "sort-desc");
+      if (th.getAttribute("data-sort-key") === sortKey) {
+        th.classList.add(sortDir > 0 ? "sort-asc" : "sort-desc");
+      }
+    });
+  }
+
+  function applyFilters(coins) {
+    let rows = coins.slice();
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((c) => {
+        const sym = String(c.symbol || "").toLowerCase();
+        const nm = String(c.name || "").toLowerCase();
+        return sym.includes(q) || nm.includes(q);
+      });
     }
+    if (filterHealthMin != null) {
+      rows = rows.filter((c) => {
+        const h = coinHealth(c);
+        return h != null && h >= filterHealthMin;
+      });
+    }
+    return rows;
+  }
 
-    const rows = coins
+  function renderRowsHtml(coins) {
+    if (!coins.length) {
+      return '<tr><td colspan="6" class="empty">No qualified coins in this snapshot.</td></tr>';
+    }
+    return coins
       .map((c) => {
         const rawSym = String(c.symbol || "").toUpperCase();
         const sym = escapeHtml(String(c.symbol || ""));
@@ -137,7 +203,7 @@
         const link = url
           ? `<a href="${escapeAttr(url)}" rel="noopener noreferrer" target="_blank">View</a>`
           : "—";
-        const badge = addedSet.has(rawSym)
+        const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
         return `<tr>
@@ -150,7 +216,39 @@
         </tr>`;
       })
       .join("");
-    elTbody.innerHTML = rows;
+  }
+
+  function applyTableView() {
+    if (!lastPayload) return;
+    const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
+    const filtered = applyFilters(coins);
+    sortCoinsInPlace(filtered);
+    elTbody.innerHTML = renderRowsHtml(filtered);
+    updateSortHeaderClasses();
+  }
+
+  function render(data) {
+    clearError();
+    lastPayload = data;
+    const coins = Array.isArray(data.coins) ? data.coins : [];
+    const updated = data.updated_at || "—";
+    const fieldSet = data.field_set || "full";
+    elMeta.textContent = `Updated ${updated} · field_set=${fieldSet} · ${coins.length} coin(s)`;
+
+    const prevSyms = readPrevSymbolSet();
+    const prevSchema = localStorage.getItem(LS_PREV_SCHEMA) ?? "";
+    const currSet = new Set(
+      coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
+    );
+    const added =
+      prevSyms.size === 0 ? [] : [...currSet].filter((s) => !prevSyms.has(s)).sort();
+    const dropped =
+      prevSyms.size === 0 ? [] : [...prevSyms].filter((s) => !currSet.has(s)).sort();
+    lastAddedSet = new Set(added);
+
+    updateDiffBanner(data, added, dropped, prevSchema);
+
+    applyTableView();
     writeSnapshotVisitState(data);
   }
 
@@ -259,6 +357,41 @@
     pollTimer = window.setInterval(() => {
       loadSnapshot({ showErrors: false, forNotify: true });
     }, POLL_INTERVAL_MS);
+  }
+
+  document.querySelectorAll("thead .sort-btn").forEach((btn) => {
+    const th = btn.closest("th");
+    const key = btn.getAttribute("data-sort");
+    if (th && key) th.setAttribute("data-sort-key", key);
+    btn.addEventListener("click", () => {
+      if (sortKey === key) {
+        sortDir = -sortDir;
+      } else {
+        sortKey = key;
+        sortDir = key === "symbol" || key === "name" ? 1 : -1;
+      }
+      applyTableView();
+    });
+  });
+
+  document.querySelectorAll(".chip-filter[data-min]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const raw = btn.getAttribute("data-min");
+      filterHealthMin = raw === "" || raw == null ? null : Number(raw);
+      document.querySelectorAll(".chip-filter[data-min]").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+      applyTableView();
+    });
+  });
+
+  if (elSearch) {
+    elSearch.addEventListener("input", () => {
+      window.clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = window.setTimeout(() => {
+        searchQuery = elSearch.value || "";
+        applyTableView();
+      }, SEARCH_DEBOUNCE_MS);
+    });
   }
 
   if (elLoad) {

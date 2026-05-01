@@ -22,17 +22,29 @@
       <button id="loadBtn" type="button">Load</button>
       <button id="notifyBtn" type="button" class="secondary">Enable update alerts</button>
     </p>
+    <p class="toolbar filters">
+      <label>
+        Search
+        <input id="searchInput" type="search" placeholder="Symbol or name" autocomplete="off" />
+      </label>
+      <span class="chip-group">
+        <span class="chip-label">Health ≥</span>
+        <button type="button" class="chip chip-filter is-active" data-min="">All</button>
+        <button type="button" class="chip chip-filter" data-min="60">60</button>
+        <button type="button" class="chip chip-filter" data-min="70">70</button>
+      </span>
+    </p>
     <div id="error" class="error" hidden></div>
     <p id="meta" class="meta"></p>
     <div id="diffBanner" class="diff-banner" role="status" hidden></div>
     <table>
       <thead>
         <tr>
-          <th>Symbol</th>
-          <th>Name</th>
-          <th>30d</th>
-          <th>Uniformity</th>
-          <th>Health</th>
+          <th><button type="button" class="sort-btn" data-sort="symbol">Symbol</button></th>
+          <th><button type="button" class="sort-btn" data-sort="name">Name</button></th>
+          <th><button type="button" class="sort-btn" data-sort="g30">30d</button></th>
+          <th><button type="button" class="sort-btn" data-sort="uniformity">Uniformity</button></th>
+          <th><button type="button" class="sort-btn" data-sort="health">Health</button></th>
           <th>Link</th>
         </tr>
       </thead>

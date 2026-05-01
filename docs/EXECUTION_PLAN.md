@@ -350,11 +350,13 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Default config → same skip/pass rates as before on `verify_backtest_*` sample.
   - **Notes:** **`OHLCV_MIN_1H_BARS_PER_DAY`** (24), **`OHLCV_MIN_1H_BARS_SLACK`** (12), **`OHLCV_MIN_1H_BARS_FLOOR`** (600) → `max(per_day·days−slack, floor)` hourly threshold; **`OHLCV_MIN_1D_BARS_SLACK`** (2), **`OHLCV_MIN_1D_BARS_FLOOR`** (25) → daily. Wired in **`backtesting/data_loader.py`** (`BacktestDataLoader`).
 
-- [ ] **L2.** **Symbol quality score** line in notifications (data age, provider mix); additive field; can be hidden via config defaulting to current look.  
+- [x] **L2.** **Symbol quality score** line in notifications (data age, provider mix); additive field; can be hidden via config defaulting to current look.  
   - **Verification:** Default hides or matches “no extra line” per product choice; no dropped alerts.
+  - **Notes:** **`NOTIFICATION_SYMBOL_QUALITY_LINE`** (default **false**). **`MessageFormatter._symbol_quality_line_html`** appends reliability / **`ohlcv_source`** / **`signal_age_label`** to entry and exit captions when enabled.
 
-- [ ] **L3.** **Watchlist export** (CSV/JSON) on schedule or command; writes to `DATA_DIR`; no change to core scan.  
+- [x] **L3.** **Watchlist export** (CSV/JSON) on schedule or command; writes to `DATA_DIR`; no change to core scan.  
   - **Verification:** Export file valid; scan unaffected.
+  - **Notes:** **`WATCHLIST_EXPORT_ENABLED`** (default **false**); **`WATCHLIST_EXPORT_CSV_FILE`** / **`WATCHLIST_EXPORT_JSON_FILE`**. Near-miss rows from **`compute_watchlist_rows`** (uniformity buffer band + non-positive 30d return with passing score). **`scripts/export_watchlist.py`** prints path/row count.
 
 - [ ] **L4.** **Backtest A/B shadow:** second profile on subset, logs only, **no Telegram** unless opt-in; default off.  
   - **Verification:** Off → no extra runtime; on → logs only, same primary alerts.
@@ -374,8 +376,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** `pre-commit run --all-files` passes.
   - **Notes:** `.pre-commit-config.yaml` uses `ruff-pre-commit` only (`compileall` remains in CI / `scripts/ci_verify.sh`).
 
-- [ ] **M3.** **`docker compose`** (optional) local profile with `PYTHON_VERSION`, `DATA_DIR`, and Render env keys as optional blanks.  
+- [x] **M3.** **`docker compose`** (optional) local profile with `PYTHON_VERSION`, `DATA_DIR`, and Render env keys as optional blanks.  
   - **Verification:** `docker compose config` valid; README one-liner.
+  - **Notes:** Root **`docker-compose.yml`** — `app` service runs **`ruff`**, **`check_backtesting_imports`**, **`verify_backtest_env`**, **`compileall`** via **`requirements-ci.txt`** (parity smoke, not production worker).
 
 ---
 
@@ -520,11 +523,13 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
   - **Verification:** Simulated two JSON versions in dev; UI updates correctly; no network beyond snapshot URL.
   - **Notes:** Keys **`qualified_dash_prev_symbols_json`**, **`qualified_dash_prev_schema_version`**; first visit shows no diff; **`#diffBanner`** + **New** row badge. Service worker **`CACHE_VERSION`** bumped with dashboard static edits.
 
-- [ ] **Q11.** **Sort & filter:** client-side sort on columns (e.g. rank, 30d gain, uniformity, health); optional filter chips (e.g. “health ≥ N”).  
+- [x] **Q11.** **Sort & filter:** client-side sort on columns (e.g. rank, 30d gain, uniformity, health); optional filter chips (e.g. “health ≥ N”).  
   - **Verification:** Sort order toggles correctly on mobile width; no extra fetches.
+  - **Notes:** Sortable column headers + **Health ≥** chips in **`docs/dashboard/`**; service worker **`CACHE_VERSION`** bumped.
 
-- [ ] **Q12.** **Symbol search:** filter table rows by symbol/name substring (debounced input).  
+- [x] **Q12.** **Symbol search:** filter table rows by symbol/name substring (debounced input).  
   - **Verification:** Large list remains responsive; snapshot fetched once per poll cycle only.
+  - **Notes:** **`#searchInput`** debounced **250ms**; filters client-side list only.
 
 - [ ] **Q13.** **Expandable row / drawer:** tap row to expand full backtest strategy table / fields from JSON (Telegram caption parity in data, not necessarily HTML).  
   - **Verification:** Collapsed by default; expand/collapse keyboard-accessible.
@@ -612,7 +617,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L2–O**, **P2**, **Q11–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, **Q13–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -631,12 +636,12 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
 | K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
-| L | Data & strategy | **L0–L1** done (OHLCV min-bar gates configurable); **L2–L4** pending |
-| M | Engineering quality | **M2** pre-commit; **M1/M3** pending |
+| L | Data & strategy | **L0–L3** done; **L4** pending |
+| M | Engineering quality | **M2** pre-commit, **M3** compose smoke; **M1** pytest pending |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
 | P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q10** done; **Q11–Q21** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q12** done; **Q13–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 
@@ -653,6 +658,8 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | CI gate + CoinGecko H0 counters | `scripts/check_github_ci.py`, `utils/coingecko_usage.py`, `utils/metrics.py` (report section) |
 | Gain filter (L0) | `main.py` FILTER 1; `GAIN_FILTER_MIN_*` in `config/settings.py` |
 | OHLCV min bars (L1) | `OHLCV_MIN_*` in `config/settings.py`; `backtesting/data_loader.py` |
+| Symbol quality line (L2) | **`NOTIFICATION_SYMBOL_QUALITY_LINE`**; `notifications/formatter.py` |
+| Watchlist export (L3) | **`WATCHLIST_EXPORT_*`**; `utils/watchlist_export.py`; `main.py`; `scripts/export_watchlist.py` |
 | Telegram diagnostics (K1) | `telegram_bot.py`; **`SCANNER_DIAG_COMMANDS_ENABLED`** in `config.json` |
 | Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
@@ -660,6 +667,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
 | Backtest library surface | `backtesting/*`, `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
 | Public dashboard + PWA + UX | `main.py` (writer hook), `DATA_DIR/qualified_public_snapshot.json`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
+| Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
 | CMC resolve (I2 step) | `scanner/cmc_resolve.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |
