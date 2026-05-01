@@ -12,6 +12,16 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 6. **Deterministic TSL-Only Backtesting:** Deterministic backtesting engine optimizes with trailing stop loss only (no TP/TTP sweep) using bounded hill-climbing search for fast convergence.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
+[![CI](https://github.com/edwardlthompson/linear-trend-spotter/actions/workflows/ci.yml/badge.svg)](https://github.com/edwardlthompson/linear-trend-spotter/actions/workflows/ci.yml)
+
+---
+
+## CI and deployment
+
+- **GitHub Actions:** On every push and pull request to `main`, the [CI workflow](https://github.com/edwardlthompson/linear-trend-spotter/blob/main/.github/workflows/ci.yml) installs dependencies on Ubuntu with **Python 3.11**, runs `python scripts/verify_backtest_env.py`, and compiles all Python sources (`python -m compileall -q .`).
+- **Render:** The worker uses `render.yaml` with `autoDeployTrigger: commit` so merges to the connected branch trigger a deploy. In the Render dashboard, confirm the service is linked to this repository, the correct **branch**, and **Auto-Deploy** is on (see execution plan milestone **A1**).
+- **Branch protection:** After CI is green, enable required status checks on `main` so merges cannot bypass the workflow (milestone **A4** in `docs/EXECUTION_PLAN.md`).
+- **Engineering roadmap:** `docs/EXECUTION_PLAN.md` tracks milestones, verification steps, and checkbox progress.
 
 ---
 
