@@ -1,0 +1,12 @@
+# CI-only deps: same as requirements.txt but without TA-Lib (sdist + native lib flaky on GitHub runners).
+# NumPy capped below 2.x so vectorbt smoke in scripts/verify_backtest_env.py stays stable on fresh resolves.
+# When editing requirements.txt, update this file in the same commit.
+requests>=2.31.0,<3
+portalocker>=2.0.0,<4
+python-dotenv>=1.0.0,<2
+pandas>=2.0.0,<3
+numpy>=1.24.0,<2
+vectorbt>=0.26.0,<1
+tabulate>=0.9.0,<1
+matplotlib>=3.7.0,<4
+psutil>=5.9.0,<8

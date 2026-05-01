@@ -26,16 +26,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      # TA-Lib on PyPI is sdist-only and needs the C library + headers; apt on runners often exits 100
-      # (fatal) depending on image/mirrors. Production (e.g. Render) still installs full requirements.txt.
-      # verify_backtest_env.py treats missing TA-Lib as WARN and still validates pandas/numpy/vectorbt.
-      - name: Install dependencies (CI skips TA-Lib)
+      # TA-Lib: sdist-only + native lib — skipped in CI (see requirements-ci.txt). Production uses requirements.txt.
+      - name: Install dependencies
         run: |
           set -euxo pipefail
           python -m pip install --upgrade pip wheel
-          grep -v -E '^[[:space:]]*TA-Lib' requirements.txt > /tmp/requirements-ci.txt
-          python -m pip install -r /tmp/requirements-ci.txt
-          python -m pip install ruff
+          python -m pip install -r requirements-ci.txt
+          python -m pip install "ruff>=0.8.0,<0.13"
 
       - name: Ruff lint
         run: python -m ruff check .
