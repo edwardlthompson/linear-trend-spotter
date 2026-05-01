@@ -1,5 +1,7 @@
 # Secrets and configuration
 config.json
+# Cursor MCP (may contain Render API keys if copied into the repo)
+.cursor/mcp.json
 *.json.backup
 *.json.fixed
 .env
