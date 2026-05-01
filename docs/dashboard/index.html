@@ -3,6 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1a1f2e" />
+    <meta name="description" content="Qualified-coin snapshot dashboard (read-only JSON)." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <title>Qualified coins</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -14,6 +20,7 @@
         <input id="apiInput" type="url" placeholder="https://…/qualified_public_snapshot.json" />
       </label>
       <button id="loadBtn" type="button">Load</button>
+      <button id="notifyBtn" type="button" class="secondary">Enable update alerts</button>
     </p>
     <div id="error" class="error" hidden></div>
     <p id="meta" class="meta"></p>

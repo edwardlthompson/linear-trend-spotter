@@ -25,6 +25,13 @@ Open `http://localhost:8765/?api=https%3A%2F%2Fyour-worker.example%2Fqualified_p
 
 The origin that hosts `index.html` (e.g. `https://YOURNAME.github.io`) must be allowed by **`Access-Control-Allow-Origin`** on the HTTP response that serves `qualified_public_snapshot.json`. Configure that on Render (static file headers) or a small read-only proxy. Set **`Cache-Control: public, max-age=`** to slightly under your `SCAN_INTERVAL_SECONDS` so repeat visitors do not refetch every second.
 
-## PWA and notifications
+## PWA and notifications (Q7–Q9)
 
-See Milestone **Q7–Q9** in `docs/EXECUTION_PLAN.md`. Tier-B Web Push (**Q21**) requires a separate subscription endpoint and is not covered here.
+Implemented under `docs/dashboard/`:
+
+- **Manifest & icons:** `manifest.webmanifest`, `icons/icon-192.png`, `icons/icon-512.png` (regenerate with `python scripts/gen_dashboard_pwa_icons.py` if you change sizes or colors).
+- **Service worker:** `sw.js` — static shell **cache-first**; same-origin `*.json` **network-only**. Cross-origin snapshot URLs (typical Render/GitHub setup) are **not** handled by this SW, so the qualified list is never served from an asset cache. After editing cached files, bump **`CACHE_VERSION`** inside `sw.js` so clients drop old caches.
+- **Tier-A alerts:** **Enable update alerts** in the UI requests notification permission, registers the SW, then polls the snapshot URL every **15 minutes** (and on `visibilitychange` when the tab wakes). A **SHA-256** digest of the snapshot body is compared to the previous fetch (`localStorage` key `qualified_dash_last_snap_digest`); on change, **`registration.showNotification`** is used when the SW is active.
+- **iOS Safari:** Web Notifications are limited; users often need **Add to Home Screen** and a user gesture. The dashboard shows a short hint if permission is not granted.
+
+Tier-B Web Push (**Q21**) still requires a separate subscription endpoint and is not covered here.

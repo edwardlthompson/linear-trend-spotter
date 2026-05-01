@@ -43,6 +43,11 @@ button:hover {
   background: #e2e8f0;
 }
 
+button.secondary {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
 .meta {
   font-size: 0.85rem;
   color: #475569;

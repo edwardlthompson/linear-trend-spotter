@@ -1,8 +1,11 @@
 /**
- * Qualified-coin dashboard (Milestone Q4): fetches snapshot JSON only.
+ * Qualified-coin dashboard (Milestones Q4, Q7–Q9): snapshot JSON only; optional tier-A alerts.
  * Snapshot URL: ?api=<encoded-url> or window.__SNAPSHOT_URL__ from config.js.
  */
 (function () {
+  const POLL_INTERVAL_MS = 15 * 60 * 1000;
+  const LS_DIGEST = "qualified_dash_last_snap_digest";
+
   const params = new URLSearchParams(window.location.search);
   const fromQuery = params.get("api");
   const snapshotUrl = fromQuery || window.__SNAPSHOT_URL__ || "";
@@ -12,9 +15,17 @@
   const elTbody = document.getElementById("tbody");
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
+  const elNotify = document.getElementById("notifyBtn");
+
+  let pollTimer = null;
+  let notifyAlertsEnabled = false;
 
   if (elInput) {
     elInput.value = snapshotUrl;
+  }
+
+  function getSnapshotUrl() {
+    return (elInput && elInput.value.trim()) || snapshotUrl || "";
   }
 
   function showError(msg) {
@@ -81,30 +92,143 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
-  async function load(url) {
+  async function digestHex(text) {
+    if (window.crypto && crypto.subtle) {
+      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+    return String(text.length) + ":" + text.slice(0, 2000);
+  }
+
+  async function notifySnapshotChanged(text, data) {
+    const next = await digestHex(text);
+    const prev = localStorage.getItem(LS_DIGEST);
+    if (prev === null || prev === "") {
+      localStorage.setItem(LS_DIGEST, next);
+      return;
+    }
+    if (prev === next) {
+      return;
+    }
+    localStorage.setItem(LS_DIGEST, next);
+    const n = Array.isArray(data.coins) ? data.coins.length : 0;
+    const body = `Snapshot changed · ${n} qualified coin(s)`;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification("Qualified list updated", {
+          body,
+          tag: "qualified-snapshot",
+          renotify: true,
+        });
+      } else if (typeof Notification === "function") {
+        new Notification("Qualified list updated", { body });
+      }
+    } catch (e) {
+      console.warn("showNotification failed", e);
+    }
+  }
+
+  async function loadSnapshot(options) {
+    const showErrors = options && options.showErrors;
+    const forNotify = options && options.forNotify;
+    const url = getSnapshotUrl();
     if (!url || !url.trim()) {
-      showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in config.js.");
+      if (showErrors) {
+        showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in config.js.");
+      }
       return;
     }
     try {
       const res = await fetch(url.trim(), { credentials: "omit" });
       if (!res.ok) {
-        showError(`HTTP ${res.status} loading snapshot`);
+        if (showErrors) showError(`HTTP ${res.status} loading snapshot`);
         return;
       }
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        if (showErrors) showError("Invalid JSON in snapshot response");
+        return;
+      }
       render(data);
+      if (forNotify && notifyAlertsEnabled) {
+        await notifySnapshotChanged(text, data);
+      } else {
+        localStorage.setItem(LS_DIGEST, await digestHex(text));
+      }
     } catch (e) {
-      showError(String(e && e.message ? e.message : e));
+      if (showErrors) showError(String(e && e.message ? e.message : e));
     }
   }
 
-  if (elLoad) {
-    elLoad.addEventListener("click", () => load(elInput ? elInput.value : snapshotUrl));
+  async function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+    } catch (e) {
+      console.warn("Service worker registration failed", e);
+    }
   }
 
+  function stopPoll() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  }
+
+  function startPoll() {
+    stopPoll();
+    pollTimer = window.setInterval(() => {
+      loadSnapshot({ showErrors: false, forNotify: true });
+    }, POLL_INTERVAL_MS);
+  }
+
+  if (elLoad) {
+    elLoad.addEventListener("click", () => loadSnapshot({ showErrors: true, forNotify: false }));
+  }
+
+  if (elNotify) {
+    elNotify.addEventListener("click", async () => {
+      if (!("Notification" in window)) {
+        showError("Browser notifications are not supported here.");
+        return;
+      }
+      let perm = Notification.permission;
+      if (perm === "default") {
+        perm = await Notification.requestPermission();
+      }
+      if (perm !== "granted") {
+        showError(
+          "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
+        );
+        return;
+      }
+      await registerServiceWorker();
+      notifyAlertsEnabled = true;
+      clearError();
+      await loadSnapshot({ showErrors: true, forNotify: false });
+      startPoll();
+      elMeta.textContent =
+        (elMeta.textContent || "") + " · Update alerts on (poll every 15 min)";
+    });
+  }
+
+  window.addEventListener("load", () => {
+    registerServiceWorker();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && notifyAlertsEnabled) {
+      loadSnapshot({ showErrors: false, forNotify: true });
+    }
+  });
+
   if (snapshotUrl) {
-    load(snapshotUrl);
+    loadSnapshot({ showErrors: true, forNotify: false });
   } else {
     showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in config.js.");
   }

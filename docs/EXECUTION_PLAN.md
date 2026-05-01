@@ -499,14 +499,17 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 
 ### Tasks — PWA & tier-A notifications
 
-- [ ] **Q7.** **PWA shell:** add `manifest.webmanifest` (`name`, `short_name`, `start_url`, `display: standalone` or `minimal-ui`, `theme_color`, `background_color`); **maskable** and **192/512** icons; `<link rel="manifest">` + `theme-color` meta + **Apple** `apple-touch-icon` / `mobile-web-app-capable` where applicable.  
+- [x] **Q7.** **PWA shell:** add `manifest.webmanifest` (`name`, `short_name`, `start_url`, `display: standalone` or `minimal-ui`, `theme_color`, `background_color`); **maskable** and **192/512** icons; `<link rel="manifest">` + `theme-color` meta + **Apple** `apple-touch-icon` / `mobile-web-app-capable` where applicable.  
   - **Verification:** Lighthouse “PWA” or Chrome **Install app** succeeds on mobile + desktop; offline shell loads branded splash (even if data still requires network).
+  - **Notes:** `docs/dashboard/manifest.webmanifest`, `docs/dashboard/icons/icon-{192,512}.png` (generated via `scripts/gen_dashboard_pwa_icons.py`), head tags in `index.html`.
 
-- [ ] **Q8.** **Service worker:** register from dashboard JS; **cache-first** for static assets (HTML/CSS/JS/icons); **network-only** (or short `networkTimeoutSeconds`) for the **snapshot JSON** so users never see stale qualified list from SW cache; bump **cache version** on deploy.  
+- [x] **Q8.** **Service worker:** register from dashboard JS; **cache-first** for static assets (HTML/CSS/JS/icons); **network-only** (or short `networkTimeoutSeconds`) for the **snapshot JSON** so users never see stale qualified list from SW cache; bump **cache version** on deploy.  
   - **Verification:** Airplane-mode: UI shell loads; snapshot fetch fails gracefully with message; no market API calls; redeploy invalidates old asset cache.
+  - **Notes:** `docs/dashboard/sw.js` — bump `CACHE_VERSION` when editing cached static files. Same-origin `*.json` requests bypass cache; cross-origin snapshot URLs are not intercepted by this SW.
 
-- [ ] **Q9.** **Tier-A notifications:** explicit **“Enable update alerts”** button → `Notification.requestPermission()`; if `granted`, start **polling** snapshot URL on an interval **≥ 15 min** (configurable constant, aligned with hourly scan); compare `updated_at` / `schema_version` / hash to previous fetch → `registration.showNotification` (preferred from SW) or `new Notification` when changed; **silent** if permission `denied` or `default`; document **iOS Safari** limitations (user gesture, PWA to home screen).  
+- [x] **Q9.** **Tier-A notifications:** explicit **“Enable update alerts”** button → `Notification.requestPermission()`; if `granted`, start **polling** snapshot URL on an interval **≥ 15 min** (configurable constant, aligned with hourly scan); compare `updated_at` / `schema_version` / hash to previous fetch → `registration.showNotification` (preferred from SW) or `new Notification` when changed; **silent** if permission `denied` or `default`; document **iOS Safari** limitations (user gesture, PWA to home screen).  
   - **Verification:** Grant + deny paths on Chrome Android + desktop; snapshot-only network traffic; `docs/WEB_DASHBOARD.md` references **Q21** for tier-B Web Push.
+  - **Notes:** `POLL_INTERVAL_MS = 15 * 60 * 1000` in `app.js`; SHA-256 digest of snapshot body vs `localStorage`; `visibilitychange` refresh when alerts on; iOS PWA note in error copy when permission denied.
 
 ### Tasks — Dashboard UX enhancements (client-only; no market APIs)
 
@@ -607,7 +610,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L–O**, **P2**, **Q7–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L–O**, **P2**, **Q10–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -631,7 +634,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
 | P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q6** done; **Q7–Q21** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q9** done; **Q10–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 
