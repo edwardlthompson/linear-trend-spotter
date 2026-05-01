@@ -265,7 +265,7 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** Before/after numbers in Notes; stakeholder summary in this file (short paragraph under H).
   - **Notes:** **H0–H4** reduce redundant calls (counters, cache TTL, batched markets, deduped tickers, CMC tertiary). A signed-off **≥50%** figure still needs two production counter dumps on identical config (paste under H0 Notes). On strict free tiers, hourly CMC OHLCV may be unavailable—Polygon/CG remain primary; document plan tier against [CMC pricing](https://coinmarketcap.com/api/pricing).
 
-### Milestone H — stakeholder summary (H6)
+### Stakeholder summary (H6)
 
 Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → CoinMarketCap) in the scanner and backtest loader without shrinking universe or scan cadence. **CoinGecko credit savings** come from earlier milestones (**H0–H2**) plus optional CMC offload for **listings** (`TOP_COINS_PROVIDER=cmc`). A finance-ready **“≥50% fewer CG calls”** proof still needs two timed counter exports on the same `config.json`; until then, treat **H6** as *architecturally complete / measurement pending*.
 
