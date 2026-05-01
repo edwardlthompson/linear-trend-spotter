@@ -410,11 +410,13 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Off → no extra IO; on → file written; scan interval/universe unchanged.
   - **Notes:** Added optional artifact writer `utils/portfolio_multi.py` (`write_multi_portfolio_simulation`) driven by the existing `scanner_insights` portfolio simulation growth factor. New config in `config/settings.py` + `config.json.example`: `PORTFOLIO_MULTI_SIM_ENABLED` (default false), `PORTFOLIO_MULTI_SIM_FILE`, `PORTFOLIO_MULTI_SIM_CAPITALS`. `main.py` writes the additional file only when enabled; no Telegram side effects.
 
-- [ ] **O2.** **Regime filter** (e.g. BTC dominance / vol) as **optional** qualification gate; `config` default **false**.  
+- [x] **O2.** **Regime filter** (e.g. BTC dominance / vol) as **optional** qualification gate; `config` default **false**.  
   - **Verification:** Default false → bit-for-bit same qualification as baseline on sample run.
+  - **Notes:** Added optional BTC-based regime gate (`scanner/regime_filter.py`, `evaluate_regime_gate`) evaluated after uniformity pass and before ranking. Default-off config in `config/settings.py` + `config.json.example`: `REGIME_FILTER_ENABLED`, `REGIME_FILTER_BTC_MIN_30D_GAIN`, `REGIME_FILTER_BTC_MAX_ABS_7D_GAIN`. No extra provider HTTP calls; uses already-fetched top-coin dataset.
 
-- [ ] **O3.** **Alert backtesting** report: hypothetical PnL for top-N alerted coins; offline or scheduled; **no change** to live alerts unless opt-in.  
+- [x] **O3.** **Alert backtesting** report: hypothetical PnL for top-N alerted coins; offline or scheduled; **no change** to live alerts unless opt-in.  
   - **Verification:** Live Telegram unchanged with default settings.
+  - **Notes:** Added optional artifact writer `utils/alert_backtest_report.py` (`write_alert_backtest_report`) with top-N hypothetical PnL rows for current alerts plus recent exits; default-off config in `config/settings.py` + `config.json.example`: `ALERT_BACKTEST_REPORT_ENABLED`, `ALERT_BACKTEST_REPORT_FILE`, `ALERT_BACKTEST_REPORT_TOP_N`. `main.py` writes the report only when enabled and never sends Telegram messages from this path.
 
 ---
 
@@ -653,7 +655,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | L | Data & strategy | **L0–L4** done |
 | M | Engineering quality | **M1** pytest, **M2** pre-commit, **M3** compose smoke |
 | N | Security & compliance | **N1–N2** done (**push protection** still admin) |
-| O | Product & research | **O1** done; **O2–O3** pending |
+| O | Product & research | **O1–O3** done |
 | P | Backtesting modularization (web reuse) | **P1–P4** done |
 | Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
 
@@ -684,5 +686,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
 | Multi-portfolio simulation (O1) | `utils/portfolio_multi.py`, `main.py`, `PORTFOLIO_MULTI_SIM_*` in `config/settings.py` |
+| Regime filter (O2) | `scanner/regime_filter.py`, `main.py`, `REGIME_FILTER_*` in `config/settings.py` |
+| Alert backtest report (O3) | `utils/alert_backtest_report.py`, `main.py`, `ALERT_BACKTEST_REPORT_*` in `config/settings.py` |
 | CMC resolve + web push + active ranking + weekly digest + anomaly + enrichment + market/quiet/runtime init (I2 steps) | `scanner/cmc_resolve.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py`, `scanner/weekly_digest.py`, `scanner/anomaly_alerts.py`, `scanner/top_coin_resolution.py`, `scanner/coin_enrichment.py`, `scanner/market_processing.py`, `scanner/quiet_hours.py`, `scanner/runtime_init.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |

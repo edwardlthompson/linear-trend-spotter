@@ -121,6 +121,12 @@ class Settings:
             'PORTFOLIO_MULTI_SIM_ENABLED': False,
             'PORTFOLIO_MULTI_SIM_FILE': 'portfolio_multi_simulation.json',
             'PORTFOLIO_MULTI_SIM_CAPITALS': [1000, 5000, 10000],
+            'ALERT_BACKTEST_REPORT_ENABLED': False,
+            'ALERT_BACKTEST_REPORT_FILE': 'alert_backtest_report.json',
+            'ALERT_BACKTEST_REPORT_TOP_N': 10,
+            'REGIME_FILTER_ENABLED': False,
+            'REGIME_FILTER_BTC_MIN_30D_GAIN': 0.0,
+            'REGIME_FILTER_BTC_MAX_ABS_7D_GAIN': 25.0,
             'SCANNER_INSIGHTS_FILE': 'scanner_insights.json',
             'WEEKLY_DIGEST_ENABLED': True,
             'WEEKLY_DIGEST_WEEKDAY_UTC': 0,
@@ -226,6 +232,8 @@ class Settings:
             'WATCHLIST_EXPORT_ENABLED',
             'PORTFOLIO_SIM_ENABLED',
             'PORTFOLIO_MULTI_SIM_ENABLED',
+            'ALERT_BACKTEST_REPORT_ENABLED',
+            'REGIME_FILTER_ENABLED',
             'WEEKLY_DIGEST_ENABLED',
             'SCAN_HEARTBEAT_ENABLED',
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
@@ -284,6 +292,7 @@ class Settings:
             ('QUIET_HOURS_START_HOUR_UTC', 0, 23),
             ('QUIET_HOURS_END_HOUR_UTC', 0, 23),
             ('TELEGRAM_WEBHOOK_PORT', 1, 65535),
+            ('ALERT_BACKTEST_REPORT_TOP_N', 1, 200),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
@@ -291,6 +300,8 @@ class Settings:
             ('ANOMALY_MAX_MISSING_CG_RATIO', 0.0, 1.0),
             ('ANOMALY_MIN_OHLCV_SUCCESS_RATIO', 0.0, 1.0),
             ('ANOMALY_MAX_NO_TICKER_RATIO', 0.0, 1.0),
+            ('REGIME_FILTER_BTC_MIN_30D_GAIN', -100.0, 500.0),
+            ('REGIME_FILTER_BTC_MAX_ABS_7D_GAIN', 0.0, 500.0),
         ]:
             require_number(number_key, min_value=lower, max_value=upper)
 
@@ -614,6 +625,31 @@ class Settings:
             if out:
                 return out
         return [1000.0, 5000.0, 10000.0]
+
+    @property
+    def regime_filter_enabled(self) -> bool:
+        return bool(self._config.get('REGIME_FILTER_ENABLED', False))
+
+    @property
+    def regime_filter_btc_min_30d_gain(self) -> float:
+        return float(self._config.get('REGIME_FILTER_BTC_MIN_30D_GAIN', 0.0))
+
+    @property
+    def regime_filter_btc_max_abs_7d_gain(self) -> float:
+        return float(self._config.get('REGIME_FILTER_BTC_MAX_ABS_7D_GAIN', 25.0))
+
+    @property
+    def alert_backtest_report_enabled(self) -> bool:
+        return bool(self._config.get('ALERT_BACKTEST_REPORT_ENABLED', False))
+
+    @property
+    def alert_backtest_report_file(self) -> Path:
+        raw_path = str(self._config.get('ALERT_BACKTEST_REPORT_FILE', 'alert_backtest_report.json')).strip()
+        return self.DATA_DIR / (raw_path or 'alert_backtest_report.json')
+
+    @property
+    def alert_backtest_report_top_n(self) -> int:
+        return int(self._config.get('ALERT_BACKTEST_REPORT_TOP_N', 10))
     
     @property
     def coingecko_calls_per_minute(self) -> int:

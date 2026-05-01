@@ -42,6 +42,7 @@ from utils.scan_artifacts import (
 from utils.scan_costs import read_last_completed_coingecko_http_total, write_scan_costs_file
 from utils.watchlist_export import compute_watchlist_rows, write_watchlist_exports
 from utils.portfolio_multi import write_multi_portfolio_simulation
+from utils.alert_backtest_report import write_alert_backtest_report
 from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
@@ -55,6 +56,7 @@ from scanner.coin_enrichment import (
 )
 from scanner.market_processing import aggregate_daily_bars_from_hourly, process_tickers
 from scanner.quiet_hours import telegram_quiet_active
+from scanner.regime_filter import evaluate_regime_gate
 from scanner.top_coin_resolution import ensure_cmc_notify_urls, resolve_top_coin_data
 from scanner.weekly_digest import (
     build_weekly_digest_message,
@@ -660,6 +662,26 @@ def run_scanner():
 
         uniformity_passed_symbols = {c['symbol'] for c in uniformity_passed}
 
+        if settings.regime_filter_enabled:
+            regime_ok, regime_reason, regime_ctx = evaluate_regime_gate(
+                all_cmc_coins,
+                btc_min_30d_gain=settings.regime_filter_btc_min_30d_gain,
+                btc_max_abs_7d_gain=settings.regime_filter_btc_max_abs_7d_gain,
+            )
+            if regime_ok:
+                if regime_ctx:
+                    app_logger.info(
+                        "🌦️ Regime filter pass: btc_7d=%.2f%% btc_30d=%.2f%%",
+                        float(regime_ctx.get("btc_7d", 0.0)),
+                        float(regime_ctx.get("btc_30d", 0.0)),
+                    )
+                else:
+                    app_logger.info("🌦️ Regime filter pass: %s", regime_reason)
+            else:
+                app_logger.warning("🌦️ Regime filter blocked qualification: %s", regime_reason)
+                uniformity_passed = []
+                uniformity_passed_symbols = set()
+
         # ============================================================
         # STEP 9: Sort and process final results
         # ============================================================
@@ -999,6 +1021,18 @@ def run_scanner():
                 app_logger.info("🧮 Multi-portfolio simulation updated")
             except Exception as multi_sim_err:
                 app_logger.warning("⚠️ Multi-portfolio simulation update failed: %s", multi_sim_err)
+        if settings.alert_backtest_report_enabled:
+            try:
+                write_alert_backtest_report(
+                    path=settings.alert_backtest_report_file,
+                    final_results=final_results,
+                    active_after_update=active_after_update,
+                    exited=exited,
+                    top_n=settings.alert_backtest_report_top_n,
+                )
+                app_logger.info("📘 Alert backtest report updated")
+            except Exception as report_err:
+                app_logger.warning("⚠️ Alert backtest report update failed: %s", report_err)
         
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
