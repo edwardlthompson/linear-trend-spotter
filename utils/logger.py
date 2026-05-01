@@ -4,12 +4,22 @@ Logging configuration.
 Convention: library/runtime modules use ``logging.getLogger(__name__)`` (or
 ``setup_logger`` for the main worker). Scripts under ``scripts/`` and small CLI
 helpers may use ``print`` for human-readable PASS/FAIL output.
+
+Optional **structured JSON** lines (Milestone J1): set env ``STRUCTURED_JSON_LOGGING``
+to ``1`` / ``true`` / ``yes`` and call ``maybe_install_structured_json_handler()``
+once at worker startup (e.g. start of ``run_scanner``). Emits one JSON object per
+log record on the ``trend_scanner`` logger in addition to existing formatting.
 """
 
+import datetime
+import json
 import logging
+import os
 import sys
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
+
+_structured_json_installed = False
 
 
 class SafeStreamHandler(logging.StreamHandler):
@@ -35,6 +45,41 @@ class SafeStreamHandler(logging.StreamHandler):
             self.flush()
         except Exception:
             self.handleError(record)
+
+
+class _JsonLineFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict = {
+            "ts": datetime_iso_from_record(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+def datetime_iso_from_record(record: logging.LogRecord) -> str:
+    dt = datetime.datetime.fromtimestamp(record.created, tz=datetime.timezone.utc)
+    return dt.isoformat(timespec="milliseconds")
+
+
+def maybe_install_structured_json_handler() -> None:
+    """If STRUCTURED_JSON_LOGGING is set, add a JSON-lines handler to ``trend_scanner``."""
+    global _structured_json_installed
+    if _structured_json_installed:
+        return
+    flag = os.getenv("STRUCTURED_JSON_LOGGING", "").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return
+    _structured_json_installed = True
+    worker = logging.getLogger("trend_scanner")
+    handler = SafeStreamHandler(sys.stderr)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(_JsonLineFormatter())
+    worker.addHandler(handler)
+
 
 def setup_logger(name: str = None, log_file: str = None) -> logging.Logger:
     """

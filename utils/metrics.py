@@ -148,6 +148,18 @@ class MetricsCollector:
                 if key == 'coingecko_http_total':
                     continue
                 lines.append(f"   • {key.removeprefix('coingecko_http_')}: {cg[key]}")
+
+        poly = {k: v for k, v in summary['counts'].items() if k.startswith('polygon_http_')}
+        if poly:
+            lines.extend(["", "📐 Polygon HTTP (J3):"])
+            for key in sorted(poly):
+                lines.append(f"   • {key}: {poly[key]}")
+
+        cmc_h = {k: v for k, v in summary['counts'].items() if k.startswith('cmc_http_')}
+        if cmc_h:
+            lines.extend(["", "🏛️ CoinMarketCap HTTP (J3):"])
+            for key in sorted(cmc_h):
+                lines.append(f"   • {key}: {cmc_h[key]}")
         
         lines.extend([
             "",

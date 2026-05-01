@@ -10,6 +10,9 @@ from urllib.parse import quote
 
 import requests
 
+from utils.provider_http_usage import record_cmc_http
+
+
 class CoinMarketCapClient:
     """
     CoinMarketCap API client - perfect for bulk gain data
@@ -55,7 +58,8 @@ class CoinMarketCapClient:
         
         try:
             response = self.session.get(url, params=params, timeout=15)
-            
+            record_cmc_http(url)
+
             if response.status_code == 200:
                 data = response.json()
                 coins = data.get('data', [])

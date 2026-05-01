@@ -281,6 +281,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Notes:** `database/models.py`: class/method docstrings for `execute()` autocommit semantics; `get_connection()` enables **WAL** on `Database` subclasses (`PriceCache` already used WAL).
 - [ ] **I2.** Split `main.py` into modules (pipeline stages) in incremental PRs.  
   - **Verification:** CI + import smoke tests pass; behavior unchanged with default config (non-regression).
+  - **Notes:** First extraction: CMC symbol resolution helpers live in `scanner/cmc_resolve.py` (`build_cmc_normalized_lookup`, `resolve_cmc_data`); `main.py` imports them. Further stage splits still pending.
 
 ---
 
@@ -290,18 +291,21 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ### Tasks
 
-- [ ] **J1.** **Structured JSON logging** (optional dual output): one JSON line per major event alongside existing human-readable logs; off by default or env-gated.  
+- [x] **J1.** **Structured JSON logging** (optional dual output): one JSON line per major event alongside existing human-readable logs; off by default or env-gated.  
   - **Verification:** With feature off, log output matches prior shape; with on, valid JSON lines; `compileall`.
+  - **Notes:** Set env `STRUCTURED_JSON_LOGGING=1` (or `true`/`yes`/`on`). `maybe_install_structured_json_handler()` runs at start of `run_scanner()`; adds JSON-lines `StreamHandler` on logger `trend_scanner` (stderr) in addition to existing formatters.
 
 - [x] **J2.** **Heartbeat / health artifact:** write a small JSON file to `DATA_DIR` (or fixed path) after each successful scan (timestamp, duration, status)—no change to scan logic.  
   - **Verification:** File appears after run; interval and universe unchanged.
   - **Notes:** `SCAN_HEARTBEAT_ENABLED` (default **false**); `utils/scan_artifacts.write_scan_heartbeat`; filename `SCAN_HEARTBEAT_FILE` (default `scan_heartbeat.json`). **Ops:** enable only when you want a Render-readable health file; see **Section 6.3** (retention, disk).
 
-- [ ] **J3.** **Scan cost dashboard:** extend `scanner_insights.json` or add `scan_costs.json` with CG/Polygon/CMC call counts and cache hit rates (can build on H0 counters).  
+- [x] **J3.** **Scan cost dashboard:** extend `scanner_insights.json` or add `scan_costs.json` with CG/Polygon/CMC call counts and cache hit rates (can build on H0 counters).  
   - **Verification:** Artifact valid JSON; scan completes; counts non-decreasing for same work (no dropped coins).
+  - **Notes:** `SCAN_COSTS_ENABLED` / `SCAN_COSTS_FILE` (default **false** / `scan_costs.json`). `utils/scan_costs.write_scan_costs_file` after `metrics.save`. Polygon/CMC HTTP tallies via `utils/provider_http_usage.py` from `api/price_history_fallback.py` and `api/coinmarketcap.py` (H0 CoinGecko counters unchanged).
 
-- [ ] **J4.** **Graceful degradation (opt-in only):** env flag e.g. `DEGRADE_SKIP_BACKTEST_ON_CG_CREDITS=0` default; when enabled and credits below threshold, skip backtest with explicit Telegram notice. **Default must preserve full pipeline.**  
+- [x] **J4.** **Graceful degradation (opt-in only):** env flag e.g. `DEGRADE_SKIP_BACKTEST_ON_CG_CREDITS=0` default; when enabled and credits below threshold, skip backtest with explicit Telegram notice. **Default must preserve full pipeline.**  
   - **Verification:** Default off → identical stages vs baseline; on → documented behavior only.
+  - **Notes:** `DEGRADE_SKIP_BACKTEST_ENABLED` + `DEGRADE_PRIOR_CG_HTTP_SKIP_GE` in `config.json`. If enabled and `SKIP_GE` **≤ 0**, every run skips backtests (emergency). If `SKIP_GE` **> 0**, skip when **prior** `metrics.json` last entry `coingecko_http_total` ≥ threshold; else run backtests. Telegram HTML notice when skipped (if bot enabled).
 
 ---
 
@@ -354,8 +358,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 - [ ] **M1.** **`pytest`** suite: migrate or wrap `scripts/verify_*.py` assertions into tests; golden-file tests for `MessageFormatter` HTML output.  
   - **Verification:** `pytest` green in CI; existing verify scripts still runnable.
 
-- [ ] **M2.** **Pre-commit:** `.pre-commit-config.yaml` with `ruff` + `compileall` (or `ruff` only if compileall covered by CI).  
+- [x] **M2.** **Pre-commit:** `.pre-commit-config.yaml` with `ruff` + `compileall` (or `ruff` only if compileall covered by CI).  
   - **Verification:** `pre-commit run --all-files` passes.
+  - **Notes:** `.pre-commit-config.yaml` uses `ruff-pre-commit` only (`compileall` remains in CI / `scripts/ci_verify.sh`).
 
 - [ ] **M3.** **`docker compose`** (optional) local profile with `PYTHON_VERSION`, `DATA_DIR`, and Render env keys as optional blanks.  
   - **Verification:** `docker compose config` valid; README one-liner.
@@ -368,8 +373,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ### Tasks
 
-- [ ] **N1.** **Secret scanning:** enable GitHub push protection; add `gitleaks` (or `trufflehog`) job in CI on PR.  
+- [x] **N1.** **Secret scanning:** enable GitHub push protection; add `gitleaks` (or `trufflehog`) job in CI on PR.  
   - **Verification:** CI job passes on clean repo; documented false positives.
+  - **Notes:** `.github/workflows/ci.yml` job **`gitleaks`** (`gitleaks/gitleaks-action@v2`, `fetch-depth: 0`). **Push protection** for secrets is still **repo/org admin** in GitHub **Settings → Code security** (not automatable from this repo).
 
 - [ ] **N2.** **Telegram webhook mode (optional):** config to use webhook instead of long polling; **default remains long polling** (Render-compatible).  
   - **Verification:** Default: existing worker behavior; webhook path documented separately if not used on Render.
@@ -415,8 +421,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** CI job fails if a forbidden import is introduced.
   - **Notes:** `scripts/check_backtesting_imports.py` (AST scan); invoked from `scripts/ci_verify.sh`.
 
-- [ ] **P4.** **Packaging stub (optional):** `pyproject.toml` `[project]` optional package name `linear-trend-backtest` pointing at `backtesting/` **or** documented `PYTHONPATH` layout for sibling repo.  
+- [x] **P4.** **Packaging stub (optional):** `pyproject.toml` `[project]` optional package name `linear-trend-backtest` pointing at `backtesting/` **or** documented `PYTHONPATH` layout for sibling repo.  
   - **Verification:** Second venv can `pip install -e .` (if packaged) or follow README “consume from sibling repo” without scanner.
+  - **Notes:** `pyproject.toml` now has `[project]` + `[build-system]` (setuptools) + `[tool.setuptools.packages.find]` excluding `scripts/`, `docs/`, venvs. **`pip install -e .`** installs discoverable packages (`api`, `backtesting`, `scanner`, …); validate in a **Python 3.11** venv per CI (3.14+ may differ for numpy wheels).
 
 ---
 
@@ -452,19 +459,23 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 - [x] **Q2.** **Snapshot writer** in scanner completion path: build list from the **same** structure used for alerts; write atomically (`tmp` then rename); env e.g. `PUBLIC_QUALIFIED_SNAPSHOT=1`.  
   - **Verification:** With flag on, one scan produces valid JSON; with flag off, no file or no write; **provider call counts** (H0) unchanged vs baseline for same config.
-  - **Notes:** `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` / `PUBLIC_QUALIFIED_SNAPSHOT_FILE` in `config.json`; `utils/scan_artifacts.write_public_qualified_snapshot` after metrics save. **Q3** redaction: default payload omits secrets/backtest tables; extend schema when product defines optional public fields. **Ops / risk:** do not enable on shared disks without reviewing row content; no API keys in JSON—see **Sections 6.3–6.4**.
+  - **Notes:** `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` / `PUBLIC_QUALIFIED_SNAPSHOT_FILE` / `PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET` in `config.json`; `utils/scan_artifacts.write_public_qualified_snapshot` after metrics save. **Q3** `field_set` **`minimal`** omits per-exchange volumes and `ohlcv_source`. **Ops / risk:** see **Sections 6.3–6.4**.
 
-- [ ] **Q3.** **Redaction / safety:** env or config for fields to omit on public JSON (e.g. internal debug); default keeps parity with notifications for allowed fields only.  
+- [x] **Q3.** **Redaction / safety:** env or config for fields to omit on public JSON (e.g. internal debug); default keeps parity with notifications for allowed fields only.  
   - **Verification:** Redacted mode produces smaller JSON; no secrets in file.
+  - **Notes:** `PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET`: **`full`** (default) includes `exchange_volumes`, `volume_24h`, `ohlcv_source`; **`minimal`** omits those for a smaller public file. Top-level `field_set` key in JSON; schema updated.
 
-- [ ] **Q4.** **Static dashboard:** responsive CSS, table or cards, reads JSON URL from `?api=` or baked `config.js` generated at deploy; empty state when `coins: []`.  
+- [x] **Q4.** **Static dashboard:** responsive CSS, table or cards, reads JSON URL from `?api=` or baked `config.js` generated at deploy; empty state when `coins: []`.  
   - **Verification:** Manual load on narrow viewport; refresh shows updated list after next scan file update.
+  - **Notes:** `docs/dashboard/` (`index.html`, `styles.css`, `app.js`, `config.example.js`). Load button + `?api=` URL encoding.
 
-- [ ] **Q5.** **CORS + caching headers** on the GET that serves the snapshot (document in `docs/WEB_DASHBOARD.md`); document **hourly** expectation tied to `SCAN_INTERVAL_SECONDS`, not per-page cron.  
+- [x] **Q5.** **CORS + caching headers** on the GET that serves the snapshot (document in `docs/WEB_DASHBOARD.md`); document **hourly** expectation tied to `SCAN_INTERVAL_SECONDS`, not per-page cron.  
   - **Verification:** Cross-origin fetch from local static server succeeds; `max-age` present.
+  - **Notes:** `docs/WEB_DASHBOARD.md` — CORS, `Cache-Control`, hourly alignment. Origin must allow cross-origin fetch to snapshot URL.
 
-- [ ] **Q6.** **GitHub Pages wiring:** `docs/dashboard/` or `gh-pages` branch build instructions; **no secrets** in repo; JSON URL supplied via GitHub Actions env at build time **or** runtime fetch to public Render URL.  
+- [x] **Q6.** **GitHub Pages wiring:** `docs/dashboard/` or `gh-pages` branch build instructions; **no secrets** in repo; JSON URL supplied via GitHub Actions env at build time **or** runtime fetch to public Render URL.  
   - **Verification:** Pages deploy succeeds; site loads without 4xx on JSON (use placeholder URL in CI if needed).
+  - **Notes:** Same doc: copy `config.example.js` → `config.js`, set `window.__SNAPSHOT_URL__`, optional second `<script>` before `app.js` per comment in `index.html`.
 
 ### PWA & browser notifications — design (tier A vs B)
 
@@ -558,6 +569,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 |---------|---------|----------------|
 | `SCAN_HEARTBEAT_ENABLED` | `false` | When an external monitor (or human) should read **`DATA_DIR` / `SCAN_HEARTBEAT_FILE`** after each successful scan. |
 | `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` | `false` | When a static dashboard (Milestone **Q4+**) will **`fetch()`** the JSON from a URL that serves **`PUBLIC_QUALIFIED_SNAPSHOT_FILE`**. |
+| `SCAN_COSTS_ENABLED` | `false` | When **`DATA_DIR` / `SCAN_COSTS_FILE`** should receive per-scan Polygon/CMC/CG counts and cache summaries (J3). |
 
 **Follow-ups**
 
@@ -583,7 +595,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2**, **J1/J3/J4**, **K–O**, **P2/P4**, **Q3–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **K–O**, **P2**, **Q7–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -599,15 +611,15 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | F | Logging | Complete |
 | G | CMC links in Telegram | Complete |
 | H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
-| I | DB docs / main split | **I1** done; **I2** pending |
-| J | Observability & operations | **J2** done; **J1/J3/J4** pending |
+| I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
+| J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
 | K | Telegram & UX | Not started |
 | L | Data & strategy | Not started |
-| M | Engineering quality | Not started |
-| N | Security & compliance | Not started |
+| M | Engineering quality | **M2** pre-commit; **M1/M3** pending |
+| N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
-| P | Backtesting modularization (web reuse) | **P1/P3** done; **P2/P4** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q2** done; **Q3–Q21** pending |
+| P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q6** done; **Q7–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 
@@ -628,4 +640,6 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
 | Backtest library surface | `backtesting/*`, `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
 | Public dashboard + PWA + UX | `main.py` (writer hook), `DATA_DIR/qualified_public_snapshot.json`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
+| Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
+| CMC resolve (I2 step) | `scanner/cmc_resolve.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |

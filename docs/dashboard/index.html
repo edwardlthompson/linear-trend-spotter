@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Qualified coins</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <h1>Qualified coins</h1>
+    <p class="toolbar">
+      <label>
+        Snapshot JSON URL
+        <input id="apiInput" type="url" placeholder="https://…/qualified_public_snapshot.json" />
+      </label>
+      <button id="loadBtn" type="button">Load</button>
+    </p>
+    <div id="error" class="error" hidden></div>
+    <p id="meta" class="meta"></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Name</th>
+          <th>30d</th>
+          <th>Uniformity</th>
+          <th>Health</th>
+          <th>Link</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <!-- Optional: <script src="./config.js"></script> for Pages builds -->
+    <!-- For GitHub Pages: add <script src="./config.js"></script> before app.js (see config.example.js). -->
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,3 +1,18 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linear-trend-spotter"
+version = "0.0.0"
+description = "Linear Trend Spotter scanner worker and backtesting helpers (Milestone P4 packaging stub)."
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*", "scripts*", "docs*", ".venv*", "venv*", "build*", "dist*"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120

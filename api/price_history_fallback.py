@@ -14,6 +14,8 @@ from typing import Any, Optional
 
 import requests
 
+from utils.provider_http_usage import record_cmc_http, record_polygon_http
+
 
 class PriceHistoryFallbackClient:
     """Fallback chain: Polygon intraday/daily OHLCV, then CoinMarketCap OHLCV / closes."""
@@ -59,6 +61,7 @@ class PriceHistoryFallbackClient:
         for attempt in range(6):
             try:
                 response = self.polygon_session.get(url, params=params, timeout=20)
+                record_polygon_http(url)
                 if response.status_code == 200:
                     payload = response.json()
                     results = payload.get("results", []) if isinstance(payload, dict) else []
@@ -132,6 +135,7 @@ class PriceHistoryFallbackClient:
 
         try:
             response = self.polygon_session.get(url, params=params, timeout=20)
+            record_polygon_http(url)
             if response.status_code != 200:
                 return None
             payload = response.json()
@@ -184,6 +188,7 @@ class PriceHistoryFallbackClient:
         for attempt in range(4):
             try:
                 response = self.cmc_session.get(url, params=params, timeout=20)
+                record_cmc_http(url)
                 if response.status_code != 200:
                     if response.status_code == 429 and attempt < 3:
                         time.sleep(min(3 * (attempt + 1), 20) + random.uniform(0, 1))
@@ -301,6 +306,7 @@ class PriceHistoryFallbackClient:
         for attempt in range(6):
             try:
                 response = self.polygon_session.get(url, params=params, timeout=15)
+                record_polygon_http(url)
                 if response.status_code == 200:
                     payload = response.json()
                     results = payload.get("results", []) if isinstance(payload, dict) else []
@@ -356,6 +362,7 @@ class PriceHistoryFallbackClient:
         for attempt in range(5):
             try:
                 response = self.cmc_session.get(url, params=params, timeout=15)
+                record_cmc_http(url)
                 if response.status_code == 200:
                     payload = response.json()
                     prices = self._extract_cmc_prices(payload, symbol.upper())

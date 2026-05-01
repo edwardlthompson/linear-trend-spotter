@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import io
+from html import escape as html_escape
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -44,7 +45,9 @@ from utils.scan_artifacts import (
     write_public_qualified_snapshot,
     write_scan_heartbeat,
 )
-from utils.logger import app_logger
+from utils.scan_costs import read_last_completed_coingecko_http_total, write_scan_costs_file
+from utils.logger import app_logger, maybe_install_structured_json_handler
+from scanner.cmc_resolve import build_cmc_normalized_lookup, resolve_cmc_data
 
 # Import exchange database
 from exchange_data.exchange_db import ExchangeDatabase
@@ -151,55 +154,6 @@ def _format_time_on_list(entered_date_raw: str | None) -> str:
     return f"{hours}h"
 
 
-def _normalize_symbol(raw_symbol: str) -> str:
-    return ''.join(ch for ch in str(raw_symbol or '').upper() if ch.isalnum())
-
-
-def _build_cmc_normalized_lookup(cmc_by_symbol: dict[str, dict]) -> dict[str, list[tuple[str, dict]]]:
-    lookup: dict[str, list[tuple[str, dict]]] = {}
-    for symbol, payload in cmc_by_symbol.items():
-        normalized = _normalize_symbol(symbol)
-        if not normalized:
-            continue
-        lookup.setdefault(normalized, []).append((symbol, payload))
-    return lookup
-
-
-def _resolve_cmc_data(
-    symbol: str,
-    cmc_by_symbol: dict[str, dict],
-    cmc_by_normalized_symbol: dict[str, list[tuple[str, dict]]],
-    symbol_aliases: dict[str, str],
-) -> tuple[dict | None, str | None, str]:
-    symbol_upper = str(symbol or '').upper()
-    if not symbol_upper:
-        return None, None, 'missing'
-
-    direct = cmc_by_symbol.get(symbol_upper)
-    if direct:
-        return direct, symbol_upper, 'direct'
-
-    alias_target = symbol_aliases.get(symbol_upper)
-    if alias_target:
-        alias_direct = cmc_by_symbol.get(alias_target)
-        if alias_direct:
-            return alias_direct, alias_target, 'configured_alias'
-
-        alias_normalized = _normalize_symbol(alias_target)
-        alias_candidates = cmc_by_normalized_symbol.get(alias_normalized, [])
-        if len(alias_candidates) == 1:
-            matched_symbol, matched_payload = alias_candidates[0]
-            return matched_payload, matched_symbol, 'configured_alias_normalized'
-
-    normalized_symbol = _normalize_symbol(symbol_upper)
-    normalized_candidates = cmc_by_normalized_symbol.get(normalized_symbol, [])
-    if len(normalized_candidates) == 1:
-        matched_symbol, matched_payload = normalized_candidates[0]
-        return matched_payload, matched_symbol, 'normalized'
-
-    return None, None, 'missing'
-
-
 def _resolve_top_coin_data(
     symbol: str,
     *,
@@ -211,7 +165,7 @@ def _resolve_top_coin_data(
     gecko: CoinGeckoClient,
     alias_markets_by_id: dict[str, dict] | None = None,
 ) -> tuple[dict | None, str | None, str]:
-    resolved_data, resolved_symbol, resolution_type = _resolve_cmc_data(
+    resolved_data, resolved_symbol, resolution_type = resolve_cmc_data(
         symbol,
         cmc_by_symbol,
         cmc_by_normalized_symbol,
@@ -524,6 +478,7 @@ def _build_weekly_digest_message(history_db: HistoryDatabase, active_db: ActiveC
 
 def run_scanner():
     """Main orchestration function"""
+    maybe_install_structured_json_handler()
     app_logger.info("=" * 60)
     app_logger.info("📊 LINEAR TREND SPOTTER (FULL EXCHANGE SCAN)")
     app_logger.info("=" * 60)
@@ -699,7 +654,7 @@ def run_scanner():
                     'info': info,
                 }
 
-        cmc_by_normalized_symbol = _build_cmc_normalized_lookup(cmc_by_symbol)
+        cmc_by_normalized_symbol = build_cmc_normalized_lookup(cmc_by_symbol)
         cmc_symbol_aliases = settings.cmc_symbol_aliases if top_coins_provider != 'coingecko' else {}
         coingecko_id_aliases = settings.coingecko_id_aliases if top_coins_provider == 'coingecko' else {}
         
@@ -1133,7 +1088,40 @@ def run_scanner():
         # STEP 9.1: Optional backtesting run (feature-flagged)
         # ============================================================
         backtest_summary = None
-        if settings.backtest_enabled:
+        skip_backtest = False
+        skip_reason = ""
+        if settings.degrade_skip_backtest_enabled:
+            ge = settings.degrade_prior_cg_http_skip_ge
+            if ge <= 0:
+                skip_backtest = True
+                skip_reason = (
+                    "DEGRADE_SKIP_BACKTEST_ENABLED with DEGRADE_PRIOR_CG_HTTP_SKIP_GE<=0 "
+                    "(skip every run; emergency ops only)"
+                )
+            else:
+                prior = read_last_completed_coingecko_http_total(settings.metrics_file)
+                if prior is not None and prior >= ge:
+                    skip_backtest = True
+                    skip_reason = (
+                        f"prior scan coingecko_http_total={prior} >= DEGRADE_PRIOR_CG_HTTP_SKIP_GE={ge}"
+                    )
+                elif prior is None:
+                    app_logger.info(
+                        "   ℹ️ Degrade skip enabled but no prior metrics.json entry; running backtests"
+                    )
+
+        if skip_backtest:
+            app_logger.warning("\n⏭️ Skipping backtests (J4 degrade): %s", skip_reason)
+            if telegram:
+                try:
+                    telegram.send_message(
+                        "<b>Degraded scan</b>\nBacktests skipped this run:\n"
+                        + html_escape(skip_reason[:500])
+                    )
+                except Exception as degrade_notify_err:
+                    app_logger.warning("   ⚠️ Could not send degrade notice: %s", degrade_notify_err)
+
+        if settings.backtest_enabled and not skip_backtest:
             app_logger.info("\n🧪 Running backtests for final-stage qualified coins...")
             try:
                 backtest_summary = run_backtests_for_final_results(final_results)
@@ -1503,6 +1491,17 @@ def run_scanner():
         
         metrics.save(settings.metrics_file)
 
+        if settings.scan_costs_enabled:
+            try:
+                write_scan_costs_file(
+                    settings.DATA_DIR,
+                    settings.scan_costs_file,
+                    metrics.get_summary(),
+                )
+                app_logger.info("📉 Scan costs artifact written (%s)", settings.scan_costs_file)
+            except Exception as costs_err:
+                app_logger.warning("⚠️ Scan costs write failed: %s", costs_err)
+
         if settings.scan_heartbeat_enabled:
             try:
                 write_scan_heartbeat(
@@ -1528,6 +1527,7 @@ def run_scanner():
                     settings.DATA_DIR,
                     settings.public_qualified_snapshot_file,
                     final_results,
+                    field_set=settings.public_qualified_snapshot_field_set,
                 )
                 app_logger.info("📤 Public qualified snapshot written")
             except Exception as snap_err:

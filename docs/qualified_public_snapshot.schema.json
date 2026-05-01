@@ -6,6 +6,11 @@
   "properties": {
     "schema_version": { "type": "integer", "minimum": 1 },
     "updated_at": { "type": "string", "description": "ISO-8601 UTC timestamp when the worker wrote the file" },
+    "field_set": {
+      "type": "string",
+      "enum": ["full", "minimal"],
+      "description": "Q3: full rows match Telegram-oriented fields; minimal omits per-exchange volumes and ohlcv_source"
+    },
     "coins": {
       "type": "array",
       "items": {

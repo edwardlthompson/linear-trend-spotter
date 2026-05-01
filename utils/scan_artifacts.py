@@ -51,37 +51,53 @@ def write_scan_heartbeat(
     _atomic_write_json(data_dir / filename, body)
 
 
-def build_public_qualified_snapshot(final_results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Notification-parity subset for public JSON (Q1/Q2). No secrets."""
+def build_public_qualified_snapshot(
+    final_results: list[dict[str, Any]],
+    *,
+    field_set: str = "full",
+) -> dict[str, Any]:
+    """Notification-parity subset for public JSON (Q1/Q2). No secrets.
+
+    field_set: ``full`` matches notification-oriented rows; ``minimal`` omits
+    exchange volume breakdown and OHLCV provenance for smaller public payloads (Q3).
+    """
     coins_out: list[dict[str, Any]] = []
+    minimal = str(field_set or "full").strip().lower() == "minimal"
     for row in final_results:
         gains = row.get("gains") or {}
-        coins_out.append(
-            {
-                "symbol": str(row.get("symbol", "")).upper(),
-                "name": str(row.get("name", "")),
-                "slug": row.get("slug"),
-                "source_url": row.get("source_url") or row.get("cmc_url"),
-                "gains": {
-                    "7d": float(gains.get("7d", 0) or 0),
-                    "30d": float(gains.get("30d", 0) or 0),
-                },
-                "uniformity_score": float(row.get("uniformity_score", 0) or 0),
-                "health_score": row.get("health_score"),
-                "current_rank": row.get("current_rank"),
-                "rank_delta": row.get("rank_delta"),
-                "exchange_volumes": row.get("exchange_volumes"),
-                "volume_24h": row.get("volume_24h"),
-                "ohlcv_source": row.get("ohlcv_source"),
-            }
-        )
+        coin: dict[str, Any] = {
+            "symbol": str(row.get("symbol", "")).upper(),
+            "name": str(row.get("name", "")),
+            "slug": row.get("slug"),
+            "source_url": row.get("source_url") or row.get("cmc_url"),
+            "gains": {
+                "7d": float(gains.get("7d", 0) or 0),
+                "30d": float(gains.get("30d", 0) or 0),
+            },
+            "uniformity_score": float(row.get("uniformity_score", 0) or 0),
+            "health_score": row.get("health_score"),
+            "current_rank": row.get("current_rank"),
+            "rank_delta": row.get("rank_delta"),
+        }
+        if not minimal:
+            coin["exchange_volumes"] = row.get("exchange_volumes")
+            coin["volume_24h"] = row.get("volume_24h")
+            coin["ohlcv_source"] = row.get("ohlcv_source")
+        coins_out.append(coin)
     return {
         "schema_version": 1,
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        "field_set": "minimal" if minimal else "full",
         "coins": coins_out,
     }
 
 
-def write_public_qualified_snapshot(data_dir: Path, filename: str, final_results: list[dict[str, Any]]) -> None:
-    payload = build_public_qualified_snapshot(final_results)
+def write_public_qualified_snapshot(
+    data_dir: Path,
+    filename: str,
+    final_results: list[dict[str, Any]],
+    *,
+    field_set: str = "full",
+) -> None:
+    payload = build_public_qualified_snapshot(final_results, field_set=field_set)
     _atomic_write_json(data_dir / filename, payload)

@@ -107,6 +107,11 @@ class Settings:
             'SCAN_HEARTBEAT_FILE': 'scan_heartbeat.json',
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED': False,
             'PUBLIC_QUALIFIED_SNAPSHOT_FILE': 'qualified_public_snapshot.json',
+            'PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET': 'full',
+            'SCAN_COSTS_ENABLED': False,
+            'SCAN_COSTS_FILE': 'scan_costs.json',
+            'DEGRADE_SKIP_BACKTEST_ENABLED': False,
+            'DEGRADE_PRIOR_CG_HTTP_SKIP_GE': 0,
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -178,6 +183,8 @@ class Settings:
             'WEEKLY_DIGEST_ENABLED',
             'SCAN_HEARTBEAT_ENABLED',
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
+            'SCAN_COSTS_ENABLED',
+            'DEGRADE_SKIP_BACKTEST_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -206,6 +213,7 @@ class Settings:
             ('PORTFOLIO_SIM_STARTING_CAPITAL', 100, 1000000000),
             ('WEEKLY_DIGEST_WEEKDAY_UTC', 0, 6),
             ('WEEKLY_DIGEST_HOUR_UTC', 0, 23),
+            ('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0, 10_000_000),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
@@ -285,7 +293,21 @@ class Settings:
         else:
             normalized['BACKTEST_INDICATORS'] = [str(item).strip() for item in indicators]
 
-        for path_key in ['BACKTEST_CHECKPOINT_FILE', 'BACKTEST_TELEMETRY_FILE', 'ARTIFACT_ARCHIVE_DIR', 'EXIT_ANALYTICS_FILE', 'SCANNER_INSIGHTS_FILE', 'WEEKLY_DIGEST_STATE_FILE']:
+        field_set = str(normalized.get('PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET', 'full')).strip().lower()
+        if field_set not in {'full', 'minimal'}:
+            errors.append('PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET must be one of: full, minimal')
+        else:
+            normalized['PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET'] = field_set
+
+        for path_key in [
+            'BACKTEST_CHECKPOINT_FILE',
+            'BACKTEST_TELEMETRY_FILE',
+            'ARTIFACT_ARCHIVE_DIR',
+            'EXIT_ANALYTICS_FILE',
+            'SCANNER_INSIGHTS_FILE',
+            'WEEKLY_DIGEST_STATE_FILE',
+            'SCAN_COSTS_FILE',
+        ]:
             value = normalized.get(path_key)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{path_key} must be a non-empty string path")
@@ -596,6 +618,27 @@ class Settings:
     def public_qualified_snapshot_file(self) -> str:
         name = str(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_FILE', 'qualified_public_snapshot.json')).strip()
         return name or 'qualified_public_snapshot.json'
+
+    @property
+    def public_qualified_snapshot_field_set(self) -> str:
+        return str(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET', 'full')).strip().lower()
+
+    @property
+    def scan_costs_enabled(self) -> bool:
+        return bool(self._config.get('SCAN_COSTS_ENABLED', False))
+
+    @property
+    def scan_costs_file(self) -> str:
+        name = str(self._config.get('SCAN_COSTS_FILE', 'scan_costs.json')).strip()
+        return name or 'scan_costs.json'
+
+    @property
+    def degrade_skip_backtest_enabled(self) -> bool:
+        return bool(self._config.get('DEGRADE_SKIP_BACKTEST_ENABLED', False))
+
+    @property
+    def degrade_prior_cg_http_skip_ge(self) -> int:
+        return int(self._config.get('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0))
 
     @property
     def base_dir(self) -> Path:
