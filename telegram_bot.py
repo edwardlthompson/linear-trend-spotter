@@ -7,10 +7,9 @@ Run this as a separate process
 import os
 import sys
 import json
-import logging
+import html
 import time
 import requests
-from datetime import datetime
 from pathlib import Path
 
 # Add current directory to path
@@ -56,14 +55,20 @@ class TelegramBotHandler:
         
         try:
             response = requests.get(url, params=params, timeout=35)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            self.logger.error(f"Error getting updates (HTTP): {e}")
+            return []
+
+        try:
             data = response.json()
-            if data.get('ok'):
-                return data.get('result', [])
-            else:
-                self.logger.error(f"Telegram API error: {data.get('description')}")
-        except Exception as e:
-            self.logger.error(f"Error getting updates: {e}")
-        
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error getting updates (invalid JSON): {e}")
+            return []
+
+        if data.get('ok'):
+            return data.get('result', [])
+        self.logger.error(f"Telegram API error: {data.get('description')}")
         return []
     
     def _get_status_text(self) -> str:
@@ -87,8 +92,8 @@ class TelegramBotHandler:
         return (
             f"📊 <b>Status Report</b>\n\n"
             f"<b>Active coins:</b> {len(active_list)}\n"
-            f"<b>Last scan:</b> {scan_time}\n"
-            f"<b>Duration:</b> {scan_duration}"
+            f"<b>Last scan:</b> {html.escape(str(scan_time), quote=False)}\n"
+            f"<b>Duration:</b> {html.escape(str(scan_duration), quote=False)}"
         )
 
     def _get_list_text_markup(self, page: int = 0) -> tuple[str, dict]:
@@ -107,7 +112,9 @@ class TelegramBotHandler:
         
         text = f"📋 <b>Tracked coins (Page {page+1}/{total_pages})</b>\n\n"
         lines = [
-            f"• <b>{c['symbol']}</b> - {c['name']} <i>(Score: {c.get('uniformity_score', 0):.0f})</i>"
+            f"• <b>{html.escape(str(c.get('symbol', '')), quote=False)}</b> - "
+            f"{html.escape(str(c.get('name', '')), quote=False)} "
+            f"<i>(Score: {c.get('uniformity_score', 0):.0f})</i>"
             for c in page_coins
         ]
         text += "\n".join(lines)

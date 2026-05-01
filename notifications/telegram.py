@@ -1,9 +1,9 @@
 """Enhanced Telegram notification client with interactive features"""
-import requests
+import html
 import io
 import json
-from typing import Optional, Dict, List
-from datetime import datetime
+import requests
+from typing import Optional, Dict
 import logging
 from notifications.formatter import MessageFormatter
 
@@ -28,14 +28,19 @@ class TelegramClient:
                 data['reply_markup'] = json.dumps(data['reply_markup'])
             
             response = self.session.post(url, data=data, timeout=10)
-            result = response.json()
-            
+            response.raise_for_status()
+            try:
+                result = response.json()
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Telegram invalid JSON for {method}: {e}")
+                return None
+
             if not result.get('ok'):
                 self.logger.error(f"Telegram API error: {result.get('description')}")
                 return None
-            
+
             return result
-        except Exception as e:
+        except requests.RequestException as e:
             self.logger.error(f"Telegram request error: {e}")
             return None
     
@@ -91,15 +96,19 @@ class TelegramClient:
                 data['reply_markup'] = json.dumps(reply_markup)
             
             response = self.session.post(url, data=data, files=files, timeout=30)
-            result = response.json()
-            
+            response.raise_for_status()
+            try:
+                result = response.json()
+            except json.JSONDecodeError as e:
+                self.logger.error(f"Telegram sendPhoto invalid JSON: {e}")
+                return None
+
             if result.get('ok'):
                 return result['result']['message_id']
-            else:
-                self.logger.error(f"Failed to send photo: {result.get('description')}")
-                return None
-                
-        except Exception as e:
+            self.logger.error(f"Failed to send photo: {result.get('description')}")
+            return None
+
+        except requests.RequestException as e:
             self.logger.error(f"Error sending photo: {e}")
             return None
     
@@ -141,6 +150,9 @@ class TelegramClient:
             or coin.get('cmc_url')
             or MessageFormatter._build_coingecko_url(coin)
         ).strip()
-        message = f"🔴 <a href='{source_url}'>{coin['symbol']} ({coin['name']})</a> has left the qualified list"
+        sym = html.escape(str(coin.get('symbol', '')), quote=False)
+        nm = html.escape(str(coin.get('name', '')), quote=False)
+        href = html.escape(source_url, quote=True)
+        message = f"🔴 <a href='{href}'>{sym} ({nm})</a> has left the qualified list"
         markup = self._build_context_keyboard(coin)
         return self.send_message(message, reply_markup=markup)

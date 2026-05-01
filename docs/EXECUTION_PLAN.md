@@ -150,11 +150,11 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **C1.** `telegram_bot.py` `get_updates`: check HTTP status / `response.ok` before `json()`; handle `JSONDecodeError`.  
+- [x] **C1.** `telegram_bot.py` `get_updates`: check HTTP status / `response.ok` before `json()`; handle `JSONDecodeError`.  
   - **Verification:** `compileall`; optional `scripts/verify_telegram.py` with test creds.
-- [ ] **C2.** `notifications/telegram.py`: harden `_request` / `send_photo` similarly.  
+- [x] **C2.** `notifications/telegram.py`: harden `_request` / `send_photo` similarly.  
   - **Verification:** `compileall`.
-- [ ] **C3.** Escape user/API-derived strings for Telegram **HTML** (`html.escape` or equivalent) in `MessageFormatter` and any raw HTML assembly in `main.py` / `telegram.py`.  
+- [x] **C3.** Escape user/API-derived strings for Telegram **HTML** (`html.escape` or equivalent) in `MessageFormatter` and any raw HTML assembly in `main.py` / `telegram.py`.  
   - **Verification:** Unit test or small script with `<`, `>`, `&` in symbol/name; message still valid.
 
 ---

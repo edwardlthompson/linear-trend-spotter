@@ -2,12 +2,25 @@
 Notification message formatting
 """
 
-from datetime import datetime
+import html
 from typing import Dict, List
+from urllib.parse import quote
+
 from config.constants import EXCHANGE_EMOJIS
+
 
 class MessageFormatter:
     """Format notification messages per spec §10.1-10.2"""
+
+    @staticmethod
+    def _tg_html_text(value: object) -> str:
+        """Escape dynamic text for Telegram HTML parse mode (body text, not href)."""
+        return html.escape(str(value or ""), quote=False)
+
+    @staticmethod
+    def _tg_html_attr(value: object) -> str:
+        """Escape dynamic values for use inside HTML double-quoted attributes."""
+        return html.escape(str(value or ""), quote=True)
 
     @staticmethod
     def _build_coingecko_url(coin: Dict) -> str:
@@ -102,23 +115,28 @@ class MessageFormatter:
         source_url = str(coin.get('source_url', '') or '').strip()
         if not source_url:
             slug = str(coin.get('slug', '') or '').strip()
-            source_url = f"https://coinmarketcap.com/currencies/{slug}/" if slug else ""
-        
+            source_url = (
+                f"https://coinmarketcap.com/currencies/{quote(slug, safe='')}/" if slug else ""
+            )
+
         # Get data
-        symbol = coin['symbol']
-        name = coin['name']
+        symbol = coin["symbol"]
+        name = coin["name"]
         gain_7d = coin['gains'].get('7d', 0)
         gain_30d = coin['gains'].get('30d', 0)
         score = coin.get('uniformity_score', 0)
         
+        sym_t = MessageFormatter._tg_html_text(symbol)
+        name_t = MessageFormatter._tg_html_text(name)
         # Header with HTML link
         if source_url:
-            caption = f"🟢 <a href='{source_url}'>{symbol} ({name})</a>\n\n"
+            href = MessageFormatter._tg_html_attr(source_url)
+            caption = f"🟢 <a href='{href}'>{sym_t} ({name_t})</a>\n\n"
         else:
-            caption = f"🟢 {symbol} ({name})\n\n"
+            caption = f"🟢 {sym_t} ({name_t})\n\n"
         
         # Gains section
-        caption += f"📊 Gains:\n"
+        caption += "📊 Gains:\n"
         caption += f"   7d: +{gain_7d:.1f}%\n"
         caption += f"   30d: +{gain_30d:.1f}%\n\n"
         
@@ -128,8 +146,8 @@ class MessageFormatter:
         health_score = coin.get('health_score')
         if isinstance(health_score, (int, float)):
             caption += f"🩺 Health Score: {float(health_score):.0f}/100"
-            if coin.get('health_label'):
-                caption += f" ({coin.get('health_label')})"
+            if coin.get("health_label"):
+                caption += f" ({MessageFormatter._tg_html_text(coin.get('health_label'))})"
             caption += "\n"
 
         caption += "\n"
@@ -162,10 +180,10 @@ class MessageFormatter:
         if isinstance(total_volume_24h, (int, float)) and total_volume_24h > 0:
             caption += f"💵 Total 24h Volume (Provider): ${total_volume_24h:,.0f}\n\n"
         else:
-            caption += f"💵 Total 24h Volume (Provider): No volume\n\n"
+            caption += "💵 Total 24h Volume (Provider): No volume\n\n"
         
         # Exchange volumes
-        caption += f"💰 Exchange Volumes:\n"
+        caption += "💰 Exchange Volumes:\n"
         
         volumes = coin.get('exchange_volumes', {})
         listed_on = coin.get('listed_on', ['coinbase', 'kraken', 'mexc'])
@@ -180,7 +198,10 @@ class MessageFormatter:
             elif isinstance(volume, (int, float)):
                 caption += f"{exchange_emoji} {exchange.title()}: ${volume:,.0f}\n"
             else:
-                caption += f"{exchange_emoji} {exchange.title()}: {volume}\n"
+                caption += (
+                    f"{exchange_emoji} {exchange.title()}: "
+                    f"{MessageFormatter._tg_html_text(volume)}\n"
+                )
         
         return caption
     
@@ -190,14 +211,16 @@ class MessageFormatter:
         Format exit notification per spec §10.2
         Returns plain text message
         """
-        symbol = coin['symbol']
-        name = coin['name']
+        symbol = MessageFormatter._tg_html_text(coin["symbol"])
+        name = MessageFormatter._tg_html_text(coin["name"])
         gecko_url = MessageFormatter._build_coingecko_url(coin)
-        reason = coin.get('exit_reason', 'No longer met qualification criteria')
-        
+        reason = MessageFormatter._tg_html_text(
+            coin.get("exit_reason", "No longer met qualification criteria")
+        )
+
         message = f"🔴 {symbol} ({name})\n"
-        message += f"🔗 {gecko_url}\n"
-        message += f"has left the qualified list\n"
+        message += f"🔗 {MessageFormatter._tg_html_text(gecko_url)}\n"
+        message += "has left the qualified list\n"
         message += f"Reason: {reason}"
 
         lifecycle_pnl_pct = coin.get('lifecycle_pnl_pct')
@@ -236,9 +259,9 @@ class MessageFormatter:
             f"Entries: {entries_count} | Exits: {exits_count} | Cooldown blocked: {blocked_count} | Active: {active_count}"
         )
         if regime:
-            header += f"\nRegime: {regime}"
+            header += f"\nRegime: {MessageFormatter._tg_html_text(regime)}"
         if drift_status:
-            header += f" | Drift: {drift_status}"
+            header += f" | Drift: {MessageFormatter._tg_html_text(drift_status)}"
 
         if not active_rows:
             return [header + "\n\nNo active coins this scan."]
@@ -251,7 +274,7 @@ class MessageFormatter:
             since_entry = MessageFormatter._format_pct(row.get('gain_since_entry_pct'))
             time_on_list = str(row.get('time_on_list') or 'n/a')
             health = MessageFormatter._format_score(row.get('health_score'))
-            symbol = str(row.get('symbol', '')).upper()
+            symbol = MessageFormatter._tg_html_text(str(row.get("symbol", "")).upper())
             lines.append(
                 f"{rank_label} {movement} <b>{symbol}</b> | H: {health} | Since alert: {since_entry} | On list: {time_on_list}"
             )
@@ -296,7 +319,7 @@ class MessageFormatter:
                 health = MessageFormatter._format_score(row.get('health_score'))
                 since_entry = MessageFormatter._format_pct(row.get('gain_since_entry_pct'))
                 time_on_list = str(row.get('time_on_list') or 'n/a')
-                symbol = str(row.get('symbol', '')).upper()
+                symbol = MessageFormatter._tg_html_text(str(row.get("symbol", "")).upper())
                 lines.append(
                     f"• {active_label} {movement} <b>{symbol}</b> | H {health} | Alert {since_entry} | On list {time_on_list}"
                 )
