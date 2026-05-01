@@ -18,13 +18,15 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 
 ## CI and deployment
 
-- **GitHub Actions:** On every push and pull request to `main`, the [CI workflow](https://github.com/edwardlthompson/linear-trend-spotter/blob/main/.github/workflows/ci.yml) installs dependencies on Ubuntu with **Python 3.11**, runs `python scripts/verify_backtest_env.py`, and compiles all Python sources (`python -m compileall -q .`).
+- **GitHub Actions:** On every push and pull request to `main`, the [CI workflow](https://github.com/edwardlthompson/linear-trend-spotter/blob/main/.github/workflows/ci.yml) installs dependencies on Ubuntu with **Python 3.11**, runs **`ruff check .`** (syntax/import rules in `pyproject.toml`), runs `python scripts/verify_backtest_env.py`, and compiles all Python sources (`python -m compileall -q .`).
 - **Render:** The worker uses `render.yaml` with `autoDeployTrigger: commit` so merges to the connected branch trigger a deploy. In the Render dashboard, confirm the service is linked to this repository, the correct **branch**, and **Auto-Deploy** is on (see execution plan milestone **A1**).
 - **Branch protection:** After CI is green, enable required status checks on `main` so merges cannot bypass the workflow (milestone **A4** in `docs/EXECUTION_PLAN.md`).
 - **Engineering roadmap:** `docs/EXECUTION_PLAN.md` tracks milestones, verification steps, and checkbox progress.
 - **Exception hygiene:** `scheduler.py`, `manage_bot.py`, and `bot_watchdog.py` use specific exception handling (no bare `except:`) where lock files, PIDs, and subprocess fallbacks are involved.
 - **Telegram safety (milestone C):** Long-polling and Bot API helpers check HTTP status before parsing JSON, handle `JSONDecodeError`, and escape user- or API-derived text in **HTML** captions (`html.escape` / formatter helpers).
 - **Cross-platform (milestone E):** The scan scheduler uses **`portalocker`** instead of `fcntl`, so imports work on Windows dev machines as well as Linux. `manage_bot.py` / `bot_watchdog.py` use **`sys.executable`** (no hard-coded `python3`); log tailing avoids a `tail` subprocess.
+- **Tooling (milestone D):** `pyproject.toml` configures **Ruff** for a narrow rule set (`E9`, `F`) so CI catches syntax and import issues without noisy style churn. `requirements.txt` uses **compatible-release** upper bounds on major versions.
+- **Logging (milestone F):** `config/settings.py`, `database/cache.py`, `utils/metrics.py`, and `utils/rate_limiter.py` use standard **`logging`**; CLI scripts under `scripts/` may still use `print` (documented in `utils/logger.py`).
 
 ---
 

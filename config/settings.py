@@ -1,12 +1,16 @@
 """Configuration management"""
-import os
 import json
+import logging
+import os
 from pathlib import Path
 from typing import Optional, Dict, Any
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
+
+_logger = logging.getLogger(__name__)
 
 class Settings:
     """Centralized settings management"""
@@ -28,7 +32,7 @@ class Settings:
             if loaded_config:
                 self._config.update(loaded_config)
         except Exception as e:
-            print(f"⚠️ Warning: Could not load config file: {e}")
+            _logger.warning("Could not load config file: %s", e)
 
         # Fail-fast safety validation and normalization
         self._config = self._validate_and_normalize(self._config)
@@ -111,7 +115,10 @@ class Settings:
 
         unknown = sorted(set(normalized.keys()) - set(defaults.keys()))
         if unknown:
-            print(f"⚠️ Warning: Unknown config keys ignored by app logic: {', '.join(unknown)}")
+            _logger.warning(
+                "Unknown config keys ignored by app logic: %s",
+                ", ".join(unknown),
+            )
 
         errors: list[str] = []
 
@@ -280,7 +287,9 @@ class Settings:
         # Architectural policy: integrated backtesting is mandatory for this app.
         # Keep key for compatibility, but enforce enabled behavior consistently.
         if normalized.get('BACKTEST_ENABLED') is False:
-            print("⚠️ Warning: BACKTEST_ENABLED=false is ignored; backtesting is always enabled by design.")
+            _logger.warning(
+                "BACKTEST_ENABLED=false is ignored; backtesting is always enabled by design."
+            )
             normalized['BACKTEST_ENABLED'] = True
 
         if errors:
@@ -299,7 +308,7 @@ class Settings:
                 return json.load(f)
                 
         except Exception as e:
-            print(f"❌ Error loading config: {e}")
+            _logger.error("Error loading config: %s", e)
             return {}
     
     @property

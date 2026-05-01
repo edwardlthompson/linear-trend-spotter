@@ -7,7 +7,7 @@ import traceback
 import time
 import concurrent.futures
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from statistics import median
 from typing import Any
 
@@ -214,7 +214,6 @@ def choose_40_symbols(maps: dict[str, dict[str, str]]) -> list[str]:
 
 def run_history(session: requests.Session, provider: str, symbols: list[str], symbol_map: dict[str, str], scenario: Scenario) -> dict[str, Any]:
     today = date.today()
-    start_30d = today - timedelta(days=30)
     def resolve_symbol(sym: str) -> str | None:
         if sym in symbol_map:
             return symbol_map[sym]

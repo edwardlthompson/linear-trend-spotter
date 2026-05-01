@@ -3,13 +3,17 @@ Metrics Collection Module
 Tracks API calls, cache hits, timing, and performance metrics
 """
 
-import time
 import json
+import logging
+import time
 from datetime import datetime
 from collections import defaultdict
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Optional
+
+_logger = logging.getLogger(__name__)
+
 
 class MetricsCollector:
     """
@@ -69,7 +73,7 @@ class MetricsCollector:
             @wraps(func)
             def wrapper(*args, **kwargs):
                 self.api_calls[service] += 1
-                self.increment(f'api_calls_total')
+                self.increment('api_calls_total')
                 start = time.time()
                 try:
                     result = func(*args, **kwargs)
@@ -184,7 +188,7 @@ class MetricsCollector:
                 json.dump(history, f, indent=2)
                 
         except Exception as e:
-            print(f"Error saving metrics: {e}")
+            _logger.warning("Error saving metrics: %s", e)
 
 # Global metrics instance
 metrics = MetricsCollector()

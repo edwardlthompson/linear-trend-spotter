@@ -6,8 +6,7 @@ Free tier: 10,000 calls/month, 30 calls/minute
 import requests
 import time
 import logging
-from typing import List, Dict, Optional, Any
-from datetime import datetime
+from typing import List, Dict, Optional
 
 class CoinMarketCapClient:
     """

@@ -126,7 +126,7 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** Screenshot or written confirmation in Notes (not committed secrets).
 - [x] **A2.** Add `.github/workflows/ci.yml`: Python **3.11**, `pip install -r requirements.txt`, run `python scripts/verify_backtest_env.py`.  
   - **Verification:** Actuator: push branch, workflow green; locally mirror commands.
-- [ ] **A3.** (Optional) Add `ruff check .` with `pyproject.toml` `[tool.ruff]` once Ruff is introduced (may align with Milestone D).  
+- [x] **A3.** (Optional) Add `ruff check .` with `pyproject.toml` `[tool.ruff]` once Ruff is introduced (may align with Milestone D).  
   - **Verification:** CI job passes.
 - [ ] **A4.** GitHub **branch protection** on `main`: require the CI check before merge.  
   - **Verification:** Repo settings documented in Notes.
@@ -163,9 +163,9 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **D1.** Add `pyproject.toml` with `[tool.ruff]` (target Py 3.11, sensible excludes for `scripts/` if needed).  
+- [x] **D1.** Add `pyproject.toml` with `[tool.ruff]` (target Py 3.11, sensible excludes for `scripts/` if needed).  
   - **Verification:** `ruff check .` passes in CI/local.
-- [ ] **D2.** Pin `requirements.txt` (via `pip freeze` from clean 3.11 env or `pip-tools`).  
+- [x] **D2.** Pin `requirements.txt` (via `pip freeze` from clean 3.11 env or `pip-tools`).  
   - **Verification:** Fresh venv `pip install -r requirements.txt` succeeds; CI passes.
 - [ ] **D3.** (Optional) `mypy` incremental on `config/` + `notifications/`.  
   - **Verification:** `mypy` passes on scoped paths.
@@ -189,9 +189,9 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **F1.** Migrate runtime modules (`config/settings.py`, `database/cache.py`, `utils/metrics.py`, `utils/rate_limiter.py`, etc.) to `logging` with consistent logger names.  
+- [x] **F1.** Migrate runtime modules (`config/settings.py`, `database/cache.py`, `utils/metrics.py`, `utils/rate_limiter.py`, etc.) to `logging` with consistent logger names.  
   - **Verification:** Run one full scan dry-run or worker start; logs appear without losing warnings.
-- [ ] **F2.** Document convention: CLI `scripts/*.py` may keep `print` or use dedicated loggers.  
+- [x] **F2.** Document convention: CLI `scripts/*.py` may keep `print` or use dedicated loggers.  
   - **Verification:** README or short comment in `utils/logger.py` Notes.
 
 ---

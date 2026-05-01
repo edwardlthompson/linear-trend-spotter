@@ -45,22 +45,15 @@ def retry(
         @wraps(func)
         def wrapper(*args, **kwargs):
             _delay = delay
-            last_exception = None
-            
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
-                    
+
                 except exceptions as e:
-                    last_exception = e
-                    
                     if attempt == max_attempts - 1:
                         # Last attempt failed
                         msg = f"All {max_attempts} attempts failed for {func.__name__}"
-                        if logger:
-                            logger.error(msg)
-                        else:
-                            print(f"❌ {msg}")
+                        (logger or logging.getLogger(func.__module__)).error(msg)
                         raise RetryExhaustedError(msg) from e
                     
                     # Calculate next delay with optional jitter
@@ -73,10 +66,7 @@ def retry(
                     
                     msg = (f"Attempt {attempt + 1}/{max_attempts} failed for "
                           f"{func.__name__}: {e}. Retrying in {sleep_time:.2f}s")
-                    if logger:
-                        logger.warning(msg)
-                    else:
-                        print(f"⚠️ {msg}")
+                    (logger or logging.getLogger(func.__module__)).warning(msg)
                     
                     time.sleep(sleep_time)
                     _delay *= backoff
@@ -233,7 +223,7 @@ class CircuitBreaker:
             
             return result
             
-        except Exception as e:
+        except Exception:
             self.failure_count += 1
             self.last_failure_time = time.time()
             

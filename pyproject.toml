@@ -1,0 +1,19 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+src = ["."]
+
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+# Narrow rule set for CI without mass reformat; expand (e.g. I, E4) incrementally.
+select = ["E9", "F"]
+ignore = []
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["E402", "F401"]
+"benchmark_40_tuned.py" = ["E402"]

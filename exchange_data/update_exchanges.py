@@ -4,7 +4,6 @@ Script to update exchange listings database
 Run this periodically (e.g., weekly) via cron
 """
 
-import os
 import sys
 from pathlib import Path
 

@@ -1,12 +1,15 @@
 """
-Logging configuration
+Logging configuration.
+
+Convention: library/runtime modules use ``logging.getLogger(__name__)`` (or
+``setup_logger`` for the main worker). Scripts under ``scripts/`` and small CLI
+helpers may use ``print`` for human-readable PASS/FAIL output.
 """
 
 import logging
 import sys
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
-from datetime import datetime
 
 
 class SafeStreamHandler(logging.StreamHandler):

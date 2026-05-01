@@ -4,10 +4,9 @@ Stores which coins are listed on which exchanges
 """
 
 import sqlite3
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Set, Optional, Tuple
+from typing import Dict, List
 import threading
 
 class ExchangeDatabase:

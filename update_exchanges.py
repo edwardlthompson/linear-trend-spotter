@@ -6,7 +6,6 @@ Run this manually or set up as a scheduled task
 
 import os
 import sys
-from pathlib import Path
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

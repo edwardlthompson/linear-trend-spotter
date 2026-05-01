@@ -5,8 +5,7 @@ Fetches listing data from various sources
 
 import requests
 import time
-from typing import List, Dict, Optional
-from datetime import datetime
+from typing import List, Dict
 from .exchange_db import ExchangeDatabase
 
 class ExchangeFetcher:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.engine import compute_buy_and_hold, run_backtest

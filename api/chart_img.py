@@ -209,7 +209,7 @@ class ChartIMGClient:
                     continue
                     
                 elif response.status_code == 429:
-                    self.logger.error(f"❌ Rate limited (429) - waiting longer")
+                    self.logger.error("❌ Rate limited (429) - waiting longer")
                     time.sleep(5)  # Extra wait on rate limit
                     continue
                     

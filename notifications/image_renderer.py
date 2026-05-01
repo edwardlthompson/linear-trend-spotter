@@ -512,7 +512,6 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
 
     if chart_points:
         close_values = [float(item[4]) for item in chart_points]
-        open_values = [float(item[1]) for item in chart_points]
         high_values = [float(item[2]) for item in chart_points]
         low_values = [float(item[3]) for item in chart_points]
 
@@ -601,7 +600,6 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                 pass
 
         display_close = close_values[start_idx:]
-        display_open = open_values[start_idx:]
         display_high = high_values[start_idx:]
         display_low = low_values[start_idx:]
 
@@ -630,9 +628,6 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
         # Map signal scatter overlays using dynamic start_idx window alignment
         if run_result:
             try:
-                signal_buy_idx = [idx - start_idx for idx, flag in enumerate(buy_signals) if bool(flag) and idx >= start_idx]
-                signal_sell_idx = [idx - start_idx for idx, flag in enumerate(sell_signals) if bool(flag) and idx >= start_idx]
-
                 # Removed signal dots to declutter chart
 
                 buy_idx = []
@@ -701,7 +696,7 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
                         labelcolor="#cbd5e1",
                         fontsize=9,
                     )
-            except Exception as e:
+            except Exception:
                 pass # Silently proceed if signal derivation crashes on faulty shapes
     else:
         ax_chart.text(0.5, 0.5, "No cached 1h OHLCV data for chart", ha="center", va="center", color="#cbd5e1")

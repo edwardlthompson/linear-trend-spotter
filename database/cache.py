@@ -59,7 +59,8 @@ class PriceCache:
         ''')
 
         # Price cache table per spec §8.1
-        self._execute('''\n          CREATE TABLE IF NOT EXISTS price_cache (
+        self._execute('''
+            CREATE TABLE IF NOT EXISTS price_cache (
                 coin_id             TEXT PRIMARY KEY,
                 prices              TEXT,
                 uniformity_score    REAL,
@@ -119,7 +120,7 @@ class PriceCache:
             return len(coins)
 
         except Exception as e:
-            print(f"⚠️ Error updating coin list: {e}")
+            self.logger.warning("Error updating coin list: %s", e)
             return 0
 
     def get_coin_ids_batch(self, symbols: List[str]) -> Dict[str, str]:
@@ -146,7 +147,7 @@ class PriceCache:
             return results
 
         except Exception as e:
-            print(f"⚠️ Error getting coin IDs: {e}")
+            self.logger.warning("Error getting coin IDs: %s", e)
             return {}
 
     def get_coin_list_stats(self) -> Dict[str, Any]:
@@ -162,7 +163,7 @@ class PriceCache:
                 'total_coins': total,
                 'last_update': last_update or 'Never',
             }
-        except Exception as e:
+        except Exception:
             return {'total_coins': 0, 'last_update': 'Unknown'}
 
     def debug_coin_list(self) -> int:
@@ -170,18 +171,18 @@ class PriceCache:
         try:
             cursor = self._execute('SELECT COUNT(*) FROM coin_list')
             total = cursor.fetchone()[0]
-            print(f"\n📊 Coin List Statistics:")
-            print(f"   Total coins: {total}")
+            self.logger.info("\n📊 Coin List Statistics:\n   Total coins: %s", total)
 
             if total > 0:
                 cursor = self._execute('SELECT id, symbol, rank FROM coin_list LIMIT 10')
-                print("   Sample entries:")
+                lines = ["   Sample entries:"]
                 for row in cursor.fetchall():
-                    print(f"      ID: {row[0]}, Symbol: {row[1]}, Rank: {row[2]}")
+                    lines.append(f"      ID: {row[0]}, Symbol: {row[1]}, Rank: {row[2]}")
+                self.logger.info("\n".join(lines))
 
             return total
         except Exception as e:
-            print(f"Error debugging: {e}")
+            self.logger.warning("Error debugging coin list: %s", e)
             return 0
 
     def get_price_data(self, coin_id: str) -> Tuple[bool, Optional[Dict]]:
@@ -204,7 +205,7 @@ class PriceCache:
                 }
 
             return False, None
-        except Exception as e:
+        except Exception:
             return False, None
 
     def cache_price_data(self, coin_id: str, prices: list, uniformity_score: float,
@@ -351,24 +352,29 @@ class PriceCache:
             oldest = 'Never'
             newest = 'Never'
             avg_score = 0
-            print(f"Debug - Error getting price cache stats: {e}")
+            self.logger.debug("Error getting price cache stats: %s", e)
 
-        print("\n" + "=" * 50)
-        print("📊 CACHE SUMMARY")
-        print("=" * 50)
-
-        print("\n💰 Coin List:")
-        print(f"   Total coins: {coin_stats['total_coins']}")
-        print(f"   Last updated: {coin_stats['last_update'][:16] if coin_stats['last_update'] != 'Never' else 'Never'}")
-
-        print(f"\n📈 Price Cache:")
-        print(f"   Cached coins: {price_count}")
+        lines = [
+            "",
+            "=" * 50,
+            "📊 CACHE SUMMARY",
+            "=" * 50,
+            "",
+            "💰 Coin List:",
+            f"   Total coins: {coin_stats['total_coins']}",
+            f"   Last updated: {coin_stats['last_update'][:16] if coin_stats['last_update'] != 'Never' else 'Never'}",
+            "",
+            "📈 Price Cache:",
+            f"   Cached coins: {price_count}",
+        ]
         if price_count > 0:
-            print(f"   Oldest: {oldest}")
-            print(f"   Newest: {newest}")
-            print(f"   Avg uniformity: {avg_score}")
-
-        print("=" * 50)
+            lines.extend([
+                f"   Oldest: {oldest}",
+                f"   Newest: {newest}",
+                f"   Avg uniformity: {avg_score}",
+            ])
+        lines.append("=" * 50)
+        self.logger.info("\n".join(lines))
 
     def close(self):
         """Close database connection"""

@@ -5,7 +5,6 @@ import sys
 import json
 import io
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +23,6 @@ from processors.uniformity_filter import UniformityFilter
 from notifications.telegram import TelegramClient
 from notifications.formatter import MessageFormatter
 from notifications.image_renderer import (
-    build_fallback_chart_image,
     build_combined_notification_image,
     build_exit_notification_image,
     build_hourly_summary_image,
@@ -496,7 +494,7 @@ def _build_weekly_digest_message(history_db: HistoryDatabase, active_db: ActiveC
 
     lines = [
         "📅 <b>Weekly Performance Digest</b>",
-        f"Window: last 7 days (UTC)",
+        "Window: last 7 days (UTC)",
         f"Scans run: {scans_count}",
         f"Unique qualified symbols: {unique_symbols}",
         f"Average uniformity: {avg_score:.1f}",
@@ -580,10 +578,9 @@ def run_scanner():
             else:
                 app_logger.info(f"✅ CoinGecko mapper ready with {stats['total_mappings']} mappings")
             
-            # Initialize Chart-IMG client
-            chart_img = None
+            # Initialize Chart-IMG client (construct to validate config; charts use client where needed downstream)
             if settings.chart_img_api_key:
-                chart_img = ChartIMGClient(settings.chart_img_api_key, mapper=tv_mapper)
+                ChartIMGClient(settings.chart_img_api_key, mapper=tv_mapper)
                 app_logger.info("✅ Chart-IMG client initialized")
             else:
                 app_logger.warning("⚠️ No Chart-IMG API key - charts disabled")
@@ -849,7 +846,7 @@ def run_scanner():
         # ============================================================
         # STEP 4: Get exchange listing data (for volume display)
         # ============================================================
-        app_logger.info(f"\n🏦 Getting exchange listing data...")
+        app_logger.info("\n🏦 Getting exchange listing data...")
 
         symbols_for_listing_check = [str(coin.get('symbol', '')).upper() for coin in gain_qualified if coin.get('symbol')]
         exchange_listing_maps: dict[str, dict[str, bool]] = {}
@@ -910,7 +907,7 @@ def run_scanner():
             found_cached_volumes, cached_volumes = cache.get_exchange_volumes(coin['cg_id'])
             if found_cached_volumes and cached_volumes:
                 coin['exchange_volumes'] = cached_volumes
-                app_logger.info(f"      ✓ Using cached exchange volumes")
+                app_logger.info("      ✓ Using cached exchange volumes")
                 continue
             
             tickers = gecko.get_tickers(coin['cg_id'])
@@ -919,17 +916,17 @@ def run_scanner():
                 volumes = process_tickers(tickers, settings.target_exchanges)
                 coin['exchange_volumes'] = volumes
                 cache.cache_exchange_volumes(coin['cg_id'], volumes)
-                app_logger.info(f"      ✓ Got exchange volumes")
+                app_logger.info("      ✓ Got exchange volumes")
             else:
                 coin['exchange_volumes'] = {ex: "N/A" for ex in settings.target_exchanges}
-                app_logger.info(f"      ⚠️ No ticker data")
+                app_logger.info("      ⚠️ No ticker data")
                 no_ticker_count += 1
 
 
         # ============================================================
         # STEP 7: Calculate uniformity scores
         # ============================================================
-        app_logger.info(f"\n📐 FILTER 2: Calculating uniformity scores...")
+        app_logger.info("\n📐 FILTER 2: Calculating uniformity scores...")
         
         # Check cache first
         cached_coins = []
@@ -1263,7 +1260,7 @@ def run_scanner():
 
         active_after_update = active_db.get_active()
         watchlist_rows = []
-        insights_payload = update_scanner_insights(
+        update_scanner_insights(
             settings.scanner_insights_file,
             final_results=final_results,
             all_processed=all_processed,
@@ -1303,17 +1300,17 @@ def run_scanner():
                         img_data = io.BytesIO(combined_image)
                         message_id = telegram.send_photo(img_data, caption=caption)
                         if message_id:
-                            app_logger.info(f"      📤 Sent combined image notification")
+                            app_logger.info("      📤 Sent combined image notification")
                         else:
-                            app_logger.error(f"      ❌ Failed to send combined image notification, falling back to text")
+                            app_logger.error("      ❌ Failed to send combined image notification, falling back to text")
                             telegram.send_message(caption)
 
                     else:
                         message_id = telegram.send_message(caption)
                         if message_id:
-                            app_logger.info(f"      📤 Sent text-only notification")
+                            app_logger.info("      📤 Sent text-only notification")
                         else:
-                            app_logger.error(f"      ❌ Failed to send text-only notification")
+                            app_logger.error("      ❌ Failed to send text-only notification")
                     
                     metrics.increment('notifications_sent')
         
@@ -1422,12 +1419,12 @@ def run_scanner():
         app_logger.info(metrics.report())
         
         stats = cache.get_coin_list_stats()
-        app_logger.info(f"\n📊 Cache Summary:")
+        app_logger.info("\n📊 Cache Summary:")
         app_logger.info(f"   Coin list: {stats['total_coins']} coins")
         app_logger.info(f"   Last updated: {stats['last_update'][:16] if stats['last_update'] != 'Never' else 'Never'}")
         
         metrics.save(settings.metrics_file)
-        app_logger.info(f"\n✅ Scan complete")
+        app_logger.info("\n✅ Scan complete")
         
         tv_mapper.close()
         exchange_db.close()

@@ -4,11 +4,10 @@ Uses the /coins/list endpoint to build and cache the mapping
 """
 
 import sqlite3
-import json
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List
 import threading
 import logging
 import requests
