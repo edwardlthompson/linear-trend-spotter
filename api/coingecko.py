@@ -251,6 +251,7 @@ class CoinGeckoClient:
             'symbol': symbol,
             'name': str(data.get('name', '')).strip(),
             'slug': normalized_id,
+            'gecko_id': normalized_id,
             'rank': int(data.get('market_cap_rank') or 999999),
             'price': float(current_price.get('usd', 0) or 0),
             'volume_24h': float(total_volume.get('usd', 0) or 0),

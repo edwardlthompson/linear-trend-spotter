@@ -4,6 +4,7 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from urllib.parse import quote
 
 
 def _build_source_url(coin: Dict[str, Any]) -> str:
@@ -11,17 +12,17 @@ def _build_source_url(coin: Dict[str, Any]) -> str:
     if source_url:
         return source_url
 
-    gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip()
+    slug = str(coin.get('slug') or '').strip().lower()
+    gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip().lower()
+    if slug and not (gecko_id and slug == gecko_id):
+        return f"https://coinmarketcap.com/currencies/{quote(slug, safe='')}/"
+
     if gecko_id:
         return f"https://www.coingecko.com/en/coins/{gecko_id}"
 
-    slug = str(coin.get('slug') or '').strip().lower()
-    if slug:
-        return f"https://coinmarketcap.com/currencies/{slug}/"
-
     symbol = str(coin.get('symbol') or coin.get('coin_symbol') or '').strip()
     if symbol:
-        return f"https://www.coingecko.com/en/search?query={symbol}"
+        return f"https://coinmarketcap.com/search/?q={quote(symbol)}"
 
     return ''
 

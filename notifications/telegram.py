@@ -115,17 +115,13 @@ class TelegramClient:
     def _build_context_keyboard(self, coin: Dict) -> dict | None:
         symbol = str(coin.get('symbol', ''))
         tv_url = f"https://www.tradingview.com/chart/?symbol={symbol}USD" # Generic URL, could be improved
-        cg_url = str(
-            coin.get('source_url')
-            or coin.get('cmc_url')
-            or MessageFormatter._build_coingecko_url(coin)
-        ).strip()
-        
+        analyze_url = MessageFormatter.primary_market_url(coin).strip()
+
         buttons = []
         if symbol:
             buttons.append({"text": "📈 View Chart", "url": tv_url})
-        if cg_url:
-            buttons.append({"text": "🔍 Analyze Coin", "url": cg_url})
+        if analyze_url:
+            buttons.append({"text": "🔍 Analyze Coin", "url": analyze_url})
             
         if buttons:
             return {"inline_keyboard": [buttons]}
@@ -145,14 +141,10 @@ class TelegramClient:
     
     def send_exit_notification(self, coin: Dict) -> Optional[int]:
         """Send exit notification without timestamp"""
-        source_url = str(
-            coin.get('source_url')
-            or coin.get('cmc_url')
-            or MessageFormatter._build_coingecko_url(coin)
-        ).strip()
+        header_url = MessageFormatter.primary_market_url(coin).strip()
         sym = html.escape(str(coin.get('symbol', '')), quote=False)
         nm = html.escape(str(coin.get('name', '')), quote=False)
-        href = html.escape(source_url, quote=True)
+        href = html.escape(header_url, quote=True)
         message = f"🔴 <a href='{href}'>{sym} ({nm})</a> has left the qualified list"
         markup = self._build_context_keyboard(coin)
         return self.send_message(message, reply_markup=markup)

@@ -23,6 +23,40 @@ class MessageFormatter:
         return html.escape(str(value or ""), quote=True)
 
     @staticmethod
+    def _build_cmc_url(coin: Dict) -> str:
+        """Prefer CoinMarketCap URLs for user-facing links (slug path or symbol search)."""
+        explicit = str(coin.get('cmc_url') or '').strip()
+        if explicit:
+            return explicit
+
+        slug = str(coin.get('slug', '') or '').strip().lower()
+        gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip().lower()
+        # Top-coin snapshot from CoinGecko stores the API coin id in `slug`; that is not a CMC slug.
+        if slug and not (gecko_id and slug == gecko_id):
+            return f"https://coinmarketcap.com/currencies/{quote(slug, safe='')}/"
+
+        symbol = str(coin.get('symbol', '') or '').strip()
+        if symbol:
+            return f"https://coinmarketcap.com/search/?q={quote(symbol)}"
+
+        return ''
+
+    @staticmethod
+    def primary_market_url(coin: Dict) -> str:
+        """Deep link shown in Telegram: CMC when available, else non-Gecko source_url, else CoinGecko."""
+        url = MessageFormatter._build_cmc_url(coin)
+        if url:
+            return url
+        su = str(coin.get('source_url') or '').strip()
+        if not su:
+            return MessageFormatter._build_coingecko_url(coin)
+        if 'coinmarketcap.com' in su.lower():
+            return su
+        if 'coingecko.com' in su.lower():
+            return MessageFormatter._build_coingecko_url(coin)
+        return su
+
+    @staticmethod
     def _build_coingecko_url(coin: Dict) -> str:
         gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip()
         if gecko_id:
@@ -111,13 +145,7 @@ class MessageFormatter:
         Format entry notification per spec §10.1
         Returns HTML-formatted caption for Telegram photo
         """
-        # Build source URL (CoinGecko when configured as source, otherwise CMC fallback)
-        source_url = str(coin.get('source_url', '') or '').strip()
-        if not source_url:
-            slug = str(coin.get('slug', '') or '').strip()
-            source_url = (
-                f"https://coinmarketcap.com/currencies/{quote(slug, safe='')}/" if slug else ""
-            )
+        header_url = MessageFormatter.primary_market_url(coin)
 
         # Get data
         symbol = coin["symbol"]
@@ -128,9 +156,9 @@ class MessageFormatter:
         
         sym_t = MessageFormatter._tg_html_text(symbol)
         name_t = MessageFormatter._tg_html_text(name)
-        # Header with HTML link
-        if source_url:
-            href = MessageFormatter._tg_html_attr(source_url)
+        # Header with HTML link (CMC-first; see primary_market_url)
+        if header_url:
+            href = MessageFormatter._tg_html_attr(header_url)
             caption = f"🟢 <a href='{href}'>{sym_t} ({name_t})</a>\n\n"
         else:
             caption = f"🟢 {sym_t} ({name_t})\n\n"
@@ -213,13 +241,13 @@ class MessageFormatter:
         """
         symbol = MessageFormatter._tg_html_text(coin["symbol"])
         name = MessageFormatter._tg_html_text(coin["name"])
-        gecko_url = MessageFormatter._build_coingecko_url(coin)
+        market_url = MessageFormatter.primary_market_url(coin)
         reason = MessageFormatter._tg_html_text(
             coin.get("exit_reason", "No longer met qualification criteria")
         )
 
         message = f"🔴 {symbol} ({name})\n"
-        message += f"🔗 {MessageFormatter._tg_html_text(gecko_url)}\n"
+        message += f"🔗 {MessageFormatter._tg_html_text(market_url)}\n"
         message += "has left the qualified list\n"
         message += f"Reason: {reason}"
 

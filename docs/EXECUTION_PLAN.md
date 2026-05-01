@@ -202,19 +202,19 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **G1.** Add `MessageFormatter._build_cmc_url(coin: dict) -> str` (slug → `https://coinmarketcap.com/currencies/{slug}/`; optional fallback by symbol search URL if product accepts).  
+- [x] **G1.** Add `MessageFormatter._build_cmc_url(coin: dict) -> str` (slug → `https://coinmarketcap.com/currencies/{slug}/`; optional fallback by symbol search URL if product accepts).  
   - **Verification:** Manual test with dict containing `slug` only / `slug`+`gecko_id` / neither.
-- [ ] **G2.** `format_entry`: ensure header `<a href>` uses **CMC URL** when `slug` or `cmc_url` exists; do not prefer `_build_coingecko_url` for display. Align with `source_url` policy in `main.py` if needed.  
+- [x] **G2.** `format_entry`: ensure header `<a href>` uses **CMC URL** when `slug` or `cmc_url` exists; do not prefer `_build_coingecko_url` for display. Align with `source_url` policy in `main.py` if needed.  
   - **Verification:** Generated HTML caption shows `coinmarketcap.com` link.
-- [ ] **G3.** `format_exit`: replace `gecko_url` / `_build_coingecko_url` with CMC-first link line.  
+- [x] **G3.** `format_exit`: replace `gecko_url` / `_build_coingecko_url` with CMC-first link line.  
   - **Verification:** Exit message contains CMC URL when slug present.
-- [ ] **G4.** `notifications/telegram.py` (`_build_context_keyboard`, `send_exit_alert`): use CMC URL builder instead of `_build_coingecko_url` for “Analyze Coin” / source links.  
+- [x] **G4.** `notifications/telegram.py` (`_build_context_keyboard`, `send_exit_alert`): use CMC URL builder instead of `_build_coingecko_url` for “Analyze Coin” / source links.  
   - **Verification:** Keyboard URL opens CMC in browser.
-- [ ] **G5.** `database/models.py` `_build_source_url`: reorder or adjust so **CMC slug URL** is preferred over CoinGecko when `slug` is available (consistent DB-derived links with Telegram).  
+- [x] **G5.** `database/models.py` `_build_source_url`: reorder or adjust so **CMC slug URL** is preferred over CoinGecko when `slug` is available (consistent DB-derived links with Telegram).  
   - **Verification:** History insert path produces `cmc_url`/stored URL matching policy; no regression on coins without slug.
-- [ ] **G6.** `main.py` / `api/coingecko.py` `source_url` assignments: when slug exists from CMC path, set **`https://coinmarketcap.com/currencies/{slug}/`** instead of CoinGecko coin page for notification-facing `source_url`.  
+- [x] **G6.** `main.py` / `api/coingecko.py` `source_url` assignments: when slug exists from CMC path, set **`https://coinmarketcap.com/currencies/{slug}/`** instead of CoinGecko coin page for notification-facing `source_url`.  
   - **Verification:** End-to-end scan with `TOP_COINS_PROVIDER=cmc` produces CMC `source_url` on sample coin.
-- [ ] **G7.** Update `linear-trend-spotter-spec.md` or README notification section if spec still mandates CoinGecko links.  
+- [x] **G7.** Update `linear-trend-spotter-spec.md` or README notification section if spec still mandates CoinGecko links.  
   - **Verification:** Doc grep shows CMC as primary user link.
 
 ---

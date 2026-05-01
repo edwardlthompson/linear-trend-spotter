@@ -3,10 +3,12 @@ CoinMarketCap API client - Optimized for bulk gain data
 Free tier: 10,000 calls/month, 30 calls/minute
 """
 
-import requests
-import time
 import logging
-from typing import List, Dict, Optional
+import time
+from typing import Dict, List, Optional
+from urllib.parse import quote
+
+import requests
 
 class CoinMarketCapClient:
     """
@@ -83,11 +85,18 @@ class CoinMarketCapClient:
     
     def extract_coin_data(self, coin_data: Dict) -> Dict:
         """Extract basic coin data"""
+        slug = str(coin_data.get('slug', '') or '').strip()
+        slug_key = slug.lower()
+        cmc_page = (
+            f"https://coinmarketcap.com/currencies/{quote(slug_key, safe='')}/" if slug_key else ""
+        )
         return {
             'symbol': coin_data.get('symbol', '').upper(),
             'name': coin_data.get('name', ''),
-            'slug': coin_data.get('slug', ''),
+            'slug': slug,
             'rank': coin_data.get('cmc_rank', 0),
             'price': coin_data.get('quote', {}).get('USD', {}).get('price', 0),
             'volume_24h': coin_data.get('quote', {}).get('USD', {}).get('volume_24h', 0),
+            'cmc_url': cmc_page,
+            'source_url': cmc_page or None,
         }

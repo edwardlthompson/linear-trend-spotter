@@ -27,6 +27,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 - **Cross-platform (milestone E):** The scan scheduler uses **`portalocker`** instead of `fcntl`, so imports work on Windows dev machines as well as Linux. `manage_bot.py` / `bot_watchdog.py` use **`sys.executable`** (no hard-coded `python3`); log tailing avoids a `tail` subprocess.
 - **Tooling (milestone D):** `pyproject.toml` configures **Ruff** for a narrow rule set (`E9`, `F`) so CI catches syntax and import issues without noisy style churn. `requirements.txt` uses **compatible-release** upper bounds on major versions.
 - **Logging (milestone F):** `config/settings.py`, `database/cache.py`, `utils/metrics.py`, and `utils/rate_limiter.py` use standard **`logging`**; CLI scripts under `scripts/` may still use `print` (documented in `utils/logger.py`).
+- **Telegram links (milestone G):** Entry headers, exit lines, inline “Analyze Coin” buttons, and history `source_url` prefer **CoinMarketCap** (`/currencies/{slug}/` or symbol search) when a real CMC slug exists; CoinGecko remains the data API and fallback link when CMC cannot be inferred.
 
 ---
 
