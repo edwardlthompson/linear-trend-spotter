@@ -6,16 +6,13 @@ import json
 import io
 from html import escape as html_escape
 from dataclasses import replace
-from urllib.parse import quote
 from datetime import datetime, timezone, timedelta
-from collections import defaultdict
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
 from config.constants import STABLECOINS
-from api.coingecko import coingecko_ticker_exchange_ids_csv
 from processors.uniformity_filter import UniformityFilter
 from notifications.formatter import MessageFormatter
 from notifications.image_renderer import (
@@ -48,13 +45,12 @@ from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.active_ranking import build_active_ranking_rows
 from scanner.anomaly_alerts import build_anomaly_messages
-from scanner.cmc_resolve import build_cmc_normalized_lookup
 from scanner.coin_enrichment import (
     attach_rank_movement,
     attach_signal_age,
     attach_volume_acceleration,
 )
-from scanner.market_processing import aggregate_daily_bars_from_hourly, process_tickers
+from scanner.market_processing import aggregate_daily_bars_from_hourly
 from scanner.quiet_hours import telegram_quiet_active
 from scanner.regime_filter import evaluate_regime_gate
 from scanner.top_coin_resolution import ensure_cmc_notify_urls, resolve_top_coin_data
@@ -66,6 +62,15 @@ from scanner.weekly_digest import (
 )
 from scanner.web_push_notify import maybe_notify_web_push_scan
 from scanner.runtime_init import initialize_runtime_components
+from scanner.top_coins_stage import fetch_top_coins_dataset
+from scanner.exchange_universe import load_exchange_symbol_universe
+from scanner.coingecko_alias_prefetch import prefetch_alias_markets_by_gecko_id
+from scanner.gain_volume_filter import apply_gain_volume_filter
+from scanner.listings_and_volumes import (
+    attach_coin_gecko_ids_and_learn,
+    attach_target_exchange_listings,
+    hydrate_exchange_volumes_from_coingecko,
+)
 
 # Import exchange database
 from exchange_data.exchange_fetcher import ExchangeFetcher
@@ -126,84 +131,28 @@ def run_scanner():
             f"\n📡 Fetching all coins with gains from {top_coins_provider.upper()} (limit={settings.top_coins_limit})..."
         )
 
-        all_cmc_coins: list[dict] = []
-        if top_coins_provider == 'coingecko':
-            gecko_rows = gecko.get_top_coins_with_gains(limit=settings.top_coins_limit)
-            if not gecko_rows:
-                app_logger.error("❌ Failed to fetch coins from CoinGecko")
-                tv_mapper.close()
-                exchange_db.close()
-                cg_mapper.close()
-                return
+        top_dataset = fetch_top_coins_dataset(
+            top_coins_provider=top_coins_provider,
+            top_coins_limit=settings.top_coins_limit,
+            cmc_symbol_aliases=settings.cmc_symbol_aliases if top_coins_provider != "coingecko" else {},
+            coingecko_id_aliases=settings.coingecko_id_aliases if top_coins_provider == "coingecko" else {},
+            gecko=gecko,
+            cmc=cmc,
+            app_logger=app_logger,
+            metrics=metrics,
+        )
+        if top_dataset is None:
+            tv_mapper.close()
+            exchange_db.close()
+            cg_mapper.close()
+            return
 
-            for index, row in enumerate(gecko_rows, start=1):
-                symbol = str(row.get('symbol', '')).upper()
-                if not symbol:
-                    continue
-                gecko_id = str(row.get('id', '')).strip()
-                gains = {
-                    '7d': float(row.get('price_change_percentage_7d_in_currency', 0) or 0),
-                    '30d': float(row.get('price_change_percentage_30d_in_currency', 0) or 0),
-                    '60d': 0.0,
-                    '90d': 0.0,
-                }
-                info = {
-                    'symbol': symbol,
-                    'name': str(row.get('name', '')).strip(),
-                    'slug': gecko_id,
-                    'gecko_id': gecko_id,
-                    'rank': int(row.get('market_cap_rank') or index),
-                    'price': float(row.get('current_price', 0) or 0),
-                    'volume_24h': float(row.get('total_volume', 0) or 0),
-                    'source_url': f"https://www.coingecko.com/en/coins/{gecko_id}" if gecko_id else None,
-                }
-                all_cmc_coins.append(
-                    {
-                        'data': row,
-                        'gains': gains,
-                        'info': info,
-                    }
-                )
-        else:
-            cmc_rows = cmc.get_all_coins_with_gains(limit=settings.top_coins_limit)
-            if not cmc_rows:
-                app_logger.error("❌ Failed to fetch coins from CMC")
-                tv_mapper.close()
-                exchange_db.close()
-                cg_mapper.close()
-                return
+        all_cmc_coins = top_dataset.all_cmc_coins
+        cmc_by_symbol = top_dataset.cmc_by_symbol
+        cmc_by_normalized_symbol = top_dataset.cmc_by_normalized_symbol
+        cmc_symbol_aliases = top_dataset.cmc_symbol_aliases
+        coingecko_id_aliases = top_dataset.coingecko_id_aliases
 
-            for row in cmc_rows:
-                symbol = str(row.get('symbol', '')).upper()
-                if not symbol:
-                    continue
-                all_cmc_coins.append(
-                    {
-                        'data': row,
-                        'gains': cmc.extract_gains(row),
-                        'info': cmc.extract_coin_data(row),
-                    }
-                )
-
-        app_logger.info(f"✅ Got {len(all_cmc_coins)} coins with gain data")
-        metrics.increment('coins_retrieved', len(all_cmc_coins))
-
-        # Build lookup dict for quick access
-        cmc_by_symbol = {}
-        for coin in all_cmc_coins:
-            info = coin.get('info') or {}
-            symbol = str(info.get('symbol', '')).upper()
-            if symbol:
-                cmc_by_symbol[symbol] = {
-                    'data': coin.get('data', {}),
-                    'gains': coin.get('gains', {}),
-                    'info': info,
-                }
-
-        cmc_by_normalized_symbol = build_cmc_normalized_lookup(cmc_by_symbol)
-        cmc_symbol_aliases = settings.cmc_symbol_aliases if top_coins_provider != 'coingecko' else {}
-        coingecko_id_aliases = settings.coingecko_id_aliases if top_coins_provider == 'coingecko' else {}
-        
         app_logger.info(f"📊 Built lookup for {len(cmc_by_symbol)} symbols")
         if cmc_symbol_aliases:
             app_logger.info(f"📎 CMC symbol aliases configured: {len(cmc_symbol_aliases)}")
@@ -214,201 +163,44 @@ def run_scanner():
         # STEP 2: Get ALL symbols from exchange listings (no limit!)
         # ============================================================
         app_logger.info("\n🔍 Getting ALL token symbols from exchange listings...")
-        
-        all_symbols = set()
-        
-        if exchange_db_path.exists():
-            try:
-                import sqlite3
-                conn = sqlite3.connect(exchange_db_path)
-                cursor = conn.cursor()
-                cursor.execute('SELECT DISTINCT symbol FROM exchange_listings')
-                for row in cursor.fetchall():
-                    all_symbols.add(row[0])
-                conn.close()
-                app_logger.info(f"   ✓ Found {len(all_symbols)} unique symbols across all exchanges")
-            except Exception as e:
-                app_logger.warning(f"   Could not query exchange_listings: {e}")
-        
-        # Fallback if no exchange data (shouldn't happen with proper setup)
-        if not all_symbols:
-            app_logger.warning("   No exchange data found. Attempting one-time exchange listings refresh...")
-            try:
-                ExchangeFetcher(exchange_db).update_all_exchanges()
 
-                import sqlite3
-                conn = sqlite3.connect(exchange_db_path)
-                cursor = conn.cursor()
-                cursor.execute('SELECT DISTINCT symbol FROM exchange_listings')
-                for row in cursor.fetchall():
-                    all_symbols.add(row[0])
-                conn.close()
+        all_symbols, all_symbols_set = load_exchange_symbol_universe(
+            exchange_db_path,
+            exchange_db,
+            ExchangeFetcher,
+            app_logger,
+        )
 
-                if all_symbols:
-                    app_logger.info(f"   ✓ Exchange listings refreshed: {len(all_symbols)} symbols")
-            except Exception as refresh_error:
-                app_logger.warning(f"   Exchange listings refresh failed: {refresh_error}")
-
-        if not all_symbols:
-            app_logger.warning("   No exchange data found after refresh - using default list")
-            all_symbols = {'BTC', 'ETH', 'SOL', 'XRP'}
-        
-        all_symbols_set = set(all_symbols)
-        all_symbols = list(all_symbols)
-        app_logger.info(f"   ✓ Scanning ALL {len(all_symbols)} coins from exchange listings")
-
-        alias_markets_by_id: dict[str, dict] = {}
-        if top_coins_provider == "coingecko" and coingecko_id_aliases:
-            prefetch_ids = sorted(
-                {
-                    str(coingecko_id_aliases[str(sym or "").strip().upper()]).strip().lower()
-                    for sym in all_symbols
-                    if str(sym or "").strip().upper() in coingecko_id_aliases
-                }
-            )
-            if prefetch_ids:
-                alias_markets_by_id = gecko.get_markets_rows_for_ids(prefetch_ids)
-                if alias_markets_by_id:
-                    app_logger.info(
-                        "📦 Prefetched CoinGecko /coins/markets for %s id-alias row(s)",
-                        len(alias_markets_by_id),
-                    )
+        alias_markets_by_id = prefetch_alias_markets_by_gecko_id(
+            top_coins_provider=top_coins_provider,
+            coingecko_id_aliases=coingecko_id_aliases,
+            all_symbols=all_symbols,
+            gecko=gecko,
+            app_logger=app_logger,
+        )
 
         # ============================================================
         # STEP 3: Match with top-coin provider data and apply volume/gain filters
         # ============================================================
-        app_logger.info(
-            f"\n💰 FILTER 1: Applying volume and gain filters ({top_coins_provider.upper()}) "
-            f"(7d≥{settings.gain_filter_min_7d_percent:g}%, 30d>{settings.gain_filter_min_30d_percent:g}%, 30d>7d)..."
+        gain_qualified = apply_gain_volume_filter(
+            all_symbols,
+            top_coins_provider=top_coins_provider,
+            min_volume=float(settings.min_volume),
+            gain_filter_min_7d_percent=float(settings.gain_filter_min_7d_percent),
+            gain_filter_min_30d_percent=float(settings.gain_filter_min_30d_percent),
+            cmc_by_symbol=cmc_by_symbol,
+            cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+            cmc_symbol_aliases=cmc_symbol_aliases,
+            coingecko_id_aliases=coingecko_id_aliases,
+            gecko=gecko,
+            alias_markets_by_id=alias_markets_by_id,
+            cmc_slug_resolver=cmc_slug_resolver,
+            app_logger=app_logger,
+            metrics=metrics,
         )
 
-        max_detailed_filter_logs = 180
-        detailed_filter_logs_emitted = 0
-        suppressed_filter_logs = 0
-        filter_failure_counts: dict[str, int] = {
-            'stablecoin': 0,
-            'missing_provider': 0,
-            'volume_low': 0,
-            'gains_low': 0,
-        }
+        gain_qualified_symbols = {c["symbol"] for c in gain_qualified}
 
-        def _log_filter_line(message: str) -> None:
-            nonlocal detailed_filter_logs_emitted, suppressed_filter_logs
-            if detailed_filter_logs_emitted < max_detailed_filter_logs:
-                app_logger.info(message)
-                detailed_filter_logs_emitted += 1
-            else:
-                suppressed_filter_logs += 1
-
-        gain_qualified = []
-        
-        for symbol in all_symbols:
-            # Filter out stablecoins per spec §5.5
-            if symbol in STABLECOINS:
-                filter_failure_counts['stablecoin'] += 1
-                _log_filter_line(f"   ⏭️ {symbol}: Skipped (stablecoin)")
-                continue
-                
-            cmc_data, resolved_cmc_symbol, resolution_type = resolve_top_coin_data(
-                symbol,
-                top_coins_provider=top_coins_provider,
-                cmc_by_symbol=cmc_by_symbol,
-                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
-                cmc_symbol_aliases=cmc_symbol_aliases,
-                coingecko_id_aliases=coingecko_id_aliases,
-                gecko=gecko,
-                alias_markets_by_id=alias_markets_by_id,
-            )
-
-            if cmc_data:
-                if resolution_type != 'direct':
-                    if top_coins_provider == 'coingecko' and resolution_type == 'coingecko_id_alias':
-                        _log_filter_line(
-                            f"   ↪️ {symbol}: Matched CoinGecko id {resolved_cmc_symbol} via {resolution_type}"
-                        )
-                    else:
-                        _log_filter_line(
-                            f"   ↪️ {symbol}: Matched CMC symbol {resolved_cmc_symbol} via {resolution_type}"
-                        )
-                gains = cmc_data['gains']
-                info = cmc_data['info']
-                
-                # Check volume filter
-                if info['volume_24h'] >= settings.min_volume:
-                    # Check gain filter (thresholds from config.json):
-                    # - 7d >= GAIN_FILTER_MIN_7D_PERCENT (default 7%)
-                    # - 30d > GAIN_FILTER_MIN_30D_PERCENT (default 30%)
-                    # - 30d must be higher than 7d (momentum)
-                    min7 = float(settings.gain_filter_min_7d_percent)
-                    min30 = float(settings.gain_filter_min_30d_percent)
-                    if (
-                        float(gains['7d']) >= min7
-                        and float(gains['30d']) > min30
-                        and float(gains['30d']) > float(gains['7d'])
-                    ):
-                        coin_info = {
-                            'symbol': symbol,
-                            'cmc_symbol': resolved_cmc_symbol,
-                            'name': info['name'],
-                            'slug': info['slug'],
-                            'source_url': info.get('source_url'),
-                            'cmc_url': info.get('cmc_url'),
-                            'gains': gains,
-                            'volume_24h': info['volume_24h'],
-                            'current_price': float(info.get('price', 0) or 0),
-                        }
-                        gecko_for_link = str(info.get('gecko_id') or '').strip().lower()
-                        if top_coins_provider == 'coingecko':
-                            coin_info['gecko_id'] = gecko_for_link
-                            if cmc_slug_resolver and gecko_for_link:
-                                resolved_slug = cmc_slug_resolver.resolve(
-                                    symbol=symbol,
-                                    name=str(info.get('name') or ''),
-                                    gecko_id=gecko_for_link,
-                                )
-                                if resolved_slug:
-                                    cu = f"https://coinmarketcap.com/currencies/{quote(resolved_slug, safe='')}/"
-                                    coin_info['cmc_slug'] = resolved_slug
-                                    coin_info['cmc_url'] = cu
-                                    coin_info['source_url'] = cu
-                        gain_qualified.append(coin_info)
-                        _log_filter_line(f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% Vol:${info['volume_24h']:,.0f}")
-                    else:
-                        filter_failure_counts['gains_low'] += 1
-                        g7, g30 = float(gains['7d']), float(gains['30d'])
-                        if g7 < min7:
-                            why = f"7d below min ({g7:.1f}% < {min7:g}%)"
-                        elif g30 <= min30:
-                            why = f"30d not above min ({g30:.1f}% ≤ {min30:g}%)"
-                        else:
-                            why = f"30d not above 7d ({g30:.1f}% ≤ {g7:.1f}%)"
-                        _log_filter_line(f"   ❌ {symbol}: Gains filter — {why}")
-                else:
-                    filter_failure_counts['volume_low'] += 1
-                    _log_filter_line(f"   ❌ {symbol}: Volume too low (${info['volume_24h']:,.0f})")
-            else:
-                filter_failure_counts['missing_provider'] += 1
-                _log_filter_line(
-                    f"   ❌ {symbol}: Not found in {top_coins_provider.upper()} data"
-                )
-        
-        app_logger.info(f"\n   ✅ PASSED gain filter: {len(gain_qualified)} coins")
-        if suppressed_filter_logs > 0:
-            app_logger.info(
-                "   ℹ️ Filter detail logs suppressed for speed: "
-                f"{suppressed_filter_logs} lines omitted after first {max_detailed_filter_logs}"
-            )
-        app_logger.info(
-            "   📉 Filter failure summary: "
-            f"stablecoin={filter_failure_counts['stablecoin']}, "
-            f"missing_provider={filter_failure_counts['missing_provider']}, "
-            f"volume_low={filter_failure_counts['volume_low']}, "
-            f"gains_low={filter_failure_counts['gains_low']}"
-        )
-        metrics.increment('gain_filter_passed', len(gain_qualified))
-
-        gain_qualified_symbols = {c['symbol'] for c in gain_qualified}
-        
         if not gain_qualified:
             app_logger.warning("No coins passed gain filter")
             tv_mapper.close()
@@ -417,68 +209,25 @@ def run_scanner():
             return
 
         # ============================================================
-        # STEP 4: Get exchange listing data (for volume display)
+        # STEP 4–6: Listings, CoinGecko IDs, exchange volumes
         # ============================================================
-        app_logger.info("\n🏦 Getting exchange listing data...")
+        attach_target_exchange_listings(
+            gain_qualified,
+            exchange_db=exchange_db,
+            target_exchanges=tuple(settings.target_exchanges),
+            app_logger=app_logger,
+        )
 
-        symbols_for_listing_check = [str(coin.get('symbol', '')).upper() for coin in gain_qualified if coin.get('symbol')]
-        exchange_listing_maps: dict[str, dict[str, bool]] = {}
-        for exchange in settings.target_exchanges:
-            exchange_listing_maps[exchange] = exchange_db.batch_check_listings(symbols_for_listing_check, exchange)
+        coins_with_cg_ids, coins_without_cg_ids = attach_coin_gecko_ids_and_learn(
+            gain_qualified,
+            top_coins_provider=top_coins_provider,
+            cg_mapper=cg_mapper,
+            cmc_slug_resolver=cmc_slug_resolver,
+            app_logger=app_logger,
+        )
 
-        for coin in gain_qualified:
-            symbol = str(coin.get('symbol', '')).upper()
-            coin['listed_on'] = [
-                exchange
-                for exchange in settings.target_exchanges
-                if exchange_listing_maps.get(exchange, {}).get(symbol, False)
-            ]
+        coins_with_cg_ids_symbols = {c["symbol"] for c in coins_with_cg_ids}
 
-        # ============================================================
-        # STEP 5: Get CoinGecko IDs for exchange volumes
-        # ============================================================
-        app_logger.info(f"\n🔍 Getting CoinGecko IDs for {len(gain_qualified)} coins...")
-        
-        coins_with_cg_ids = []
-        coins_without_cg_ids = []
-        
-        for coin in gain_qualified:
-            cg_id: str | None = None
-            if top_coins_provider == "coingecko":
-                pref = str(coin.get("slug") or "").strip().lower()
-                if pref:
-                    cg_id = pref
-            if not cg_id:
-                cg_id = cg_mapper.get_coin_id(coin['symbol'])
-            if not cg_id and coin.get('cmc_symbol'):
-                cg_id = cg_mapper.get_coin_id(str(coin['cmc_symbol']))
-                if cg_id:
-                    app_logger.info(
-                        f"   ↪️ {coin['symbol']}: CoinGecko ID resolved via CMC symbol {coin['cmc_symbol']}"
-                    )
-            if cg_id:
-                coin['cg_id'] = cg_id
-                coin['gecko_id'] = cg_id
-                coins_with_cg_ids.append(coin)
-            else:
-                coins_without_cg_ids.append(coin['symbol'])
-
-        if cmc_slug_resolver:
-            for coin in coins_with_cg_ids:
-                gid = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip().lower()
-                cslug = str(coin.get('cmc_slug') or '').strip().lower()
-                if not cslug and top_coins_provider == 'cmc':
-                    raw = str(coin.get('slug') or '').strip().lower()
-                    if raw and raw != gid:
-                        cslug = raw
-                if gid and cslug and cslug != gid:
-                    cmc_slug_resolver.learn_from_cmc_listing_coin(gecko_id=gid, cmc_slug=cslug)
-            cmc_slug_resolver.save_learned_if_dirty()
-
-        coins_with_cg_ids_symbols = {c['symbol'] for c in coins_with_cg_ids}
-        
-        app_logger.info(f"   Found CoinGecko IDs for {len(coins_with_cg_ids)} coins")
-        
         if not coins_with_cg_ids:
             app_logger.warning("No coins with CoinGecko IDs")
             tv_mapper.close()
@@ -486,49 +235,13 @@ def run_scanner():
             cg_mapper.close()
             return
 
-        # ============================================================
-        # STEP 6: Get exchange volume data from CoinGecko
-        # ============================================================
-        app_logger.info(f"\n💱 Fetching exchange volume data for {len(coins_with_cg_ids)} coins...")
-        no_ticker_count = 0
-        ticker_exchange_csv = coingecko_ticker_exchange_ids_csv(settings.target_exchanges)
-
-        by_gid: dict[str, list] = defaultdict(list)
-        for i, coin in enumerate(coins_with_cg_ids, 1):
-            app_logger.info(f"   [{i}/{len(coins_with_cg_ids)}] {coin['symbol']}")
-
-            found_cached_volumes, cached_volumes = cache.get_exchange_volumes(coin['cg_id'])
-            if found_cached_volumes and cached_volumes:
-                coin['exchange_volumes'] = cached_volumes
-                app_logger.info("      ✓ Using cached exchange volumes")
-                continue
-
-            gid_key = str(coin["cg_id"]).strip().lower()
-            by_gid[gid_key].append(coin)
-
-        for gid_key, group in by_gid.items():
-            tickers = gecko.get_tickers(gid_key, exchange_ids=ticker_exchange_csv)
-            if tickers:
-                volumes = process_tickers(tickers, settings.target_exchanges)
-                for c in group:
-                    c["exchange_volumes"] = volumes
-                    cache.cache_exchange_volumes(c["cg_id"], volumes)
-                app_logger.info(
-                    "      ✓ Got exchange volumes for %s coin(s) (cg_id=%s)",
-                    len(group),
-                    gid_key,
-                )
-            else:
-                na_vols = {ex: "N/A" for ex in settings.target_exchanges}
-                for c in group:
-                    c["exchange_volumes"] = na_vols
-                app_logger.info(
-                    "      ⚠️ No ticker data for %s coin(s) (cg_id=%s)",
-                    len(group),
-                    gid_key,
-                )
-                no_ticker_count += len(group)
-
+        no_ticker_count = hydrate_exchange_volumes_from_coingecko(
+            coins_with_cg_ids,
+            cache=cache,
+            gecko=gecko,
+            target_exchanges=tuple(settings.target_exchanges),
+            app_logger=app_logger,
+        )
 
         # ============================================================
         # STEP 7: Calculate uniformity scores
