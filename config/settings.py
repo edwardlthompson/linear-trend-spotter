@@ -62,7 +62,7 @@ class Settings:
             },
             'CACHE_GECKO_ID_DAYS': 30,
             'CACHE_EXCHANGE_HOURS': 24,
-            'CACHE_PRICE_HOURS': 6,
+            'CACHE_PRICE_HOURS': 12,
             'CIRCUIT_FAILURE_THRESHOLD': 5,
             'CIRCUIT_RECOVERY_TIMEOUT': 60,
             'BACKTEST_ENABLED': True,
@@ -398,7 +398,7 @@ class Settings:
     
     @property
     def cache_price_hours(self) -> int:
-        return self._config.get('CACHE_PRICE_HOURS', 6)
+        return self._config.get('CACHE_PRICE_HOURS', 12)
     
     @property
     def circuit_failure_threshold(self) -> int:

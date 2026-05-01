@@ -572,11 +572,20 @@ def run_scanner():
             cg_mapper = CoinGeckoMapper(cg_mapper_db_path)
             
             stats = cg_mapper.get_stats()
-            if stats['total_mappings'] == 0:
-                app_logger.info("📡 CoinGecko mappings empty, fetching...")
+            max_list_age_days = settings.cache_gecko_id_days
+            if cg_mapper.should_refresh_list(max_list_age_days):
+                app_logger.info(
+                    "📡 CoinGecko mappings %s — fetching /coins/list (refresh if empty or older than %sd)...",
+                    "empty" if int(stats.get("total_mappings") or 0) == 0 else "stale",
+                    max_list_age_days,
+                )
                 cg_mapper.update_mappings()
             else:
-                app_logger.info(f"✅ CoinGecko mapper ready with {stats['total_mappings']} mappings")
+                app_logger.info(
+                    "✅ CoinGecko mapper ready with %s mappings (list fresh within %sd; skipping /coins/list)",
+                    stats["total_mappings"],
+                    max_list_age_days,
+                )
             
             # Initialize Chart-IMG client (construct to validate config; charts use client where needed downstream)
             if settings.chart_img_api_key:

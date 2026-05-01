@@ -828,7 +828,7 @@ CREATE TABLE price_cache (
 );
 ```
 
-Cache TTL: 6 hours. Entries older than `CACHE_PRICE_HOURS` are ignored and re-fetched.
+Cache TTL: default 12 hours (`CACHE_PRICE_HOURS`). Entries older than that window are ignored and re-fetched.
 
 ### 8.2. Exchange Listings Database — `exchanges.db`
 
@@ -963,7 +963,7 @@ All tunable parameters have hardcoded defaults in `Settings._get_default_config(
 | `CMC_CALLS_PER_MINUTE` | int | `333` | CMC rate limit target. |
 | `CACHE_GECKO_ID_DAYS` | int | `30` | Mapping cache TTL in days. |
 | `CACHE_EXCHANGE_HOURS` | int | `24` | Exchange volume cache TTL in hours. |
-| `CACHE_PRICE_HOURS` | int | `6` | Price history cache TTL in hours. |
+| `CACHE_PRICE_HOURS` | int | `12` | Price / OHLCV cache TTL in hours (hourly scans reuse rows within this window). |
 | `CIRCUIT_FAILURE_THRESHOLD` | int | `5` | Failures before circuit opens. |
 | `CIRCUIT_RECOVERY_TIMEOUT` | int | `60` | Seconds before circuit retry. |
 

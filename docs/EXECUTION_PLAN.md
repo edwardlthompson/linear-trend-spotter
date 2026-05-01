@@ -232,9 +232,10 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** One scan produces a numeric summary; baseline saved in Notes.
   - **Notes:** Implemented via `utils/coingecko_usage.py` (`record_coingecko_http`) from `api/coingecko.py` (`_make_request` + `/coins/markets` pages) and `api/coingecko_mapper.py` (`/coins/list`). Counters live in `metrics.counts` as `coingecko_http_*`, appear in `metrics.report()` / persisted `metrics.json` history. Save your first post-deploy **totals** here as baseline when tuning **H1–H6**: _e.g. `coingecko_http_total`, `markets`, `market_chart`, `coin_detail`, `tickers`, `ohlc`, `coins_list`._
 
-- [ ] **H1. Cache & config tuning (low risk, no universe/interval change)**  
+- [x] **H1. Cache & config tuning (low risk, no universe/interval change)**  
   - Tune `CACHE_PRICE_HOURS` / `CACHE_GECKO_ID_DAYS` only with **before/after qualification comparison** on a fixed config (same `TOP_COINS_LIMIT`, same exchanges, same `SCAN_INTERVAL_SECONDS`); ensure `BACKTEST_RESUME_ENABLED` avoids duplicate heavy fetches. **Do not** reduce coin universe or interval.  
   - **Verification:** H0 metrics improve; qualified-coin counts / alert cardinality within agreed tolerance vs baseline (document in Notes).
+  - **Notes:** Default **`CACHE_PRICE_HOURS` 6 → 12** so hourly workers reuse SQLite OHLCV / price rows across consecutive scans (fewer CoinGecko `market_chart` / related hits for the same symbol within 12h). **`CACHE_GECKO_ID_DAYS`** is now enforced: `/coins/list` runs when mappings are **empty** or metadata **`last_update`** is older than this setting (default 30d)—replacing “only refresh when empty” so new listings age in on schedule without per-scan list pulls. `BACKTEST_RESUME_ENABLED` unchanged (still avoids duplicate heavy backtest work). **Post-merge:** capture one **H0** counter block before/after on the same `config.json` and paste baseline deltas here if product wants a signed-off %.
 
 - [ ] **H2. Bulk vs per-coin**  
   - Audit `api/coingecko.py` and `main.py` for redundant per-coin calls; consolidate to list/markets endpoints where possible.  
@@ -522,7 +523,7 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 | E | Cross-platform | Complete |
 | F | Logging | Complete |
 | G | CMC links in Telegram | Complete |
-| H | CoinGecko usage reduction | **H0** complete; **H1–H6** pending |
+| H | CoinGecko usage reduction | **H0–H1** complete; **H2–H6** pending |
 | I | DB docs / main split | Not started |
 | J | Observability & operations | Not started |
 | K | Telegram & UX | Not started |

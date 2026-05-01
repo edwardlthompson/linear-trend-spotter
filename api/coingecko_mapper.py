@@ -5,7 +5,7 @@ Uses the /coins/list endpoint to build and cache the mapping
 
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Optional, List
 import threading
@@ -226,7 +226,27 @@ class CoinGeckoMapper:
             'total_mappings': total,
             'last_update': last_update[0] if last_update else 'Never'
         }
-    
+
+    def should_refresh_list(self, max_age_days: int) -> bool:
+        """True if mapping table is empty or last /coins/list refresh is older than max_age_days."""
+        stats = self.get_stats()
+        if int(stats.get('total_mappings') or 0) == 0:
+            return True
+        raw = stats.get('last_update') or 'Never'
+        if raw in ('Never', '', None):
+            return True
+        try:
+            text = str(raw).strip().replace('Z', '+00:00')
+            last = datetime.fromisoformat(text)
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            else:
+                last = last.astimezone(timezone.utc)
+            age_limit = datetime.now(timezone.utc) - timedelta(days=max(1, int(max_age_days)))
+            return last < age_limit
+        except (TypeError, ValueError, OSError):
+            return True
+
     def debug_check_symbol(self, symbol: str):
         """Debug method to check all mappings for a symbol"""
         cursor = self._execute('''
