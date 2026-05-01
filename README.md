@@ -24,7 +24,16 @@ Read-only **PWA** for the hourly qualified snapshot: sort, filter, theme, export
 
 **Live site (GitHub Pages, after you turn Pages on):** [edwardlthompson.github.io/linear-trend-spotter/dashboard/](https://edwardlthompson.github.io/linear-trend-spotter/dashboard/)
 
-If that URL returns **404**, GitHub Pages is not enabled yet for this repo—the steps below fix that. Full behavior and CORS notes live in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet (or the first deploy is still running—wait 1–2 minutes and hard-refresh). See **step 3** below and the **404 checklist** right after it. Full behavior and CORS notes live in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+
+**404 checklist**
+
+| Fix | Where |
+|-----|--------|
+| Turn Pages on | Repo **Settings → Pages** → **Build and deployment** → **Source:** branch **`main`**, folder **`/docs`** (not “`/ (root)`”). Save. |
+| Confirm the deploy | Same **Pages** page: wait until it shows a green success or a **`your-branch`** publish notice; then open the site again. |
+| Wrong URL | Project Pages live at **`https://edwardlthompson.github.io/linear-trend-spotter/`** plus paths under `docs/`. The dashboard is **`…/dashboard/`** (maps to `docs/dashboard/index.html`). |
+| Repo visibility | **Public** repos get free Pages on github.io; **private** repos may need GitHub Pro/Team for Pages (otherwise enable Pages only works on public mirrors). |
 
 ### How to enable the dashboard
 
