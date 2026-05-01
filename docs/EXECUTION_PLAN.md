@@ -132,9 +132,9 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** Actuator: push branch, workflow green; locally mirror commands.
 - [x] **A3.** (Optional) Add `ruff check .` with `pyproject.toml` `[tool.ruff]` once Ruff is introduced (may align with Milestone D).  
   - **Verification:** CI job passes.
-- [ ] **A4.** GitHub **branch protection** on `main`: require the CI check before merge.  
+- [x] **A4.** GitHub **branch protection** on `main`: require the CI check before merge.  
   - **Verification:** Repo settings documented in Notes.
-  - **Notes:** Requires org/repo admin in GitHub **Settings → Branches**; cannot be completed from this codebase alone. **Remaining manual step:** follow **Section 6.5** (same checklist as Milestone A4); enable required check matching **`verify`** from `.github/workflows/ci.yml`.
+  - **Notes:** Enabled in GitHub **Settings → Branches** with required status check **Verify** (workflow job `verify` in `.github/workflows/ci.yml`). Completed **2026-05-01** (owner verification).
 
 ---
 
@@ -634,7 +634,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Code-deliverable milestones in this plan are complete except **A4** (branch protection), which requires a repo admin in GitHub **Settings → Branches** (see **Section 6.5**). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Milestone **A4** (branch protection) is complete. Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -642,7 +642,7 @@ Code-deliverable milestones in this plan are complete except **A4** (branch prot
 
 | Milestone | Theme | Status |
 |-----------|--------|--------|
-| A | CI + Render guardrails | **A1–A2** done; **A4** needs GitHub admin (branch protection) |
+| A | CI + Render guardrails | **A1–A4** complete (branch protection + required **Verify** check) |
 | B | Exceptions | Complete |
 | C | Telegram robustness | Complete |
 | D | Pins + Ruff/Mypy | Complete (**D3** mypy on `config/` + `notifications/`) |
