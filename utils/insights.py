@@ -51,6 +51,8 @@ def compute_data_reliability(coin: dict[str, Any]) -> dict[str, Any]:
         score += 25.0
     elif ohlcv_source.startswith("polygon"):
         score += 18.0
+    elif ohlcv_source.startswith("cmc"):
+        score += 16.0
     elif ohlcv_source == "price_cache":
         score += 20.0
 

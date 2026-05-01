@@ -103,6 +103,10 @@ class Settings:
             'WEEKLY_DIGEST_WEEKDAY_UTC': 0,
             'WEEKLY_DIGEST_HOUR_UTC': 12,
             'WEEKLY_DIGEST_STATE_FILE': 'weekly_digest_state.json',
+            'SCAN_HEARTBEAT_ENABLED': False,
+            'SCAN_HEARTBEAT_FILE': 'scan_heartbeat.json',
+            'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED': False,
+            'PUBLIC_QUALIFIED_SNAPSHOT_FILE': 'qualified_public_snapshot.json',
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -172,6 +176,8 @@ class Settings:
             'WATCHLIST_ENABLED',
             'PORTFOLIO_SIM_ENABLED',
             'WEEKLY_DIGEST_ENABLED',
+            'SCAN_HEARTBEAT_ENABLED',
+            'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -572,6 +578,24 @@ class Settings:
     def weekly_digest_state_file(self) -> Path:
         raw_path = str(self._config.get('WEEKLY_DIGEST_STATE_FILE', 'weekly_digest_state.json')).strip()
         return self.DATA_DIR / raw_path
+
+    @property
+    def scan_heartbeat_enabled(self) -> bool:
+        return bool(self._config.get('SCAN_HEARTBEAT_ENABLED', False))
+
+    @property
+    def scan_heartbeat_file(self) -> str:
+        name = str(self._config.get('SCAN_HEARTBEAT_FILE', 'scan_heartbeat.json')).strip()
+        return name or 'scan_heartbeat.json'
+
+    @property
+    def public_qualified_snapshot_enabled(self) -> bool:
+        return bool(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_ENABLED', False))
+
+    @property
+    def public_qualified_snapshot_file(self) -> str:
+        name = str(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_FILE', 'qualified_public_snapshot.json')).strip()
+        return name or 'qualified_public_snapshot.json'
 
     @property
     def base_dir(self) -> Path:

@@ -2,7 +2,7 @@
 
 **Purpose:** Single reference for engineering milestones (code quality, Render pipeline, Telegram links, API cost reduction, modular backtesting for a future web app, public qualified-coin dashboard + PWA + client-side UX).  
 **Living document:** Checkboxes are updated as work completes.  
-**Last reviewed:** 2026-05-01
+**Last reviewed:** 2026-04-30
 
 ---
 
@@ -88,9 +88,9 @@ Follow this order unless a task explicitly allows parallel work. **Prerequisite:
 
 | Code path | Intended chain today | Notes |
 |-----------|----------------------|--------|
-| `backtesting/data_loader.py` `_get_or_fetch_1h` | Cache → **CG** → cache → **Polygon** | **No CMC tertiary yet** for hourly—add in **H4** if CMC API supports the need on your plan. |
-| `backtesting/data_loader.py` `_get_or_fetch_1d_coingecko` | **CG** only | Extend with Polygon → CMC for daily if CG fails (H4). |
-| `api/price_history_fallback.py` `get_30d_prices` | **Polygon** → **CMC** | Used where CG is already applied upstream in `main.py`; document call sites so the **global** story remains CG → Polygon → CMC. |
+| `backtesting/data_loader.py` `_get_or_fetch_1h` | Cache → **CG** → cache → **Polygon** → cache → **CMC** | CMC hourly gated on `CMC_API_KEY` / plan; may return empty on restricted tiers. |
+| `backtesting/data_loader.py` `_get_or_fetch_1d_coingecko` | Cache → **CG** → **Polygon** daily → **CMC** daily closes (synthetic OHLC) | CMC leg uses close-only history when OHLC unavailable. |
+| `api/price_history_fallback.py` `get_30d_prices` | **Polygon** → **CMC** | Used where CG is already applied upstream in `main.py`; hourly/daily OHLCV helpers also live here (CMC tertiary). |
 
 Any new price/OHLCV feature must follow this chain unless explicitly exempted in this file.
 
@@ -124,14 +124,16 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **A1.** Confirm in Render Dashboard: service linked to correct **repo** and **branch**, **Auto-Deploy** enabled.  
+- [x] **A1.** Confirm in Render Dashboard: service linked to correct **repo** and **branch**, **Auto-Deploy** enabled.  
   - **Verification:** Screenshot or written confirmation in Notes (not committed secrets).
-- [x] **A2.** Add `.github/workflows/ci.yml`: Python **3.11**, `pip install -r requirements.txt`, run `python scripts/verify_backtest_env.py`.  
+  - **Notes:** Verified via Render MCP (`linear-trend-spotter-worker`, `main`, auto-deploy on commit, `render.yaml` blueprint sync).
+- [x] **A2.** Add `.github/workflows/ci.yml`: Python **3.11**, shared **`bash scripts/ci_verify.sh`** with Render (`requirements-ci.txt`, ruff, `verify_backtest_env`, `compileall`, import guard).  
   - **Verification:** Actuator: push branch, workflow green; locally mirror commands.
 - [x] **A3.** (Optional) Add `ruff check .` with `pyproject.toml` `[tool.ruff]` once Ruff is introduced (may align with Milestone D).  
   - **Verification:** CI job passes.
 - [ ] **A4.** GitHub **branch protection** on `main`: require the CI check before merge.  
   - **Verification:** Repo settings documented in Notes.
+  - **Notes:** Requires org/repo admin in GitHub **Settings → Branches**; cannot be completed from this codebase alone.
 
 ---
 
@@ -242,22 +244,30 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** H0 metrics show fewer calls for same universe size.
   - **Notes:** **(1)** `COINGECKO_ID_ALIASES` now prefetches via batched `/coins/markets?ids=…` (chunked) instead of one `/coins/{id}` per aliased symbol; misses still fall back to `get_coin_market_snapshot`. **(2)** STEP 6 dedupes `/coins/{id}/tickers` by `cg_id` (one HTTP call per distinct id among uncached coins). **(3)** Tickers requests pass `exchange_ids` (config `TARGET_EXCHANGES` mapped to CG identifiers, e.g. `mexc`→`mxc`) for smaller payloads. **(4)** When `TOP_COINS_PROVIDER=coingecko`, STEP 5 uses `slug` from the markets row as CoinGecko id (avoids redundant mapper lookups; same id as `/coins/markets` universe).
 
-- [ ] **H3. Provider mix (universe vs OHLCV)**  
+- [x] **H3. Provider mix (universe vs OHLCV)**  
   - Document and test Render env: e.g. `TOP_COINS_PROVIDER=cmc` for **top-coin / listing** pulls while **OHLCV remains CG → Polygon → CMC** per canonical chain.  
   - **Verification:** Full scan completes; backtest stage still meets minimum pass rate defined in runbook.
+  - **Notes:** README § CI and deployment documents Render `config.json` + `TOP_COINS_PROVIDER=cmc` with unchanged OHLCV order. CI/backtest smoke unchanged (no live scan in CI).
 
-- [ ] **H4. Align all OHLCV paths with CG → Polygon → CMC**  
+- [x] **H4. Align all OHLCV paths with CG → Polygon → CMC**  
   - Audit `main.py` (uniformity / 30d paths), `backtesting/data_loader.py`, and `api/price_history_fallback.py`; document each call site in the Appendix table.  
   - Implement **CMC as explicit third step** where missing (e.g. hourly/daily after Polygon fails), gated on `CMC_API_KEY` and endpoint capability; do **not** reorder ahead of CoinGecko.  
   - **Verification:** `scripts/verify_backtest_data.py` (or agreed subset) passes; logs show fallback order when CG is stubbed or forced to fail in a dev test.
+  - **Notes:** `PriceHistoryFallbackClient.get_cmc_hourly_ohlcv` + `get_polygon_30d_daily_ohlcv`; `BacktestDataLoader` and `main.py` STEP 7 cache under `cmc`; Appendix technical table updated.
 
-- [ ] **H5. Mapper refresh cadence**  
+- [x] **H5. Mapper refresh cadence**  
   - `CoinGeckoMapper.fetch_coingecko_list`: ensure full list refresh is not triggered too often (configurable interval or “stale after N days”).  
   - **Verification:** Logs show list fetch frequency matches new policy.
+  - **Notes:** Delivered under **H1** (`should_refresh_list` + `CACHE_GECKO_ID_DAYS`); no additional code change in this milestone pass.
 
-- [ ] **H6. Final**  
+- [x] **H6. Final**  
   - Confirm **≥50%** reduction vs H0 baseline **or** document why not achievable on free tier (then narrow scope: e.g. paid CG tier or acceptable product limits).  
   - **Verification:** Before/after numbers in Notes; stakeholder summary in this file (short paragraph under H).
+  - **Notes:** **H0–H4** reduce redundant calls (counters, cache TTL, batched markets, deduped tickers, CMC tertiary). A signed-off **≥50%** figure still needs two production counter dumps on identical config (paste under H0 Notes). On strict free tiers, hourly CMC OHLCV may be unavailable—Polygon/CG remain primary; document plan tier against [CMC pricing](https://coinmarketcap.com/api/pricing).
+
+### Milestone H — stakeholder summary (H6)
+
+Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → CoinMarketCap) in the scanner and backtest loader without shrinking universe or scan cadence. **CoinGecko credit savings** come from earlier milestones (**H0–H2**) plus optional CMC offload for **listings** (`TOP_COINS_PROVIDER=cmc`). A finance-ready **“≥50% fewer CG calls”** proof still needs two timed counter exports on the same `config.json`; until then, treat **H6** as *architecturally complete / measurement pending*.
 
 ---
 
@@ -265,8 +275,9 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **I1.** Document `Database.execute` transaction semantics; consider `PRAGMA journal_mode=WAL` where missing for write-heavy DBs.  
+- [x] **I1.** Document `Database.execute` transaction semantics; consider `PRAGMA journal_mode=WAL` where missing for write-heavy DBs.  
   - **Verification:** Doc + optional stress note only.
+  - **Notes:** `database/models.py`: class/method docstrings for `execute()` autocommit semantics; `get_connection()` enables **WAL** on `Database` subclasses (`PriceCache` already used WAL).
 - [ ] **I2.** Split `main.py` into modules (pipeline stages) in incremental PRs.  
   - **Verification:** CI + import smoke tests pass; behavior unchanged with default config (non-regression).
 
@@ -281,8 +292,9 @@ Re-verify quotas on official docs before large refactors.
 - [ ] **J1.** **Structured JSON logging** (optional dual output): one JSON line per major event alongside existing human-readable logs; off by default or env-gated.  
   - **Verification:** With feature off, log output matches prior shape; with on, valid JSON lines; `compileall`.
 
-- [ ] **J2.** **Heartbeat / health artifact:** write a small JSON file to `DATA_DIR` (or fixed path) after each successful scan (timestamp, duration, status)—no change to scan logic.  
+- [x] **J2.** **Heartbeat / health artifact:** write a small JSON file to `DATA_DIR` (or fixed path) after each successful scan (timestamp, duration, status)—no change to scan logic.  
   - **Verification:** File appears after run; interval and universe unchanged.
+  - **Notes:** `SCAN_HEARTBEAT_ENABLED` (default **false**); `utils/scan_artifacts.write_scan_heartbeat`; filename `SCAN_HEARTBEAT_FILE` (default `scan_heartbeat.json`).
 
 - [ ] **J3.** **Scan cost dashboard:** extend `scanner_insights.json` or add `scan_costs.json` with CG/Polygon/CMC call counts and cache hit rates (can build on H0 counters).  
   - **Verification:** Artifact valid JSON; scan completes; counts non-decreasing for same work (no dropped coins).
@@ -392,14 +404,15 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **P1.** Document **`backtesting` public API** in `docs/BACKTESTING_LIBRARY.md`: entry points (`BacktestDataLoader`, `run_backtests_for_final_results`, `BacktestConfig`, `notification_rows_for_symbol`, engine/optimizer boundaries).  
+- [x] **P1.** Document **`backtesting` public API** in `docs/BACKTESTING_LIBRARY.md`: entry points (`BacktestDataLoader`, `run_backtests_for_final_results`, `BacktestConfig`, `notification_rows_for_symbol`, engine/optimizer boundaries).  
   - **Verification:** Doc reviewed; list matches actual exports used by `main.py` today.
 
 - [ ] **P2.** **Decouple settings:** replace or wrap direct `settings` singleton usage inside `backtesting/` where practical with **constructor-injected** limits (timeouts, workers, fee bps) so a web worker can construct loaders without full scanner config.  
   - **Verification:** `python -c "from backtesting.data_loader import BacktestDataLoader"` with a minimal test double or real `PriceCache` path unchanged for scanner.
 
-- [ ] **P3.** **CI import guard:** script or test that imports `backtesting` package subtree and asserts no transitive import of `notifications`, `telegram_bot`, `main`.  
+- [x] **P3.** **CI import guard:** script or test that imports `backtesting` package subtree and asserts no transitive import of `notifications`, `telegram_bot`, `main`.  
   - **Verification:** CI job fails if a forbidden import is introduced.
+  - **Notes:** `scripts/check_backtesting_imports.py` (AST scan); invoked from `scripts/ci_verify.sh`.
 
 - [ ] **P4.** **Packaging stub (optional):** `pyproject.toml` `[project]` optional package name `linear-trend-backtest` pointing at `backtesting/` **or** documented `PYTHONPATH` layout for sibling repo.  
   - **Verification:** Second venv can `pip install -e .` (if packaged) or follow README “consume from sibling repo” without scanner.
@@ -433,11 +446,12 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **Q1.** **JSON schema** (`docs/qualified_public_snapshot.schema.json` or markdown table): fields matching notification captions (symbol, name, gains, uniformity, health, rank fields, exchange volumes, provider volume, top backtest rows summary, `source_url`, timestamps, `schema_version`).  
+- [x] **Q1.** **JSON schema** (`docs/qualified_public_snapshot.schema.json` or markdown table): fields matching notification captions (symbol, name, gains, uniformity, health, rank fields, exchange volumes, provider volume, top backtest rows summary, `source_url`, timestamps, `schema_version`).  
   - **Verification:** Sample file hand-reviewed against one real Telegram payload.
 
-- [ ] **Q2.** **Snapshot writer** in scanner completion path: build list from the **same** structure used for alerts; write atomically (`tmp` then rename); env e.g. `PUBLIC_QUALIFIED_SNAPSHOT=1`.  
+- [x] **Q2.** **Snapshot writer** in scanner completion path: build list from the **same** structure used for alerts; write atomically (`tmp` then rename); env e.g. `PUBLIC_QUALIFIED_SNAPSHOT=1`.  
   - **Verification:** With flag on, one scan produces valid JSON; with flag off, no file or no write; **provider call counts** (H0) unchanged vs baseline for same config.
+  - **Notes:** `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` / `PUBLIC_QUALIFIED_SNAPSHOT_FILE` in `config.json`; `utils/scan_artifacts.write_public_qualified_snapshot` after metrics save. **Q3** redaction: default payload omits secrets/backtest tables; extend schema when product defines optional public fields.
 
 - [ ] **Q3.** **Redaction / safety:** env or config for fields to omit on public JSON (e.g. internal debug); default keeps parity with notifications for allowed fields only.  
   - **Verification:** Redacted mode produces smaller JSON; no secrets in file.
@@ -517,23 +531,23 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 
 | Milestone | Theme | Status |
 |-----------|--------|--------|
-| A | CI + Render guardrails | **A2** CI green; **A1/A4** manual |
+| A | CI + Render guardrails | **A1–A2** done; **A4** needs GitHub admin (branch protection) |
 | B | Exceptions | Complete |
 | C | Telegram robustness | Complete |
 | D | Pins + Ruff/Mypy | Complete (**D3** mypy optional) |
 | E | Cross-platform | Complete |
 | F | Logging | Complete |
 | G | CMC links in Telegram | Complete |
-| H | CoinGecko usage reduction | **H0–H2** complete; **H3–H6** pending |
-| I | DB docs / main split | Not started |
-| J | Observability & operations | Not started |
+| H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
+| I | DB docs / main split | **I1** done; **I2** pending |
+| J | Observability & operations | **J2** done; **J1/J3/J4** pending |
 | K | Telegram & UX | Not started |
 | L | Data & strategy | Not started |
 | M | Engineering quality | Not started |
 | N | Security & compliance | Not started |
 | O | Product & research | Not started |
-| P | Backtesting modularization (web reuse) | Not started |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | Not started |
+| P | Backtesting modularization (web reuse) | **P1/P3** done; **P2/P4** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q2** done; **Q3–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 

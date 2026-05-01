@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 import pandas as pd
@@ -25,14 +26,14 @@ class LoadResult:
 
 
 class BacktestDataLoader:
-    """Loads CoinGecko 1h OHLCV and falls back to Polygon intraday when needed."""
+    """Loads 1h OHLCV: CoinGecko first, then Polygon, then CoinMarketCap (when configured)."""
 
     def __init__(self, cache: PriceCache, max_cache_age_hours: int = 6):
         self.cache = cache
         self.coingecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
         self.price_fallback = PriceHistoryFallbackClient(
             polygon_api_key=os.getenv("POLYGON_API_KEY", ""),
-            cmc_api_key="",
+            cmc_api_key=settings.cmc_api_key or "",
         )
         self.max_cache_age_hours = max_cache_age_hours
         self.ram_cache: OrderedDict[str, LoadResult] = OrderedDict()
@@ -156,19 +157,40 @@ class BacktestDataLoader:
                 return frame, "cache", None
 
         polygon_rows = self.price_fallback.get_polygon_30d_hourly_ohlcv(symbol)
-        if not polygon_rows:
-            return None, "none", "no_intraday_ohlcv"
+        if polygon_rows:
+            cached = self.cache.cache_ohlcv_rows("polygon", symbol, "1h", polygon_rows, source="polygon_api")
+            if cached > 0:
+                frame = self._rows_to_frame(polygon_rows)
+                ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1h")
+                if ok and len(frame) >= expected_points:
+                    return frame, "polygon_api", None
 
-        cached = self.cache.cache_ohlcv_rows("polygon", symbol, "1h", polygon_rows, source="polygon_api")
-        if cached <= 0:
-            return None, "none", "cache_write_failed"
+        found_cmc, cached_cmc_rows = self.cache.get_ohlcv_rows(
+            "cmc",
+            symbol,
+            "1h",
+            max_age_hours=self.max_cache_age_hours,
+        )
+        if found_cmc and cached_cmc_rows:
+            frame = self._rows_to_frame(cached_cmc_rows)
+            ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1h")
+            if ok and len(frame) >= expected_points:
+                return frame, "cache", None
 
-        frame = self._rows_to_frame(polygon_rows)
-        ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1h")
-        if not ok:
-            return None, "polygon_api", reason
+        cmc_rows = self.price_fallback.get_cmc_hourly_ohlcv(symbol, days=days)
+        if cmc_rows:
+            cached = self.cache.cache_ohlcv_rows("cmc", symbol, "1h", cmc_rows, source="cmc_api")
+            if cached <= 0:
+                return None, "none", "cache_write_failed"
+            frame = self._rows_to_frame(cmc_rows)
+            ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1h")
+            if not ok:
+                return None, "cmc_api", reason
+            if len(frame) < expected_points:
+                return None, "cmc_api", "insufficient_hourly_bars"
+            return frame, "cmc_api", None
 
-        return frame, "polygon_api", None
+        return None, "none", "no_intraday_ohlcv"
 
     def _get_or_fetch_1d_coingecko(
         self,
@@ -176,9 +198,6 @@ class BacktestDataLoader:
         gecko_id: Optional[str],
         days: int = 30,
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
-        if not gecko_id:
-            return None, "none", "missing_gecko_id"
-
         expected_points = max(days - 2, 25)
 
         found, cached_rows = self.cache.get_ohlcv_rows("coingecko", symbol, "1d", max_age_hours=self.max_cache_age_hours)
@@ -188,36 +207,77 @@ class BacktestDataLoader:
             if ok and len(frame) >= expected_points:
                 return frame, "cache", None
 
-        ohlc_rows = self.coingecko.get_ohlc(coin_id=gecko_id, days=max(30, days))
-        if not ohlc_rows:
-            return None, "none", "no_coingecko_ohlc"
+        if gecko_id:
+            ohlc_rows = self.coingecko.get_ohlc(coin_id=gecko_id, days=max(30, days))
+            if ohlc_rows:
+                normalized_rows: list[dict] = []
+                for row in ohlc_rows:
+                    ts_sec = int(float(row[0]) / 1000)
+                    normalized_rows.append(
+                        {
+                            "ts": ts_sec,
+                            "open": float(row[1]),
+                            "high": float(row[2]),
+                            "low": float(row[3]),
+                            "close": float(row[4]),
+                            "volume": 1.0,
+                        }
+                    )
 
-        normalized_rows: list[dict] = []
-        for row in ohlc_rows:
-            ts_sec = int(float(row[0]) / 1000)
-            normalized_rows.append(
-                {
-                    "ts": ts_sec,
-                    "open": float(row[1]),
-                    "high": float(row[2]),
-                    "low": float(row[3]),
-                    "close": float(row[4]),
-                    "volume": 1.0,
-                }
-            )
+                cached = self.cache.cache_ohlcv_rows("coingecko", symbol, "1d", normalized_rows, source="coingecko_api")
+                if cached <= 0:
+                    return None, "none", "cache_write_failed"
 
-        cached = self.cache.cache_ohlcv_rows("coingecko", symbol, "1d", normalized_rows, source="coingecko_api")
-        if cached <= 0:
-            return None, "none", "cache_write_failed"
+                frame = self._rows_to_frame_daily(normalized_rows)
+                ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1d")
+                if not ok:
+                    return None, "coingecko_api", reason
+                if len(frame) < expected_points:
+                    return None, "coingecko_api", "insufficient_daily_bars"
 
-        frame = self._rows_to_frame_daily(normalized_rows)
-        ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1d")
-        if not ok:
-            return None, "coingecko_api", reason
-        if len(frame) < expected_points:
-            return None, "coingecko_api", "insufficient_daily_bars"
+                return frame, "coingecko_api", None
 
-        return frame, "coingecko_api", None
+        found_poly_d, cached_poly_d = self.cache.get_ohlcv_rows(
+            "polygon",
+            symbol,
+            "1d",
+            max_age_hours=self.max_cache_age_hours,
+        )
+        if found_poly_d and cached_poly_d:
+            frame = self._rows_to_frame_daily(cached_poly_d)
+            ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1d")
+            if ok and len(frame) >= expected_points:
+                return frame, "cache", None
+
+        polygon_daily = self.price_fallback.get_polygon_30d_daily_ohlcv(symbol)
+        if polygon_daily:
+            cached = self.cache.cache_ohlcv_rows("polygon", symbol, "1d", polygon_daily, source="polygon_api")
+            if cached > 0:
+                frame = self._rows_to_frame_daily(polygon_daily)
+                ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1d")
+                if ok and len(frame) >= expected_points:
+                    return frame, "polygon_api", None
+
+        daily_prices = self.price_fallback.get_cmc_daily_closes(symbol)
+        if daily_prices and len(daily_prices) >= expected_points:
+            end_d = datetime.now(timezone.utc).date()
+            synthetic: list[dict] = []
+            n = len(daily_prices)
+            for i, price in enumerate(daily_prices):
+                d = end_d - timedelta(days=(n - 1 - i))
+                ts_sec = int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp())
+                p = float(price)
+                synthetic.append(
+                    {"ts": ts_sec, "open": p, "high": p, "low": p, "close": p, "volume": 1.0}
+                )
+            cached = self.cache.cache_ohlcv_rows("cmc", symbol, "1d", synthetic, source="cmc_api")
+            if cached > 0:
+                frame = self._rows_to_frame_daily(synthetic)
+                ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1d")
+                if ok and len(frame) >= expected_points:
+                    return frame, "cmc_api", None
+
+        return None, "none", "no_coingecko_ohlc"
 
     def load(self, symbol: str, timeframe: str = "1h", days: int = 30, gecko_id: Optional[str] = None) -> LoadResult:
         cache_key = f"{symbol}_{timeframe}_{days}"

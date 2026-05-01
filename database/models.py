@@ -27,8 +27,14 @@ def _build_source_url(coin: Dict[str, Any]) -> str:
     return ''
 
 class Database:
-    """Base database class"""
-    
+    """Base database class.
+
+    Connections use thread-local SQLite handles. ``execute()`` runs one statement
+    with an immediate ``commit`` (autocommit per call), not an interactive transaction
+    spanning multiple statements—callers batching writes should use ``get_connection()``
+    and a single ``with conn:`` / explicit transaction when atomicity is required.
+    """
+
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self._local = threading.local()
@@ -39,9 +45,13 @@ class Database:
         raise NotImplementedError
     
     def get_connection(self):
-        """Get a database connection (thread-local)"""
+        """Get a database connection (thread-local). Enables WAL for write-heavy paths."""
         if not hasattr(self._local, 'conn'):
             self._local.conn = sqlite3.connect(self.db_path)
+            try:
+                self._local.conn.execute("PRAGMA journal_mode=WAL;")
+            except sqlite3.Error:
+                pass
         return self._local.conn
     
     def close(self):
@@ -51,7 +61,7 @@ class Database:
             del self._local.conn
     
     def execute(self, query: str, params: tuple = ()):
-        """Execute a query and return cursor"""
+        """Execute one SQL statement and commit. See class docstring for transaction semantics."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)

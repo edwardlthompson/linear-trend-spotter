@@ -46,5 +46,9 @@
     "ARTIFACT_ARCHIVE_DIR": ".archive/auto",
     "NOTIFICATION_INCLUDE_QUALITY_PANEL": true,
     "ALERT_COOLDOWN_HOURS": 6,
-    "EXIT_ANALYTICS_FILE": "exit_reason_analytics.json"
+    "EXIT_ANALYTICS_FILE": "exit_reason_analytics.json",
+    "SCAN_HEARTBEAT_ENABLED": false,
+    "SCAN_HEARTBEAT_FILE": "scan_heartbeat.json",
+    "PUBLIC_QUALIFIED_SNAPSHOT_ENABLED": false,
+    "PUBLIC_QUALIFIED_SNAPSHOT_FILE": "qualified_public_snapshot.json"
 }

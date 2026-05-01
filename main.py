@@ -40,6 +40,10 @@ from utils.insights import (
 )
 from utils.metrics import metrics, timed_block
 from utils.runtime_hygiene import run_artifact_hygiene, update_exit_reason_analytics
+from utils.scan_artifacts import (
+    write_public_qualified_snapshot,
+    write_scan_heartbeat,
+)
 from utils.logger import app_logger
 
 # Import exchange database
@@ -547,6 +551,7 @@ def run_scanner():
             app_logger.warning(f"⚠️ Artifact hygiene failed: {hygiene_error}")
     
     try:
+        scan_started_at = datetime.now(timezone.utc)
         # Initialize components
         with timed_block('initialization'):
             history_db = HistoryDatabase(settings.db_paths['scanner'])
@@ -572,7 +577,7 @@ def run_scanner():
                 polygon_api_key=os.getenv('POLYGON_API_KEY', ''),
                 cmc_api_key=settings.cmc_api_key
             )
-            app_logger.info("✅ OHLCV fallback chain initialized (Polygon hourly)")
+            app_logger.info("✅ OHLCV fallback chain initialized (Polygon + CMC hourly/daily tertiary)")
             
             # Initialize CoinGecko Mapper
             cg_mapper_db_path = settings.db_paths['mappings']
@@ -1034,6 +1039,20 @@ def run_scanner():
                         ohlcv_source = 'polygon_api'
 
             if not hourly_rows:
+                found_cmc, cached_cmc_rows = cache.get_ohlcv_rows(
+                    'cmc', coin['symbol'], '1h', max_age_hours=settings.cache_price_hours
+                )
+                if found_cmc and cached_cmc_rows:
+                    hourly_rows = cached_cmc_rows
+                    ohlcv_source = 'cmc_cache'
+                else:
+                    cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(coin['symbol'], days=max(30, uniformity_days))
+                    if cmc_hourly:
+                        cache.cache_ohlcv_rows('cmc', coin['symbol'], '1h', cmc_hourly, source='cmc_api')
+                        hourly_rows = cmc_hourly
+                        ohlcv_source = 'cmc_api'
+
+            if not hourly_rows:
                 app_logger.info("      ⏳ No OHLCV data available - will retry next scan")
                 continue
 
@@ -1483,6 +1502,37 @@ def run_scanner():
         app_logger.info(f"   Last updated: {stats['last_update'][:16] if stats['last_update'] != 'Never' else 'Never'}")
         
         metrics.save(settings.metrics_file)
+
+        if settings.scan_heartbeat_enabled:
+            try:
+                write_scan_heartbeat(
+                    settings.DATA_DIR,
+                    filename=settings.scan_heartbeat_file,
+                    status="ok",
+                    started_at=scan_started_at,
+                    finished_at=datetime.now(timezone.utc),
+                    extra={
+                        "gain_qualified": len(gain_qualified),
+                        "final_results": len(final_results),
+                        "entered": len(entered),
+                        "exited": len(exited),
+                    },
+                )
+                app_logger.info("💓 Scan heartbeat written")
+            except Exception as hb_err:
+                app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
+
+        if settings.public_qualified_snapshot_enabled and final_results:
+            try:
+                write_public_qualified_snapshot(
+                    settings.DATA_DIR,
+                    settings.public_qualified_snapshot_file,
+                    final_results,
+                )
+                app_logger.info("📤 Public qualified snapshot written")
+            except Exception as snap_err:
+                app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+
         app_logger.info("\n✅ Scan complete")
         
         tv_mapper.close()
