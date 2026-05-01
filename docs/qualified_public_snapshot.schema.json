@@ -6,6 +6,11 @@
   "properties": {
     "schema_version": { "type": "integer", "minimum": 1 },
     "updated_at": { "type": "string", "description": "ISO-8601 UTC timestamp when the worker wrote the file" },
+    "scan_interval_seconds": {
+      "type": "integer",
+      "minimum": 60,
+      "description": "Nominal seconds between scans (from config / SCAN_INTERVAL_SECONDS env) for stale-dashboard logic"
+    },
     "field_set": {
       "type": "string",
       "enum": ["full", "minimal"],
@@ -38,7 +43,14 @@
           "rank_delta": { "type": ["integer", "null"] },
           "exchange_volumes": { "type": ["object", "null"] },
           "volume_24h": { "type": ["number", "null"] },
-          "ohlcv_source": { "type": ["string", "null"] }
+          "ohlcv_source": { "type": ["string", "null"] },
+          "backtest_top_strategies": {
+            "type": "array",
+            "description": "Present in field_set full when scanner attached backtest rows (Q13 parity)"
+          },
+          "backtest_buy_hold": {
+            "description": "Optional buy-and-hold summary object when field_set full"
+          }
         }
       }
     }

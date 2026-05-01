@@ -369,8 +369,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ### Tasks
 
-- [ ] **M1.** **`pytest`** suite: migrate or wrap `scripts/verify_*.py` assertions into tests; golden-file tests for `MessageFormatter` HTML output.  
+- [x] **M1.** **`pytest`** suite: migrate or wrap `scripts/verify_*.py` assertions into tests; golden-file tests for `MessageFormatter` HTML output.  
   - **Verification:** `pytest` green in CI; existing verify scripts still runnable.
+  - **Notes:** `tests/test_formatter_cmc_urls.py` (CMC `/currencies/` vs search + `format_entry` header), `tests/test_public_snapshot.py`; `scripts/ci_verify.sh` runs `pytest tests/`; further golden HTML files optional.
 
 - [x] **M2.** **Pre-commit:** `.pre-commit-config.yaml` with `ruff` + `compileall` (or `ruff` only if compileall covered by CI).  
   - **Verification:** `pre-commit run --all-files` passes.
@@ -531,11 +532,13 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
   - **Verification:** Large list remains responsive; snapshot fetched once per poll cycle only.
   - **Notes:** **`#searchInput`** debounced **250ms**; filters client-side list only.
 
-- [ ] **Q13.** **Expandable row / drawer:** tap row to expand full backtest strategy table / fields from JSON (Telegram caption parity in data, not necessarily HTML).  
+- [x] **Q13.** **Expandable row / drawer:** tap row to expand full backtest strategy table / fields from JSON (Telegram caption parity in data, not necessarily HTML).  
   - **Verification:** Collapsed by default; expand/collapse keyboard-accessible.
+  - **Notes:** `docs/dashboard/app.js` — `tr.coin-row` + detail row; `field_set` **full** snapshot includes `backtest_top_strategies` / `backtest_buy_hold` from `utils/scan_artifacts.py`; SW **`CACHE_VERSION`** bumped with static assets.
 
-- [ ] **Q14.** **Last updated + stale warning:** display `updated_at` (humanized) and optional countdown to next expected scan; banner if snapshot age **> 2×** nominal `SCAN_INTERVAL_SECONDS` (config constant matching worker).  
+- [x] **Q14.** **Last updated + stale warning:** display `updated_at` (humanized) and optional countdown to next expected scan; banner if snapshot age **> 2×** nominal `SCAN_INTERVAL_SECONDS` (config constant matching worker).  
   - **Verification:** Mock old `updated_at` shows warning; fresh snapshot clears it.
+  - **Notes:** Top-level **`scan_interval_seconds`** on snapshot (from `Settings.scan_interval_seconds` / env override); dashboard `#staleBanner` + humanized meta line; older JSON without the field uses **3600s** fallback.
 
 - [ ] **Q15.** **Dark / light theme:** respect `prefers-color-scheme`; optional toggle with `localStorage` persistence.  
   - **Verification:** Toggle survives reload; contrast acceptable on OLED.
@@ -617,7 +620,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, **Q13–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L4–O**, **P2**, **Q15–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -637,11 +640,11 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
 | K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
 | L | Data & strategy | **L0–L3** done; **L4** pending |
-| M | Engineering quality | **M2** pre-commit, **M3** compose smoke; **M1** pytest pending |
+| M | Engineering quality | **M1** pytest, **M2** pre-commit, **M3** compose smoke |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
 | P | Backtesting modularization (web reuse) | **P1/P3/P4** done; **P2** pending |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q12** done; **Q13–Q21** pending |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q14** done; **Q15–Q21** pending |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 

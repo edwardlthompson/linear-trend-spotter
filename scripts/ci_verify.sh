@@ -8,3 +8,4 @@ python -m ruff check .
 python scripts/check_backtesting_imports.py
 python scripts/verify_backtest_env.py
 python -m compileall -q .
+python -m pytest tests/ -q

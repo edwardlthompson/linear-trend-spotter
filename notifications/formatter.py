@@ -25,9 +25,9 @@ class MessageFormatter:
 
     @staticmethod
     def _build_cmc_url(coin: Dict) -> str:
-        """Prefer CoinMarketCap URLs for user-facing links (slug path or symbol search)."""
+        """Prefer CoinMarketCap ``/currencies/{slug}/`` URLs only (never ``/search/``)."""
         explicit = str(coin.get('cmc_url') or '').strip()
-        if explicit:
+        if explicit and "coinmarketcap.com/search" not in explicit.lower():
             return explicit
 
         cmc_slug_resolved = str(coin.get('cmc_slug') or '').strip().lower()
@@ -39,10 +39,6 @@ class MessageFormatter:
         # Top-coin snapshot from CoinGecko stores the API coin id in `slug`; that is not a CMC slug.
         if slug and not (gecko_id and slug == gecko_id):
             return f"https://coinmarketcap.com/currencies/{quote(slug, safe='')}/"
-
-        symbol = str(coin.get('symbol', '') or '').strip()
-        if symbol:
-            return f"https://coinmarketcap.com/search/?q={quote(symbol)}"
 
         return ''
 
@@ -84,7 +80,9 @@ class MessageFormatter:
         su = str(coin.get('source_url') or '').strip()
         if not su:
             return MessageFormatter._build_coingecko_url(coin)
-        if 'coinmarketcap.com' in su.lower():
+        if "coinmarketcap.com" in su.lower():
+            if "coinmarketcap.com/search" in su.lower():
+                return MessageFormatter._build_coingecko_url(coin)
             return su
         if 'coingecko.com' in su.lower():
             return MessageFormatter._build_coingecko_url(coin)

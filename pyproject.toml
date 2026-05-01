@@ -32,3 +32,7 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 "scripts/**" = ["E402", "F401"]
 "benchmark_40_tuned.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

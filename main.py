@@ -68,6 +68,33 @@ def _telegram_quiet_active() -> bool:
     )
 
 
+def _ensure_cmc_notify_urls(coin: dict, cmc_slug_resolver) -> None:
+    """Prefer ``/currencies/{slug}/`` for Telegram; clear CMC search URLs; resolve slug from map when missing."""
+    for key in ("cmc_url", "source_url"):
+        raw = str(coin.get(key) or "").strip()
+        if "coinmarketcap.com/search" in raw.lower():
+            coin[key] = ""
+    if str(coin.get("cmc_slug") or "").strip():
+        return
+    if not cmc_slug_resolver:
+        return
+    gid = str(coin.get("gecko_id") or coin.get("cg_id") or "").strip().lower()
+    if not gid:
+        return
+    slug = cmc_slug_resolver.resolve(
+        symbol=str(coin.get("symbol") or ""),
+        name=str(coin.get("name") or ""),
+        gecko_id=gid,
+    )
+    if not slug:
+        return
+    cu = f"https://coinmarketcap.com/currencies/{quote(str(slug).strip().lower(), safe='')}/"
+    coin["cmc_slug"] = str(slug).strip().lower()
+    coin["cmc_url"] = cu
+    if not str(coin.get("source_url") or "").strip():
+        coin["source_url"] = cu
+
+
 def process_tickers(tickers_data, target_exchanges):
     """Process ticker data to extract exchange volumes"""
     volumes = {ex: "N/A" for ex in target_exchanges}
@@ -605,7 +632,7 @@ def run_scanner():
                         app_logger.info("📥 Refreshing CMC cryptocurrency map cache (Telegram CMC deep links)...")
                         if not cmc_slug_resolver.refresh_map_from_api(cmc):
                             app_logger.warning(
-                                "⚠️ CMC map refresh failed or empty; CoinGecko-only runs may fall back to CMC search URLs"
+                                "⚠️ CMC map refresh failed or empty; CMC deep links may fall back to CoinGecko until the map loads"
                             )
                     else:
                         app_logger.info(
@@ -1463,7 +1490,8 @@ def run_scanner():
                 
                 for coin in entered:
                     app_logger.info(f"   🟢 {coin['symbol']}")
-                    
+                    _ensure_cmc_notify_urls(coin, cmc_slug_resolver)
+
                     # Get chart image from Chart-IMG (external service)
                     caption = MessageFormatter.format_entry(coin)
                     entry_markup = telegram.coin_link_reply_markup(coin)
@@ -1500,6 +1528,7 @@ def run_scanner():
             app_logger.info(f"\n📱 Sending exit notifications for {len(exited)} coins...")
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
+                _ensure_cmc_notify_urls(coin, cmc_slug_resolver)
                 message = MessageFormatter.format_exit(coin)
                 exit_markup = telegram.coin_link_reply_markup(coin)
                 try:
@@ -1674,6 +1703,7 @@ def run_scanner():
                     settings.public_qualified_snapshot_file,
                     final_results,
                     field_set=settings.public_qualified_snapshot_field_set,
+                    scan_interval_seconds=settings.scan_interval_seconds,
                 )
                 app_logger.info("📤 Public qualified snapshot written")
             except Exception as snap_err:

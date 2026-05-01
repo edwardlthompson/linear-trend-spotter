@@ -26,7 +26,7 @@ def _build_source_url(coin: Dict[str, Any]) -> str:
 
     symbol = str(coin.get('symbol') or coin.get('coin_symbol') or '').strip()
     if symbol:
-        return f"https://coinmarketcap.com/search/?q={quote(symbol)}"
+        return f"https://www.coingecko.com/en/search?query={quote(symbol)}"
 
     return ''
 

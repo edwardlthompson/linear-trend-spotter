@@ -119,6 +119,7 @@ class Settings:
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED': False,
             'PUBLIC_QUALIFIED_SNAPSHOT_FILE': 'qualified_public_snapshot.json',
             'PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET': 'full',
+            'SCAN_INTERVAL_SECONDS': 3600,
             'SCAN_COSTS_ENABLED': False,
             'SCAN_COSTS_FILE': 'scan_costs.json',
             'DEGRADE_SKIP_BACKTEST_ENABLED': False,
@@ -255,6 +256,7 @@ class Settings:
             ('WEEKLY_DIGEST_HOUR_UTC', 0, 23),
             ('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0, 10_000_000),
             ('CMC_SLUG_MAP_MAX_AGE_HOURS', 1, 8760),
+            ('SCAN_INTERVAL_SECONDS', 60, 604800),
             ('QUIET_HOURS_START_HOUR_UTC', 0, 23),
             ('QUIET_HOURS_END_HOUR_UTC', 0, 23),
         ]:
@@ -764,6 +766,19 @@ class Settings:
     @property
     def public_qualified_snapshot_field_set(self) -> str:
         return str(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET', 'full')).strip().lower()
+
+    @property
+    def scan_interval_seconds(self) -> int:
+        """Nominal seconds between worker scans (Render `SCAN_INTERVAL_SECONDS` overrides config)."""
+        env_raw = os.getenv('SCAN_INTERVAL_SECONDS', '').strip()
+        if env_raw:
+            try:
+                v = int(env_raw)
+                if 60 <= v <= 604800:
+                    return v
+            except ValueError:
+                pass
+        return int(self._config.get('SCAN_INTERVAL_SECONDS', 3600))
 
     @property
     def scan_costs_enabled(self) -> bool:

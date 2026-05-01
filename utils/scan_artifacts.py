@@ -55,6 +55,7 @@ def build_public_qualified_snapshot(
     final_results: list[dict[str, Any]],
     *,
     field_set: str = "full",
+    scan_interval_seconds: int = 3600,
 ) -> dict[str, Any]:
     """Notification-parity subset for public JSON (Q1/Q2). No secrets.
 
@@ -84,11 +85,18 @@ def build_public_qualified_snapshot(
             coin["exchange_volumes"] = row.get("exchange_volumes")
             coin["volume_24h"] = row.get("volume_24h")
             coin["ohlcv_source"] = row.get("ohlcv_source")
+            strategies = row.get("backtest_top_strategies")
+            if strategies is not None:
+                coin["backtest_top_strategies"] = strategies
+            if row.get("backtest_buy_hold") is not None:
+                coin["backtest_buy_hold"] = row.get("backtest_buy_hold")
         coins_out.append(coin)
+    interval = max(60, int(scan_interval_seconds or 3600))
     return {
         "schema_version": 1,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "field_set": "minimal" if minimal else "full",
+        "scan_interval_seconds": interval,
         "coins": coins_out,
     }
 
@@ -99,6 +107,11 @@ def write_public_qualified_snapshot(
     final_results: list[dict[str, Any]],
     *,
     field_set: str = "full",
+    scan_interval_seconds: int = 3600,
 ) -> None:
-    payload = build_public_qualified_snapshot(final_results, field_set=field_set)
+    payload = build_public_qualified_snapshot(
+        final_results,
+        field_set=field_set,
+        scan_interval_seconds=scan_interval_seconds,
+    )
     _atomic_write_json(data_dir / filename, payload)
