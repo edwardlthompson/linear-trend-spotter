@@ -47,12 +47,25 @@ from utils.scan_artifacts import (
     write_scan_heartbeat,
 )
 from utils.scan_costs import read_last_completed_coingecko_http_total, write_scan_costs_file
+from utils.quiet_hours import is_within_utc_quiet_window
+from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.cmc_resolve import build_cmc_normalized_lookup, resolve_cmc_data
 
 # Import exchange database
 from exchange_data.exchange_db import ExchangeDatabase
 from exchange_data.exchange_fetcher import ExchangeFetcher
+
+
+def _telegram_quiet_active() -> bool:
+    if not settings.quiet_hours_enabled:
+        return False
+    return is_within_utc_quiet_window(
+        datetime.now(timezone.utc),
+        settings.quiet_hours_start_hour_utc,
+        settings.quiet_hours_end_hour_utc,
+    )
+
 
 def process_tickers(tickers_data, target_exchanges):
     """Process ticker data to extract exchange volumes"""
@@ -1425,6 +1438,7 @@ def run_scanner():
         # ============================================================
         # STEP 10: Send Telegram notifications with chart images
         # ============================================================
+        quiet = _telegram_quiet_active()
         if telegram and entered and settings.entry_notifications:
             with timed_block('notifications'):
                 app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
@@ -1434,6 +1448,7 @@ def run_scanner():
                     
                     # Get chart image from Chart-IMG (external service)
                     caption = MessageFormatter.format_entry(coin)
+                    entry_markup = telegram.coin_link_reply_markup(coin)
                     
                     combined_image = None
                     try:
@@ -1443,15 +1458,19 @@ def run_scanner():
 
                     if combined_image:
                         img_data = io.BytesIO(combined_image)
-                        message_id = telegram.send_photo(img_data, caption=caption)
+                        message_id = telegram.send_photo(
+                            img_data,
+                            caption=caption,
+                            reply_markup=entry_markup,
+                        )
                         if message_id:
                             app_logger.info("      📤 Sent combined image notification")
                         else:
                             app_logger.error("      ❌ Failed to send combined image notification, falling back to text")
-                            telegram.send_message(caption)
+                            telegram.send_message(caption, reply_markup=entry_markup)
 
                     else:
-                        message_id = telegram.send_message(caption)
+                        message_id = telegram.send_message(caption, reply_markup=entry_markup)
                         if message_id:
                             app_logger.info("      📤 Sent text-only notification")
                         else:
@@ -1464,6 +1483,7 @@ def run_scanner():
             for coin in exited:
                 app_logger.info(f"   🔴 Exit: {coin['symbol']}")
                 message = MessageFormatter.format_exit(coin)
+                exit_markup = telegram.coin_link_reply_markup(coin)
                 try:
                     exit_image = build_exit_notification_image(coin, settings.db_paths['scanner'])
                 except Exception as e:
@@ -1471,21 +1491,34 @@ def run_scanner():
                     exit_image = None
 
                 if exit_image:
-                    sent = telegram.send_photo(io.BytesIO(exit_image), caption=message)
+                    sent = telegram.send_photo(
+                        io.BytesIO(exit_image),
+                        caption=message,
+                        reply_markup=exit_markup,
+                    )
                     if not sent:
                         app_logger.warning(f"      ⚠️ Failed to send exit image for {coin['symbol']}, falling back to text")
-                        telegram.send_message(message)
+                        telegram.send_message(message, reply_markup=exit_markup)
                 else:
-                    telegram.send_message(message)
+                    telegram.send_message(message, reply_markup=exit_markup)
 
                 metrics.increment('notifications_sent')
 
-        if telegram and settings.anomaly_alerts_enabled and anomaly_messages:
+        if (
+            telegram
+            and settings.anomaly_alerts_enabled
+            and anomaly_messages
+            and not (quiet and settings.quiet_hours_suppress_anomaly)
+        ):
             anomaly_text = "⚠️ <b>Scanner Anomaly Detector</b>\n" + "\n".join(f"• {m}" for m in anomaly_messages)
             telegram.send_message(anomaly_text)
             metrics.increment('notifications_sent')
 
-        if telegram and settings.weekly_digest_enabled:
+        if (
+            telegram
+            and settings.weekly_digest_enabled
+            and not (quiet and settings.quiet_hours_suppress_weekly_digest)
+        ):
             now_utc = datetime.now(timezone.utc)
             state = _load_weekly_digest_state()
             current_week_key = _iso_week_key(now_utc)
@@ -1507,7 +1540,11 @@ def run_scanner():
                     )
                     metrics.increment('notifications_sent')
 
-        if telegram and (entered or exited):
+        if (
+            telegram
+            and (entered or exited)
+            and not (quiet and settings.quiet_hours_suppress_event_summary)
+        ):
             app_logger.info("\n📱 Sending scanner event summary notification...")
             active_ranking_rows = _build_active_ranking_rows(
                 final_results,
@@ -1543,6 +1580,18 @@ def run_scanner():
                 f"messages={sent_summary_count}/1 "
                 f"active_coins={len(active_ranking_rows)}"
             )
+
+        if telegram and sync_still_qualifying_scan_message(
+            telegram,
+            state_path=settings.still_qualifying_state_path,
+            final_results=final_results,
+            entered_len=len(entered),
+            exited_len=len(exited),
+            enabled=settings.still_qualifying_edit_enabled,
+            no_change_notifications=settings.no_change_notifications,
+            quiet_suppress=quiet and settings.quiet_hours_suppress_still_qualifying,
+        ):
+            metrics.increment('notifications_sent')
 
         if not telegram and (entered or exited):
             app_logger.warning("⚠️ Entry/exit events detected but Telegram is disabled")

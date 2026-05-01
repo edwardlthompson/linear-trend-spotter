@@ -117,15 +117,33 @@ class TelegramClient:
         tv_url = f"https://www.tradingview.com/chart/?symbol={symbol}USD" # Generic URL, could be improved
         analyze_url = MessageFormatter.primary_market_url(coin).strip()
 
-        buttons = []
+        rows: list[list[dict]] = []
+        row0: list[dict] = []
         if symbol:
-            buttons.append({"text": "📈 View Chart", "url": tv_url})
+            row0.append({"text": "📈 View Chart", "url": tv_url})
         if analyze_url:
-            buttons.append({"text": "🔍 Analyze Coin", "url": analyze_url})
-            
-        if buttons:
-            return {"inline_keyboard": [buttons]}
+            row0.append({"text": "🔍 Analyze Coin", "url": analyze_url})
+        if row0:
+            rows.append(row0)
+
+        ex_row: list[dict] = []
+        for label, url in MessageFormatter.exchange_url_buttons(coin):
+            if not url:
+                continue
+            ex_row.append({"text": label, "url": url})
+            if len(ex_row) >= 3:
+                rows.append(ex_row)
+                ex_row = []
+        if ex_row:
+            rows.append(ex_row)
+
+        if rows:
+            return {"inline_keyboard": rows}
         return None
+
+    def coin_link_reply_markup(self, coin: Dict) -> dict | None:
+        """Inline keyboard for entry/exit messages (chart, CMC/CG, per-exchange links)."""
+        return self._build_context_keyboard(coin)
 
     def send_entry_notification(self, coin: Dict, chart_bytes: bytes = None) -> Optional[int]:
         """Send entry notification with chart and backtest details"""

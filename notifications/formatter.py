@@ -3,7 +3,7 @@ Notification message formatting
 """
 
 import html
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from urllib.parse import quote
 
 from config.constants import EXCHANGE_EMOJIS
@@ -44,6 +44,35 @@ class MessageFormatter:
             return f"https://coinmarketcap.com/search/?q={quote(symbol)}"
 
         return ''
+
+    @staticmethod
+    def _volume_listed_for_exchange(raw: object) -> bool:
+        if raw is None:
+            return False
+        s = str(raw).strip().upper()
+        if not s or s in {'N/A', 'NA', 'NONE', 'NULL'}:
+            return False
+        try:
+            return float(s) > 0
+        except ValueError:
+            return True
+
+    @staticmethod
+    def exchange_url_buttons(coin: Dict) -> List[Tuple[str, str]]:
+        """Per-exchange trade URLs for targets that show non-empty listing volume on the coin."""
+        symbol = str(coin.get('symbol', '') or '').strip().upper()
+        if not symbol:
+            return []
+        vols = coin.get('exchange_volumes') or {}
+        out: List[Tuple[str, str]] = []
+        if MessageFormatter._volume_listed_for_exchange(vols.get('coinbase')):
+            out.append(('Coinbase', f'https://www.coinbase.com/advanced-trade/{symbol}-USD'))
+        if MessageFormatter._volume_listed_for_exchange(vols.get('kraken')):
+            pair = f'{symbol.lower()}-usd'
+            out.append(('Kraken', f'https://pro.kraken.com/app/trade/{pair}'))
+        if MessageFormatter._volume_listed_for_exchange(vols.get('mexc')):
+            out.append(('MEXC', f'https://www.mexc.com/exchange/{symbol}_USDT'))
+        return out
 
     @staticmethod
     def primary_market_url(coin: Dict) -> str:

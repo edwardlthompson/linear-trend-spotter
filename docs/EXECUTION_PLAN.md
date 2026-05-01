@@ -322,14 +322,17 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Flag off: no behavior change for existing flows; flag on: commands return expected text.
   - **Notes:** **`SCANNER_DIAG_COMMANDS_ENABLED`** (default **false**). **`/health`**: `SCAN_HEARTBEAT_FILE` + last `metrics.json` **`coins_processed`**. **`/last`**: last metrics row timestamp/duration. **`/cost`**: **`coingecko_http_*`** slice + Polygon/CMC totals + note if **`scan_costs.json`** exists. Commands parsed with **`/cmd@BotName`** stripping.
 
-- [ ] **K2.** **Quiet hours:** config window (UTC) suppressing non-critical alerts; **entries/critical unchanged** when disabled; default = no quiet hours.  
+- [x] **K2.** **Quiet hours:** config window (UTC) suppressing non-critical alerts; **entries/critical unchanged** when disabled; default = no quiet hours.  
   - **Verification:** Default config sends same alerts as today; quiet window suppresses only configured classes.
+  - **Notes:** **`QUIET_HOURS_ENABLED`** (default **false**). **`QUIET_HOURS_START_HOUR_UTC`** / **`QUIET_HOURS_END_HOUR_UTC`** (default **22**→**6**, wrap). Per-class toggles: **`QUIET_HOURS_SUPPRESS_ANOMALY`**, **`QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST`**, **`QUIET_HOURS_SUPPRESS_EVENT_SUMMARY`**, **`QUIET_HOURS_SUPPRESS_STILL_QUALIFYING`** (defaults **true** when quiet). Entry/exit/degrade Telegram paths are **not** gated.
 
-- [ ] **K3.** **Per-exchange deep links** in formatter/keyboard (Coinbase/Kraken/MEXC) **in addition to** CMC link; no removal of existing buttons.  
+- [x] **K3.** **Per-exchange deep links** in formatter/keyboard (Coinbase/Kraken/MEXC) **in addition to** CMC link; no removal of existing buttons.  
   - **Verification:** Manual Telegram check; links resolve.
+  - **Notes:** **`MessageFormatter.exchange_url_buttons`** + **`TelegramClient.coin_link_reply_markup`**; entry/exit **`send_photo`/`send_message`** in **`main.py`** use that markup (Chart / Analyze + per-exchange URL rows).
 
-- [ ] **K4.** **Message edit** path for “still qualifying” (optional): use `editMessageText` only when config enabled; default off.  
+- [x] **K4.** **Message edit** path for “still qualifying” (optional): use `editMessageText` only when config enabled; default off.  
   - **Verification:** Default off: message volume unchanged vs baseline.
+  - **Notes:** **`STILL_QUALIFYING_EDIT_ENABLED`** (default **false**) + **`NO_CHANGE_NOTIFICATIONS`**. One roster message per chat; **`STILL_QUALIFYING_STATE_FILE`** stores **`message_id`** under **`DATA_DIR`**; cleared on any entry/exit. **`utils/still_qualifying_notify.py`**.
 
 ---
 
@@ -604,7 +607,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **K2–O**, **P2**, **Q7–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **L–O**, **P2**, **Q7–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -622,7 +625,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
 | I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
-| K | Telegram & UX | **K1** done (**SCANNER_DIAG_COMMANDS_ENABLED**); **K2–K4** pending |
+| K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
 | L | Data & strategy | **L0** gain thresholds done; **L1–L4** pending |
 | M | Engineering quality | **M2** pre-commit; **M1/M3** pending |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |

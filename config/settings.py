@@ -119,6 +119,15 @@ class Settings:
             'CMC_SLUG_MAP_CACHE_FILE': 'cmc_cryptocurrency_map_cache.json',
             'CMC_SLUG_LEARN_FILE': 'gecko_id_to_cmc_slug.json',
             'SCANNER_DIAG_COMMANDS_ENABLED': False,
+            'QUIET_HOURS_ENABLED': False,
+            'QUIET_HOURS_START_HOUR_UTC': 22,
+            'QUIET_HOURS_END_HOUR_UTC': 6,
+            'QUIET_HOURS_SUPPRESS_ANOMALY': True,
+            'QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST': True,
+            'QUIET_HOURS_SUPPRESS_EVENT_SUMMARY': True,
+            'QUIET_HOURS_SUPPRESS_STILL_QUALIFYING': True,
+            'STILL_QUALIFYING_EDIT_ENABLED': False,
+            'STILL_QUALIFYING_STATE_FILE': 'still_qualifying_telegram.json',
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -194,6 +203,12 @@ class Settings:
             'DEGRADE_SKIP_BACKTEST_ENABLED',
             'CMC_SLUG_MAP_ENABLED',
             'SCANNER_DIAG_COMMANDS_ENABLED',
+            'QUIET_HOURS_ENABLED',
+            'QUIET_HOURS_SUPPRESS_ANOMALY',
+            'QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST',
+            'QUIET_HOURS_SUPPRESS_EVENT_SUMMARY',
+            'QUIET_HOURS_SUPPRESS_STILL_QUALIFYING',
+            'STILL_QUALIFYING_EDIT_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -224,6 +239,8 @@ class Settings:
             ('WEEKLY_DIGEST_HOUR_UTC', 0, 23),
             ('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0, 10_000_000),
             ('CMC_SLUG_MAP_MAX_AGE_HOURS', 1, 8760),
+            ('QUIET_HOURS_START_HOUR_UTC', 0, 23),
+            ('QUIET_HOURS_END_HOUR_UTC', 0, 23),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
@@ -322,6 +339,7 @@ class Settings:
             'SCAN_COSTS_FILE',
             'CMC_SLUG_MAP_CACHE_FILE',
             'CMC_SLUG_LEARN_FILE',
+            'STILL_QUALIFYING_STATE_FILE',
         ]:
             value = normalized.get(path_key)
             if not isinstance(value, str) or not value.strip():
@@ -378,6 +396,44 @@ class Settings:
     def scanner_diag_commands_enabled(self) -> bool:
         """When True, ``telegram_bot`` handles /health, /last, /cost (Milestone K1)."""
         return bool(self._config.get('SCANNER_DIAG_COMMANDS_ENABLED', False))
+
+    @property
+    def quiet_hours_enabled(self) -> bool:
+        return bool(self._config.get('QUIET_HOURS_ENABLED', False))
+
+    @property
+    def quiet_hours_start_hour_utc(self) -> int:
+        return int(self._config.get('QUIET_HOURS_START_HOUR_UTC', 22))
+
+    @property
+    def quiet_hours_end_hour_utc(self) -> int:
+        return int(self._config.get('QUIET_HOURS_END_HOUR_UTC', 6))
+
+    @property
+    def quiet_hours_suppress_anomaly(self) -> bool:
+        return bool(self._config.get('QUIET_HOURS_SUPPRESS_ANOMALY', True))
+
+    @property
+    def quiet_hours_suppress_weekly_digest(self) -> bool:
+        return bool(self._config.get('QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST', True))
+
+    @property
+    def quiet_hours_suppress_event_summary(self) -> bool:
+        return bool(self._config.get('QUIET_HOURS_SUPPRESS_EVENT_SUMMARY', True))
+
+    @property
+    def quiet_hours_suppress_still_qualifying(self) -> bool:
+        return bool(self._config.get('QUIET_HOURS_SUPPRESS_STILL_QUALIFYING', True))
+
+    @property
+    def still_qualifying_edit_enabled(self) -> bool:
+        return bool(self._config.get('STILL_QUALIFYING_EDIT_ENABLED', False))
+
+    @property
+    def still_qualifying_state_path(self) -> Path:
+        raw = str(self._config.get('STILL_QUALIFYING_STATE_FILE', 'still_qualifying_telegram.json')).strip()
+        name = raw or 'still_qualifying_telegram.json'
+        return self.DATA_DIR / name
 
     @property
     def telegram(self) -> Optional[Dict[str, str]]:
