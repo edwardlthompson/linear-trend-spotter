@@ -16,7 +16,8 @@ env:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Pin 22.04: TA-Lib PyPI ships sdist-only; libta-lib0-dev is in universe and is reliable on jammy.
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,11 +27,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      # TA-Lib Python wheel often falls back to source build; Ubuntu needs headers from this package.
+      # apt exits 100 on fatal errors (e.g. missing package). Ensure universe + build tools for TA-Lib sdist.
       - name: Install TA-Lib native library
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libta-lib0-dev
+          set -euxo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y software-properties-common
+          sudo apt-add-repository -y universe || true
+          sudo apt-get update -y
+          sudo apt-get install -y libta-lib0-dev build-essential
 
       - name: Install dependencies
         run: |
