@@ -9,6 +9,11 @@ on:
 permissions:
   contents: read
 
+# Use Node 24 for JavaScript-based actions (checkout/setup-python) per GitHub deprecation timeline.
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -21,13 +26,20 @@ jobs:
         with:
           python-version: "3.11"
 
+      # TA-Lib Python wheel often falls back to source build; Ubuntu needs headers from this package.
+      - name: Install TA-Lib native library
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libta-lib0-dev
+
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install ruff
+          python -m pip install --upgrade pip wheel
+          python -m pip install -r requirements.txt
+          python -m pip install ruff
 
       - name: Ruff lint
-        run: ruff check .
+        run: python -m ruff check .
 
       - name: Backtest environment smoke test
         run: python scripts/verify_backtest_env.py
