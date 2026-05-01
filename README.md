@@ -22,6 +22,7 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 - **Render:** The worker uses `render.yaml` with `autoDeployTrigger: commit` so merges to the connected branch trigger a deploy. In the Render dashboard, confirm the service is linked to this repository, the correct **branch**, and **Auto-Deploy** is on (see execution plan milestone **A1**).
 - **Branch protection:** After CI is green, enable required status checks on `main` so merges cannot bypass the workflow (milestone **A4** in `docs/EXECUTION_PLAN.md`).
 - **Engineering roadmap:** `docs/EXECUTION_PLAN.md` tracks milestones, verification steps, and checkbox progress.
+- **Exception hygiene:** `scheduler.py`, `manage_bot.py`, and `bot_watchdog.py` use specific exception handling (no bare `except:`) where lock files, PIDs, and subprocess fallbacks are involved.
 
 ---
 

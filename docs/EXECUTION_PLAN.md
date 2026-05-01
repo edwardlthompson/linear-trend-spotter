@@ -137,11 +137,11 @@ Re-verify quotas on official docs before large refactors.
 
 ### Tasks
 
-- [ ] **B1.** `scheduler.py`: replace bare `except:` on lock unlink with `except OSError:`; log if useful.  
+- [x] **B1.** `scheduler.py`: replace bare `except:` on lock unlink with `except OSError:`; log if useful.  
   - **Verification:** `python -m compileall scheduler.py`; on Linux/WSL, run scheduler lock path smoke test if available.
-- [ ] **B2.** `manage_bot.py`: replace bare `except:` with specific types (`ValueError`, `OSError`, `ProcessLookupError`, etc.).  
+- [x] **B2.** `manage_bot.py`: replace bare `except:` with specific types (`ValueError`, `OSError`, `ProcessLookupError`, etc.).  
   - **Verification:** `python -m compileall manage_bot.py`.
-- [ ] **B3.** Review `bot_watchdog.py` for same patterns.  
+- [x] **B3.** Review `bot_watchdog.py` for same patterns.  
   - **Verification:** `compileall` + quick manual run of entrypoint if applicable.
 
 ---

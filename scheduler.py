@@ -61,7 +61,7 @@ class ScanLock:
                 # Try to remove the lock file
                 try:
                     self.lock_file.unlink()
-                except:
+                except OSError:
                     pass
                 self.logger.info("Lock released")
             except Exception as e:

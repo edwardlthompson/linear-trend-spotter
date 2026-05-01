@@ -19,7 +19,7 @@ def get_pid():
         with open(PID_FILE, 'r') as f:
             try:
                 return int(f.read().strip())
-            except:
+            except ValueError:
                 return None
     return None
 
@@ -74,7 +74,7 @@ def stop():
         time.sleep(2)
         if is_running(pid):
             os.kill(pid, signal.SIGKILL)
-    except:
+    except (ProcessLookupError, PermissionError, OSError):
         pass
     
     if os.path.exists(PID_FILE):
@@ -91,9 +91,9 @@ def status():
         if os.path.exists(LOG_FILE):
             print("\n📝 Last 5 log lines:")
             try:
-                subprocess.run(['tail', '-5', LOG_FILE])
-            except:
-                # Fallback if tail command fails
+                subprocess.run(['tail', '-5', LOG_FILE], check=False)
+            except (FileNotFoundError, OSError):
+                # Fallback if tail is missing (e.g. Windows) or command fails
                 with open(LOG_FILE, 'r') as f:
                     lines = f.readlines()[-5:]
                     for line in lines:
