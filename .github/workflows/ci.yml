@@ -26,19 +26,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # TA-Lib: sdist-only + native lib — skipped in CI (see requirements-ci.txt). Production uses requirements.txt.
-      - name: Install dependencies
-        run: |
-          set -euxo pipefail
-          python -m pip install --upgrade pip wheel
-          python -m pip install -r requirements-ci.txt
-          python -m pip install "ruff>=0.8.0,<0.13"
-
-      - name: Ruff lint
-        run: python -m ruff check .
-
-      - name: Backtest environment smoke test
-        run: python scripts/verify_backtest_env.py
-
-      - name: Compile all Python sources
-        run: python -m compileall -q .
+      # TA-Lib: sdist-only + native lib — skipped in CI (see requirements-ci.txt). Render build uses the same script.
+      - name: Install, lint, and verify (shared with Render)
+        run: bash scripts/ci_verify.sh

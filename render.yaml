@@ -4,7 +4,8 @@ services:
     runtime: python
     plan: starter
     autoDeployTrigger: commit
-    buildCommand: pip install -r requirements.txt
+    # Match GitHub CI: requirements-ci.txt (no TA-Lib sdist), ruff, verify_backtest_env, compileall.
+    buildCommand: bash scripts/ci_verify.sh
     startCommand: bash scripts/run_render_worker.sh
     envVars:
       - key: PYTHON_VERSION
