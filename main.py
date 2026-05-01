@@ -52,6 +52,7 @@ from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.active_ranking import build_active_ranking_rows
+from scanner.anomaly_alerts import build_anomaly_messages
 from scanner.cmc_resolve import build_cmc_normalized_lookup, resolve_cmc_data
 from scanner.weekly_digest import (
     build_weekly_digest_message,
@@ -331,40 +332,6 @@ def _attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
 
 
 
-
-def _build_anomaly_messages(
-    total_gain_qualified: int,
-    missing_cg_count: int,
-    no_ticker_count: int,
-    cg_mapped_count: int,
-    processed_ohlcv_count: int,
-) -> list[str]:
-    messages: list[str] = []
-
-    if total_gain_qualified > 0:
-        missing_cg_ratio = missing_cg_count / total_gain_qualified
-        if missing_cg_ratio > settings.anomaly_max_missing_cg_ratio:
-            messages.append(
-                "High CoinGecko mapping miss ratio "
-                f"({missing_cg_count}/{total_gain_qualified}, {missing_cg_ratio:.0%})"
-            )
-
-    if cg_mapped_count > 0:
-        no_ticker_ratio = no_ticker_count / cg_mapped_count
-        if no_ticker_ratio > settings.anomaly_max_no_ticker_ratio:
-            messages.append(
-                "High no-ticker ratio "
-                f"({no_ticker_count}/{cg_mapped_count}, {no_ticker_ratio:.0%})"
-            )
-
-        ohlcv_success_ratio = processed_ohlcv_count / cg_mapped_count
-        if ohlcv_success_ratio < settings.anomaly_min_ohlcv_success_ratio:
-            messages.append(
-                "Low OHLCV success ratio "
-                f"({processed_ohlcv_count}/{cg_mapped_count}, {ohlcv_success_ratio:.0%})"
-            )
-
-    return messages
 
 def run_scanner():
     """Main orchestration function"""
@@ -996,12 +963,15 @@ def run_scanner():
         for coin in all_processed:
             compute_data_reliability(coin)
 
-        anomaly_messages = _build_anomaly_messages(
+        anomaly_messages = build_anomaly_messages(
             total_gain_qualified=len(gain_qualified),
             missing_cg_count=len(coins_without_cg_ids),
             no_ticker_count=no_ticker_count,
             cg_mapped_count=len(coins_with_cg_ids),
             processed_ohlcv_count=len(all_processed),
+            max_missing_cg_ratio=settings.anomaly_max_missing_cg_ratio,
+            max_no_ticker_ratio=settings.anomaly_max_no_ticker_ratio,
+            min_ohlcv_success_ratio=settings.anomaly_min_ohlcv_success_ratio,
         )
         if anomaly_messages:
             app_logger.warning("⚠️ Anomaly detector triggered:")
