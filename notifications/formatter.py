@@ -29,6 +29,10 @@ class MessageFormatter:
         if explicit:
             return explicit
 
+        cmc_slug_resolved = str(coin.get('cmc_slug') or '').strip().lower()
+        if cmc_slug_resolved:
+            return f"https://coinmarketcap.com/currencies/{quote(cmc_slug_resolved, safe='')}/"
+
         slug = str(coin.get('slug', '') or '').strip().lower()
         gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip().lower()
         # Top-coin snapshot from CoinGecko stores the API coin id in `slug`; that is not a CMC slug.

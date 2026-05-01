@@ -12,6 +12,10 @@ def _build_source_url(coin: Dict[str, Any]) -> str:
     if source_url:
         return source_url
 
+    cmc_slug_resolved = str(coin.get('cmc_slug') or '').strip().lower()
+    if cmc_slug_resolved:
+        return f"https://coinmarketcap.com/currencies/{quote(cmc_slug_resolved, safe='')}/"
+
     slug = str(coin.get('slug') or '').strip().lower()
     gecko_id = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip().lower()
     if slug and not (gecko_id and slug == gecko_id):

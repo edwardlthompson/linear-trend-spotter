@@ -5,6 +5,7 @@ import sys
 import json
 import io
 from html import escape as html_escape
+from urllib.parse import quote
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
@@ -571,6 +572,36 @@ def run_scanner():
                 app_logger.info("✅ Telegram client initialized")
             else:
                 app_logger.warning("⚠️ Telegram credentials missing - notifications disabled")
+
+            cmc_slug_resolver = None
+            if settings.cmc_slug_map_enabled and settings.cmc_api_key and str(settings.cmc_api_key).strip():
+                from utils.cmc_slug_resolver import CmcSlugResolver
+
+                cmc_slug_resolver = CmcSlugResolver(
+                    settings.DATA_DIR,
+                    map_cache_file=settings.cmc_slug_map_cache_file,
+                    learn_file=settings.cmc_slug_learn_file,
+                )
+                try:
+                    cmc_slug_resolver.load()
+                    if (
+                        not cmc_slug_resolver.by_symbol
+                        or cmc_slug_resolver.map_cache_is_stale(settings.cmc_slug_map_max_age_hours)
+                    ):
+                        app_logger.info("📥 Refreshing CMC cryptocurrency map cache (Telegram CMC deep links)...")
+                        if not cmc_slug_resolver.refresh_map_from_api(cmc):
+                            app_logger.warning(
+                                "⚠️ CMC map refresh failed or empty; CoinGecko-only runs may fall back to CMC search URLs"
+                            )
+                    else:
+                        app_logger.info(
+                            "✅ CMC slug map cache loaded (%s symbols indexed, max age %sh)",
+                            len(cmc_slug_resolver.by_symbol),
+                            settings.cmc_slug_map_max_age_hours,
+                        )
+                except Exception as slug_exc:
+                    app_logger.warning("⚠️ CMC slug resolver unavailable: %s", slug_exc)
+                    cmc_slug_resolver = None
         
         # ============================================================
         # STEP 1: Get top configured coins with gains from provider
@@ -801,6 +832,20 @@ def run_scanner():
                             'volume_24h': info['volume_24h'],
                             'current_price': float(info.get('price', 0) or 0),
                         }
+                        gecko_for_link = str(info.get('gecko_id') or '').strip().lower()
+                        if top_coins_provider == 'coingecko':
+                            coin_info['gecko_id'] = gecko_for_link
+                            if cmc_slug_resolver and gecko_for_link:
+                                resolved_slug = cmc_slug_resolver.resolve(
+                                    symbol=symbol,
+                                    name=str(info.get('name') or ''),
+                                    gecko_id=gecko_for_link,
+                                )
+                                if resolved_slug:
+                                    cu = f"https://coinmarketcap.com/currencies/{quote(resolved_slug, safe='')}/"
+                                    coin_info['cmc_slug'] = resolved_slug
+                                    coin_info['cmc_url'] = cu
+                                    coin_info['source_url'] = cu
                         gain_qualified.append(coin_info)
                         _log_filter_line(f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% Vol:${info['volume_24h']:,.0f}")
                     else:
@@ -885,6 +930,18 @@ def run_scanner():
                 coins_with_cg_ids.append(coin)
             else:
                 coins_without_cg_ids.append(coin['symbol'])
+
+        if cmc_slug_resolver:
+            for coin in coins_with_cg_ids:
+                gid = str(coin.get('gecko_id') or coin.get('cg_id') or '').strip().lower()
+                cslug = str(coin.get('cmc_slug') or '').strip().lower()
+                if not cslug and top_coins_provider == 'cmc':
+                    raw = str(coin.get('slug') or '').strip().lower()
+                    if raw and raw != gid:
+                        cslug = raw
+                if gid and cslug and cslug != gid:
+                    cmc_slug_resolver.learn_from_cmc_listing_coin(gecko_id=gid, cmc_slug=cslug)
+            cmc_slug_resolver.save_learned_if_dirty()
 
         coins_with_cg_ids_symbols = {c['symbol'] for c in coins_with_cg_ids}
         

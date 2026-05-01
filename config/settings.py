@@ -112,6 +112,10 @@ class Settings:
             'SCAN_COSTS_FILE': 'scan_costs.json',
             'DEGRADE_SKIP_BACKTEST_ENABLED': False,
             'DEGRADE_PRIOR_CG_HTTP_SKIP_GE': 0,
+            'CMC_SLUG_MAP_ENABLED': True,
+            'CMC_SLUG_MAP_MAX_AGE_HOURS': 72,
+            'CMC_SLUG_MAP_CACHE_FILE': 'cmc_cryptocurrency_map_cache.json',
+            'CMC_SLUG_LEARN_FILE': 'gecko_id_to_cmc_slug.json',
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -185,6 +189,7 @@ class Settings:
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
             'SCAN_COSTS_ENABLED',
             'DEGRADE_SKIP_BACKTEST_ENABLED',
+            'CMC_SLUG_MAP_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -214,6 +219,7 @@ class Settings:
             ('WEEKLY_DIGEST_WEEKDAY_UTC', 0, 6),
             ('WEEKLY_DIGEST_HOUR_UTC', 0, 23),
             ('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0, 10_000_000),
+            ('CMC_SLUG_MAP_MAX_AGE_HOURS', 1, 8760),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
@@ -307,6 +313,8 @@ class Settings:
             'SCANNER_INSIGHTS_FILE',
             'WEEKLY_DIGEST_STATE_FILE',
             'SCAN_COSTS_FILE',
+            'CMC_SLUG_MAP_CACHE_FILE',
+            'CMC_SLUG_LEARN_FILE',
         ]:
             value = normalized.get(path_key)
             if not isinstance(value, str) or not value.strip():
@@ -639,6 +647,24 @@ class Settings:
     @property
     def degrade_prior_cg_http_skip_ge(self) -> int:
         return int(self._config.get('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0))
+
+    @property
+    def cmc_slug_map_enabled(self) -> bool:
+        return bool(self._config.get('CMC_SLUG_MAP_ENABLED', True))
+
+    @property
+    def cmc_slug_map_max_age_hours(self) -> int:
+        return int(self._config.get('CMC_SLUG_MAP_MAX_AGE_HOURS', 72))
+
+    @property
+    def cmc_slug_map_cache_file(self) -> str:
+        name = str(self._config.get('CMC_SLUG_MAP_CACHE_FILE', 'cmc_cryptocurrency_map_cache.json')).strip()
+        return name or 'cmc_cryptocurrency_map_cache.json'
+
+    @property
+    def cmc_slug_learn_file(self) -> str:
+        name = str(self._config.get('CMC_SLUG_LEARN_FILE', 'gecko_id_to_cmc_slug.json')).strip()
+        return name or 'gecko_id_to_cmc_slug.json'
 
     @property
     def base_dir(self) -> Path:

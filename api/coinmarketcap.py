@@ -5,7 +5,7 @@ Free tier: 10,000 calls/month, 30 calls/minute
 
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 import requests
@@ -72,7 +72,37 @@ class CoinMarketCapClient:
         except Exception as e:
             self.logger.error(f"❌ Error fetching from CMC: {e}")
             return None
-    
+
+    def fetch_cryptocurrency_map_page(
+        self,
+        *,
+        start: int = 1,
+        limit: int = 5000,
+        listing_status: str = "active",
+    ) -> Optional[List[Dict]]:
+        """One page of ``/v1/cryptocurrency/map`` for slug resolution (paginate externally)."""
+        self._rate_limit()
+        url = f"{self.BASE_URL}/cryptocurrency/map"
+        params: Dict[str, Any] = {
+            "listing_status": listing_status,
+            "start": max(1, int(start)),
+            "limit": min(5000, max(1, int(limit))),
+        }
+        try:
+            response = self.session.get(url, params=params, timeout=60)
+            record_cmc_http(url)
+            if response.status_code != 200:
+                self.logger.error("CMC map HTTP %s: %s", response.status_code, response.text[:200])
+                return None
+            payload = response.json()
+            data = payload.get("data")
+            if not isinstance(data, list):
+                return None
+            return data
+        except Exception as exc:
+            self.logger.error("CMC map request failed: %s", exc)
+            return None
+
     def extract_gains(self, coin_data: Dict) -> Dict:
         """
         Extract gain percentages from CMC data format

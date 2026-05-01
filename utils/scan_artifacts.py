@@ -69,6 +69,7 @@ def build_public_qualified_snapshot(
             "symbol": str(row.get("symbol", "")).upper(),
             "name": str(row.get("name", "")),
             "slug": row.get("slug"),
+            "cmc_slug": row.get("cmc_slug"),
             "source_url": row.get("source_url") or row.get("cmc_url"),
             "gains": {
                 "7d": float(gains.get("7d", 0) or 0),

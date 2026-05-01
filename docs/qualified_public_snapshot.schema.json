@@ -20,6 +20,10 @@
           "symbol": { "type": "string" },
           "name": { "type": "string" },
           "slug": { "type": ["string", "null"] },
+          "cmc_slug": {
+            "type": ["string", "null"],
+            "description": "CoinMarketCap /currencies/{slug}/ path segment when resolved from map or learn file (G8)"
+          },
           "source_url": { "type": ["string", "null"] },
           "gains": {
             "type": "object",

@@ -109,7 +109,7 @@ Any new price/OHLCV feature must follow this chain unless explicitly exempted in
 
 **Conclusion for “free only” and ~50% CoinGecko reduction (without violating OHLCV order or non-regression guardrails):**
 
-1. **Telegram links → CoinMarketCap** (Milestone G): **Zero API impact**—URLs only. Prefer `slug` → `https://coinmarketcap.com/currencies/{slug}/`; ensure `slug` is populated when using CMC-backed metadata.
+1. **Telegram links → CoinMarketCap** (Milestone G): Prefer **`/currencies/{slug}/`**. With **`TOP_COINS_PROVIDER=cmc`**, listings supply CMC slugs directly. With **`TOP_COINS_PROVIDER=coingecko`**, use **G8**: cached **`/v1/cryptocurrency/map`** + **`gecko_id_to_cmc_slug`** learn file (`CMC_SLUG_MAP_*` config) to set **`cmc_slug`** / `source_url`—bounded CMC map refresh credits, not per-notification HTTP.
 2. **Operational (within guardrails):** Tune **caches** (`CACHE_PRICE_HOURS`, `CACHE_GECKO_ID_DAYS`) only where staleness remains acceptable **and** qualification outputs match baseline runs; **do not** reduce `TOP_COINS_LIMIT` or scan interval for savings (see Non-regression section).
 3. **Architecture:** Prefer **bulk** CoinGecko endpoints where one call returns many coins instead of per-coin calls; ensure SQLite OHLCV cache (`database/cache.py`) is checked **before** repeating the same CG request.
 4. **Do not** use “Polygon-first” or “CMC-first” for OHLCV to save credits; use **cache hits**, **bulk endpoints**, **mapper/list cadence**, and optional **`TOP_COINS_PROVIDER=cmc`** for **universe/listing** metadata only (same universe size)—keeping **CG → Polygon → CMC** for bars.
@@ -221,6 +221,9 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** End-to-end scan with `TOP_COINS_PROVIDER=cmc` produces CMC `source_url` on sample coin.
 - [x] **G7.** Update `linear-trend-spotter-spec.md` or README notification section if spec still mandates CoinGecko links.  
   - **Verification:** Doc grep shows CMC as primary user link.
+- [x] **G8.** When `TOP_COINS_PROVIDER=coingecko`, resolve **real CoinMarketCap currency slugs** for Telegram (avoid `coinmarketcap.com/search/?q=` when a confident match exists): cache **CMC `/v1/cryptocurrency/map`** under `DATA_DIR` (`CMC_SLUG_MAP_*` keys), index by **symbol** with **name** disambiguation, persist **`gecko_id → cmc_slug`** learn file across scans; set `cmc_slug` / `cmc_url` / `source_url` on qualified coins.  
+  - **Verification:** With `CMC_API_KEY` + map cache populated, a CG-top run yields `/currencies/{slug}/` links for common symbols; ambiguous symbols still fall back to search.  
+  - **Notes:** `utils/cmc_slug_resolver.py`, `CoinMarketCapClient.fetch_cryptocurrency_map_page`, `MessageFormatter` / `_build_source_url` honor **`cmc_slug`**. Refresh is credit-bounded (paginated `limit=5000`); tune **`CMC_SLUG_MAP_MAX_AGE_HOURS`** (default 72). Disable with **`CMC_SLUG_MAP_ENABLED`: false**.
 
 ---
 
@@ -570,6 +573,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 | `SCAN_HEARTBEAT_ENABLED` | `false` | When an external monitor (or human) should read **`DATA_DIR` / `SCAN_HEARTBEAT_FILE`** after each successful scan. |
 | `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` | `false` | When a static dashboard (Milestone **Q4+**) will **`fetch()`** the JSON from a URL that serves **`PUBLIC_QUALIFIED_SNAPSHOT_FILE`**. |
 | `SCAN_COSTS_ENABLED` | `false` | When **`DATA_DIR` / `SCAN_COSTS_FILE`** should receive per-scan Polygon/CMC/CG counts and cache summaries (J3). |
+| `CMC_SLUG_MAP_ENABLED` / `CMC_SLUG_MAP_MAX_AGE_HOURS` | `true` / `72` | When **`CMC_API_KEY`** is set, refresh **`CMC_SLUG_MAP_CACHE_FILE`** from **`/v1/cryptocurrency/map`** if missing or stale; persist **`CMC_SLUG_LEARN_FILE`** for **gecko_id → cmc_slug** (Milestone **G8**). |
 
 **Follow-ups**
 
@@ -609,7 +613,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | D | Pins + Ruff/Mypy | Complete (**D3** mypy optional) |
 | E | Cross-platform | Complete |
 | F | Logging | Complete |
-| G | CMC links in Telegram | Complete |
+| G | CMC links in Telegram | Complete (**G8** CG→CMC slug map + cache) |
 | H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
 | I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
@@ -634,7 +638,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Area | Files |
 |------|--------|
 | CI gate + CoinGecko H0 counters | `scripts/check_github_ci.py`, `utils/coingecko_usage.py`, `utils/metrics.py` (report section) |
-| Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py` |
+| Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
