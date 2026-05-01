@@ -14,6 +14,54 @@ Automated full-exchange scanner focused on identifying sustained trend quality (
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 [![CI](https://github.com/edwardlthompson/linear-trend-spotter/actions/workflows/ci.yml/badge.svg)](https://github.com/edwardlthompson/linear-trend-spotter/actions/workflows/ci.yml)
 
+**Repository:** [github.com/edwardlthompson/linear-trend-spotter](https://github.com/edwardlthompson/linear-trend-spotter)
+
+---
+
+## Public qualified-coin dashboard (website)
+
+Read-only **PWA** for the hourly qualified snapshot: sort, filter, theme, exports, deep links, optional chart thumbnails, scan health strip, in-browser “update alerts,” and optional **Tier-B Web Push** when you deploy the small relay service.
+
+**Live site (GitHub Pages, after you turn Pages on):** [edwardlthompson.github.io/linear-trend-spotter/dashboard/](https://edwardlthompson.github.io/linear-trend-spotter/dashboard/)
+
+If that URL returns **404**, GitHub Pages is not enabled yet for this repo—the steps below fix that. Full behavior and CORS notes live in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+
+### How to enable the dashboard
+
+1. **Worker writes the public JSON**  
+   In `config.json` on the Render worker (or local `DATA_DIR`):
+
+   - Set **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** to **`true`**.  
+   - Keep or set **`PUBLIC_QUALIFIED_SNAPSHOT_FILE`** (default `qualified_public_snapshot.json` under `DATA_DIR`).  
+   - Optionally set **`PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET`** to `minimal` or `full` (see `config/settings.py` / Milestone Q3 in `docs/EXECUTION_PLAN.md`).
+
+2. **Expose the JSON over HTTPS with CORS**  
+   Browsers must be allowed to `fetch()` the snapshot from the **origin** that hosts the dashboard (e.g. `https://edwardlthompson.github.io`). Configure **`Access-Control-Allow-Origin`** (and sensible **`Cache-Control`**) on the response that serves `qualified_public_snapshot.json`—for example via Render static headers, a tiny read-only proxy, or the same host that already serves your worker artifacts.
+
+3. **Turn on GitHub Pages**  
+   In the GitHub repo: **Settings → Pages → Build and deployment → Source:** deploy from branch **`main`** with folder **`/docs`**. After the first successful build, the dashboard is at  
+   `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/`  
+   (static files live under [`docs/dashboard/`](docs/dashboard/) in this repo).
+
+4. **Point the UI at your snapshot URL**  
+   - Easiest: open the site with a query string, e.g.  
+     `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/?api=https%3A%2F%2FYOUR-SERVICE.onrender.com%2Fqualified_public_snapshot.json`  
+   - For GitHub Pages builds, copy [`docs/dashboard/config.example.js`](docs/dashboard/config.example.js) to **`docs/dashboard/config.js`**, set **`window.__SNAPSHOT_URL__`** to that HTTPS JSON URL, commit, and redeploy Pages (see Milestone **Q6** in `docs/EXECUTION_PLAN.md`). **Do not** put API keys in `config.js`; the snapshot URL is public by design.
+
+5. **Optional: Tier-B Web Push (off-device scan alerts)**  
+   Deploy the **`push_server/`** Render web service from [`render.yaml`](render.yaml), set **VAPID** and relay secrets, set worker env **`WEB_PUSH_NOTIFY_URL`**, **`WEB_PUSH_INTERNAL_SECRET`**, **`WEB_PUSH_DASHBOARD_URL`**, then add **`__PUSH_API_BASE__`** and **`__VAPID_PUBLIC_KEY__`** to dashboard `config.js` as documented in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+
+---
+
+## Recent engineering additions (changelog-style)
+
+| Area | What shipped |
+|------|----------------|
+| **Public dashboard (Q)** | Static `docs/dashboard/` PWA: snapshot-driven table, health strip (**Q20**), Tier-A polling alerts, Tier-B Web Push client (**Q21**), docs in `docs/WEB_DASHBOARD.md`. |
+| **Web Push relay (Q21)** | Optional `push_server/` Flask + `pywebpush`; second service in `render.yaml`; worker calls relay after each successful scan when env vars are set. |
+| **Backtesting library (P2)** | `backtesting/params.py` — inject **`BacktestLoaderParams`** / **`BacktestRunnerParams`** so hosts avoid the full `settings` object; lazy exports in `backtesting/__init__.py`. |
+| **CI / tests** | `tests/conftest.py` redirects read-only **`DATA_DIR=/var/data`** during pytest collection on Render-style builds. |
+
 ---
 
 ## CI and deployment
