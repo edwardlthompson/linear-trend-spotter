@@ -318,8 +318,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ### Tasks
 
-- [ ] **K1.** **`/health`**, **`/last`**, **`/cost`** (or similar) read-only commands in `telegram_bot.py` reading persisted metrics/heartbeat; feature flag default **off** or commands no-op until enabled.  
+- [x] **K1.** **`/health`**, **`/last`**, **`/cost`** (or similar) read-only commands in `telegram_bot.py` reading persisted metrics/heartbeat; feature flag default **off** or commands no-op until enabled.  
   - **Verification:** Flag off: no behavior change for existing flows; flag on: commands return expected text.
+  - **Notes:** **`SCANNER_DIAG_COMMANDS_ENABLED`** (default **false**). **`/health`**: `SCAN_HEARTBEAT_FILE` + last `metrics.json` **`coins_processed`**. **`/last`**: last metrics row timestamp/duration. **`/cost`**: **`coingecko_http_*`** slice + Polygon/CMC totals + note if **`scan_costs.json`** exists. Commands parsed with **`/cmd@BotName`** stripping.
 
 - [ ] **K2.** **Quiet hours:** config window (UTC) suppressing non-critical alerts; **entries/critical unchanged** when disabled; default = no quiet hours.  
   - **Verification:** Default config sends same alerts as today; quiet window suppresses only configured classes.
@@ -337,6 +338,10 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 *Promoted from former backlog (“Data & strategy”). Defaults must match current min bars and notification content.*
 
 ### Tasks
+
+- [x] **L0.** **Gain filter thresholds (FILTER 1 + exit parity):** configurable **`GAIN_FILTER_MIN_7D_PERCENT`** (default **7**, inclusive) and **`GAIN_FILTER_MIN_30D_PERCENT`** (default **30**, exclusive upper bound so **30d must be > 30** as before); keep **30d > 7d** momentum rule. Applied in **`main.py`** STEP 3 and exit-reason re-checks.  
+  - **Verification:** Default config tightens 7d vs legacy (was no 7d floor); set **`GAIN_FILTER_MIN_7D_PERCENT`: 0** to approximate prior behavior on 7d only.  
+  - **Notes:** Product intentionally **drops** coins whose **7d gain is below the minimum**; narrows qualified set vs pre-change (not a universe/API shrink—filter logic only).
 
 - [ ] **L1.** **Configurable OHLCV min bars** per timeframe in `config.json` with validation in `settings.py`; **defaults equal current hardcoded behavior.**  
   - **Verification:** Default config → same skip/pass rates as before on `verify_backtest_*` sample.
@@ -599,7 +604,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 
 ### 6.6 Remaining engineering scope (pointer)
 
-Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **K–O**, **P2**, **Q7–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
+Outstanding milestones are still listed in **Progress summary** and in **Master execution order**: e.g. **I2** (further `main.py` splits), **K2–O**, **P2**, **Q7–Q21**, optional **D3**, **A4** (settings, not code). Use this section for **risks and ops**; use milestone checkboxes for **delivery**.
 
 ---
 
@@ -617,8 +622,8 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
 | I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
-| K | Telegram & UX | Not started |
-| L | Data & strategy | Not started |
+| K | Telegram & UX | **K1** done (**SCANNER_DIAG_COMMANDS_ENABLED**); **K2–K4** pending |
+| L | Data & strategy | **L0** gain thresholds done; **L1–L4** pending |
 | M | Engineering quality | **M2** pre-commit; **M1/M3** pending |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |
@@ -638,6 +643,8 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Area | Files |
 |------|--------|
 | CI gate + CoinGecko H0 counters | `scripts/check_github_ci.py`, `utils/coingecko_usage.py`, `utils/metrics.py` (report section) |
+| Gain filter (L0) | `main.py` FILTER 1; `GAIN_FILTER_MIN_*` in `config/settings.py` |
+| Telegram diagnostics (K1) | `telegram_bot.py`; **`SCANNER_DIAG_COMMANDS_ENABLED`** in `config.json` |
 | Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `main.py` (uniformity / price paths), `database/cache.py` |
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |

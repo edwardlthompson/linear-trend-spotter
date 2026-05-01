@@ -762,7 +762,10 @@ def run_scanner():
         # ============================================================
         # STEP 3: Match with top-coin provider data and apply volume/gain filters
         # ============================================================
-        app_logger.info(f"\n💰 FILTER 1: Applying volume and gain filters ({top_coins_provider.upper()})...")
+        app_logger.info(
+            f"\n💰 FILTER 1: Applying volume and gain filters ({top_coins_provider.upper()}) "
+            f"(7d≥{settings.gain_filter_min_7d_percent:g}%, 30d>{settings.gain_filter_min_30d_percent:g}%, 30d>7d)..."
+        )
 
         max_detailed_filter_logs = 180
         detailed_filter_logs_emitted = 0
@@ -817,10 +820,17 @@ def run_scanner():
                 
                 # Check volume filter
                 if info['volume_24h'] >= settings.min_volume:
-                    # Check gain filter:
-                    # - 30d > 30%
-                    # - 30d must be higher than 7d
-                    if gains['30d'] > 30 and gains['30d'] > gains['7d']:
+                    # Check gain filter (thresholds from config.json):
+                    # - 7d >= GAIN_FILTER_MIN_7D_PERCENT (default 7%)
+                    # - 30d > GAIN_FILTER_MIN_30D_PERCENT (default 30%)
+                    # - 30d must be higher than 7d (momentum)
+                    min7 = float(settings.gain_filter_min_7d_percent)
+                    min30 = float(settings.gain_filter_min_30d_percent)
+                    if (
+                        float(gains['7d']) >= min7
+                        and float(gains['30d']) > min30
+                        and float(gains['30d']) > float(gains['7d'])
+                    ):
                         coin_info = {
                             'symbol': symbol,
                             'cmc_symbol': resolved_cmc_symbol,
@@ -850,7 +860,14 @@ def run_scanner():
                         _log_filter_line(f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% Vol:${info['volume_24h']:,.0f}")
                     else:
                         filter_failure_counts['gains_low'] += 1
-                        _log_filter_line(f"   ❌ {symbol}: Gains too low (7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}%)")
+                        g7, g30 = float(gains['7d']), float(gains['30d'])
+                        if g7 < min7:
+                            why = f"7d below min ({g7:.1f}% < {min7:g}%)"
+                        elif g30 <= min30:
+                            why = f"30d not above min ({g30:.1f}% ≤ {min30:g}%)"
+                        else:
+                            why = f"30d not above 7d ({g30:.1f}% ≤ {g7:.1f}%)"
+                        _log_filter_line(f"   ❌ {symbol}: Gains filter — {why}")
                 else:
                     filter_failure_counts['volume_low'] += 1
                     _log_filter_line(f"   ❌ {symbol}: Volume too low (${info['volume_24h']:,.0f})")
@@ -1323,10 +1340,15 @@ def run_scanner():
                 )
                 continue
 
-            gain_7d = gains.get('7d', 0)
-            gain_30d = gains.get('30d', 0)
-            if gain_30d <= 30:
-                coin['exit_reason'] = f"30d gain below threshold ({gain_30d:.1f}% ≤ 30.0%)"
+            gain_7d = float(gains.get('7d', 0) or 0)
+            gain_30d = float(gains.get('30d', 0) or 0)
+            min7 = float(settings.gain_filter_min_7d_percent)
+            min30 = float(settings.gain_filter_min_30d_percent)
+            if gain_7d < min7:
+                coin['exit_reason'] = f"7d gain below threshold ({gain_7d:.1f}% < {min7:g}%)"
+                continue
+            if gain_30d <= min30:
+                coin['exit_reason'] = f"30d gain below threshold ({gain_30d:.1f}% ≤ {min30:g}%)"
                 continue
             if gain_30d <= gain_7d:
                 coin['exit_reason'] = f"30d gain not higher than 7d ({gain_30d:.1f}% ≤ {gain_7d:.1f}%)"

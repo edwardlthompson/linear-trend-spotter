@@ -41,6 +41,8 @@ class Settings:
         """Get default configuration values per spec §9.3"""
         return {
             'MIN_VOLUME_M': 1000000,
+            'GAIN_FILTER_MIN_7D_PERCENT': 7.0,
+            'GAIN_FILTER_MIN_30D_PERCENT': 30.0,
             'TARGET_EXCHANGES': ['coinbase', 'kraken', 'mexc'],
             'UNIFORMITY_MIN_SCORE': 55,
             'UNIFORMITY_PERIOD': 30,
@@ -116,6 +118,7 @@ class Settings:
             'CMC_SLUG_MAP_MAX_AGE_HOURS': 72,
             'CMC_SLUG_MAP_CACHE_FILE': 'cmc_cryptocurrency_map_cache.json',
             'CMC_SLUG_LEARN_FILE': 'gecko_id_to_cmc_slug.json',
+            'SCANNER_DIAG_COMMANDS_ENABLED': False,
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -190,6 +193,7 @@ class Settings:
             'SCAN_COSTS_ENABLED',
             'DEGRADE_SKIP_BACKTEST_ENABLED',
             'CMC_SLUG_MAP_ENABLED',
+            'SCANNER_DIAG_COMMANDS_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -229,6 +233,9 @@ class Settings:
             ('ANOMALY_MAX_NO_TICKER_RATIO', 0.0, 1.0),
         ]:
             require_number(number_key, min_value=lower, max_value=upper)
+
+        require_number('GAIN_FILTER_MIN_7D_PERCENT', min_value=-100.0, max_value=500.0)
+        require_number('GAIN_FILTER_MIN_30D_PERCENT', min_value=-100.0, max_value=500.0)
 
         cmc_symbol_aliases = normalized.get('CMC_SYMBOL_ALIASES', {})
         if not isinstance(cmc_symbol_aliases, dict):
@@ -356,7 +363,22 @@ class Settings:
     def min_volume(self) -> int:
         """Minimum 24h volume in USD"""
         return self._config.get('MIN_VOLUME_M', 1000000)
-    
+
+    @property
+    def gain_filter_min_7d_percent(self) -> float:
+        """FILTER 1: minimum provider-reported 7d gain (percent) to stay in the pipeline."""
+        return float(self._config.get('GAIN_FILTER_MIN_7D_PERCENT', 7.0))
+
+    @property
+    def gain_filter_min_30d_percent(self) -> float:
+        """FILTER 1: 30d gain must be strictly greater than this value (percent)."""
+        return float(self._config.get('GAIN_FILTER_MIN_30D_PERCENT', 30.0))
+
+    @property
+    def scanner_diag_commands_enabled(self) -> bool:
+        """When True, ``telegram_bot`` handles /health, /last, /cost (Milestone K1)."""
+        return bool(self._config.get('SCANNER_DIAG_COMMANDS_ENABLED', False))
+
     @property
     def telegram(self) -> Optional[Dict[str, str]]:
         """Telegram credentials from environment"""

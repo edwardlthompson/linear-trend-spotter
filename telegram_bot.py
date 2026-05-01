@@ -45,6 +45,74 @@ class TelegramBotHandler:
         self.poll_interval = 2
         
         self.logger.info("Telegram Bot Handler initialized")
+
+    def _load_metrics_history_tail(self, n: int = 1) -> list:
+        path = settings.metrics_file
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, list) or not data:
+                return []
+            return data[-n:]
+        except Exception as exc:
+            self.logger.error("Error reading metrics.json: %s", exc)
+            return []
+
+    def _diag_health_text(self) -> str:
+        hb_path = settings.DATA_DIR / settings.scan_heartbeat_file
+        hb_line = "Heartbeat: <i>not found</i>"
+        if hb_path.exists():
+            try:
+                hb = json.loads(hb_path.read_text(encoding="utf-8"))
+                if isinstance(hb, dict):
+                    hb_line = (
+                        f"Heartbeat: <b>{html.escape(str(hb.get('status', '')), quote=False)}</b> "
+                        f"finished <code>{html.escape(str(hb.get('finished_at', '')), quote=False)}</code>"
+                    )
+            except Exception as exc:
+                hb_line = f"Heartbeat: <i>read error ({html.escape(str(exc), quote=False)})</i>"
+        last = self._load_metrics_history_tail(1)
+        coins = "n/a"
+        if last and isinstance(last[0], dict):
+            coins = str(last[0].get("coins_processed", "n/a"))
+        return (
+            "<b>/health</b>\n"
+            f"{hb_line}\n"
+            f"Last metrics run coins_processed: <b>{html.escape(coins, quote=False)}</b>"
+        )
+
+    def _diag_last_text(self) -> str:
+        last = self._load_metrics_history_tail(1)
+        if not last:
+            return "<b>/last</b>\nNo <code>metrics.json</code> history yet."
+        row = last[0]
+        stamp = row.get("timestamp") if isinstance(row.get("timestamp"), str) else "unknown"
+        dur = row.get("duration", "?")
+        return (
+            "<b>/last</b>\n"
+            f"Last metrics row timestamp: <code>{html.escape(str(stamp), quote=False)}</code>\n"
+            f"Duration (s): <code>{html.escape(str(dur), quote=False)}</code>"
+        )
+
+    def _diag_cost_text(self) -> str:
+        last = self._load_metrics_history_tail(1)
+        if not last:
+            return "<b>/cost</b>\nNo metrics history."
+        counts = last[0].get("counts") if isinstance(last[0], dict) else {}
+        if not isinstance(counts, dict):
+            counts = {}
+        cg = {k: v for k, v in counts.items() if str(k).startswith("coingecko_http_")}
+        lines = [f"• <code>{html.escape(str(k), quote=False)}</code>: {v}" for k, v in sorted(cg.items())[:14]]
+        poly = counts.get("polygon_http_total", 0)
+        cmc = counts.get("cmc_http_total", 0)
+        extra = f"\nPolygon HTTP total: <b>{poly}</b>\nCMC HTTP total: <b>{cmc}</b>"
+        body = "\n".join(lines) if lines else "<i>No CoinGecko HTTP counters in last row.</i>"
+        scan_costs_path = settings.DATA_DIR / settings.scan_costs_file
+        sc_note = ""
+        if scan_costs_path.exists():
+            sc_note = f"\n<code>{html.escape(scan_costs_path.name, quote=False)}</code> present on disk."
+        return "<b>/cost</b> (last metrics row)\n" + body + extra + sc_note
     
     def get_updates(self, offset: int = None) -> list:
         """Get updates from Telegram"""
@@ -160,33 +228,50 @@ class TelegramBotHandler:
                             self.logger.warning(f"Ignored message from unauthorized chat: {chat_id}")
                             continue
                             
-                        text = message['text']
-                        
-                        if text == '/start':
+                        text_raw = message['text']
+                        cmd = text_raw.strip().split()[0].split("@", 1)[0].lower()
+
+                        if cmd == '/start':
                             welcome = (
                                 "🤖 <b>Welcome to Linear Trend Spotter Bot!</b>\n\n"
                                 "Use the interactive buttons below to navigate."
                             )
                             self.telegram.send_message(welcome, reply_markup=self._get_main_keyboard())
                         
-                        elif text == '/status':
+                        elif cmd == '/status':
                             status_msg = self._get_status_text()
                             markup = {"inline_keyboard": [[{"text": "🔄 Refresh", "callback_data": "status"}]]}
                             self.telegram.send_message(status_msg, reply_markup=markup)
                         
-                        elif text == '/list':
+                        elif cmd == '/list':
                             msg_text, markup = self._get_list_text_markup(0)
                             self.telegram.send_message(msg_text, reply_markup=markup)
                         
-                        elif text == '/help':
-                            help_text = (
-                                "🤖 <b>Linear Trend Spotter Commands:</b>\n\n"
-                                "/start - Welcome interactive menu\n"
-                                "/status - Show current qualified coins\n"
-                                "/list - List all tracked coins\n"
-                                "/help - Show this help"
-                            )
-                            self.telegram.send_message(help_text)
+                        elif settings.scanner_diag_commands_enabled and cmd in ('/health', '/last', '/cost'):
+                            if cmd == '/health':
+                                self.telegram.send_message(self._diag_health_text())
+                            elif cmd == '/last':
+                                self.telegram.send_message(self._diag_last_text())
+                            else:
+                                self.telegram.send_message(self._diag_cost_text())
+
+                        elif cmd == '/help':
+                            help_lines = [
+                                "🤖 <b>Linear Trend Spotter Commands:</b>\n",
+                                "/start - Welcome interactive menu",
+                                "/status - Show current qualified coins",
+                                "/list - List all tracked coins",
+                                "/help - Show this help",
+                            ]
+                            if settings.scanner_diag_commands_enabled:
+                                help_lines.extend(
+                                    [
+                                        "/health - Heartbeat + last metrics coins_processed",
+                                        "/last - Last metrics.json row summary",
+                                        "/cost - CoinGecko HTTP counters from last metrics row",
+                                    ]
+                                )
+                            self.telegram.send_message("\n".join(help_lines))
                     
                     elif 'callback_query' in update:
                         query = update['callback_query']
