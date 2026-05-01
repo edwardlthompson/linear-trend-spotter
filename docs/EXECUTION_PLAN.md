@@ -284,7 +284,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Notes:** `database/models.py`: class/method docstrings for `execute()` autocommit semantics; `get_connection()` enables **WAL** on `Database` subclasses (`PriceCache` already used WAL).
 - [ ] **I2.** Split `main.py` into modules (pipeline stages) in incremental PRs.  
   - **Verification:** CI + import smoke tests pass; behavior unchanged with default config (non-regression).
-  - **Notes:** First extraction: CMC symbol resolution helpers live in `scanner/cmc_resolve.py` (`build_cmc_normalized_lookup`, `resolve_cmc_data`); `main.py` imports them. **2026-04-30:** Tier-B worker notify hook moved to `scanner/web_push_notify.py` (`maybe_notify_web_push_scan`). Further stage splits still pending.
+  - **Notes:** First extraction: CMC symbol resolution helpers live in `scanner/cmc_resolve.py` (`build_cmc_normalized_lookup`, `resolve_cmc_data`); `main.py` imports them. **2026-04-30:** Tier-B worker notify hook moved to `scanner/web_push_notify.py` (`maybe_notify_web_push_scan`). **2026-05-01:** Event-summary active ranking rows extracted to `scanner/active_ranking.py` (`build_active_ranking_rows`). Further stage splits still pending.
 
 ---
 
@@ -680,5 +680,5 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Public dashboard + PWA + UX | `main.py` (writer + optional Tier-B notify), `DATA_DIR/qualified_public_snapshot.json`, `push_server/`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
 | Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
-| CMC resolve + web push hook (I2 steps) | `scanner/cmc_resolve.py`, `scanner/web_push_notify.py` |
+| CMC resolve + web push + active ranking (I2 steps) | `scanner/cmc_resolve.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |

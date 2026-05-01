@@ -51,6 +51,7 @@ from utils.watchlist_export import compute_watchlist_rows, write_watchlist_expor
 from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
+from scanner.active_ranking import build_active_ranking_rows
 from scanner.cmc_resolve import build_cmc_normalized_lookup, resolve_cmc_data
 from scanner.web_push_notify import maybe_notify_web_push_scan
 
@@ -162,41 +163,6 @@ def _attach_rank_movement(final_results: list[dict], previous_rank_map: dict[str
                 coin['rank_status'] = 'flat'
 
 
-def _pct_change(current_value: float, baseline_value: float) -> float | None:
-    try:
-        current = float(current_value)
-        baseline = float(baseline_value)
-    except Exception:
-        return None
-    if baseline <= 0:
-        return None
-    return ((current - baseline) / baseline) * 100.0
-
-
-def _format_time_on_list(entered_date_raw: str | None) -> str:
-    entered_date = str(entered_date_raw or '').strip()
-    if not entered_date:
-        return "n/a"
-    try:
-        entered_at = datetime.fromisoformat(entered_date.replace('Z', '+00:00'))
-    except Exception:
-        return "n/a"
-
-    if entered_at.tzinfo is None:
-        entered_at = entered_at.replace(tzinfo=timezone.utc)
-
-    elapsed = datetime.now(timezone.utc) - entered_at.astimezone(timezone.utc)
-    if elapsed.total_seconds() < 0:
-        return "n/a"
-
-    total_hours = int(elapsed.total_seconds() // 3600)
-    days = total_hours // 24
-    hours = total_hours % 24
-    if days > 0:
-        return f"{days}d {hours}h"
-    return f"{hours}h"
-
-
 def _resolve_top_coin_data(
     symbol: str,
     *,
@@ -241,41 +207,6 @@ def _resolve_top_coin_data(
     }
     cmc_by_symbol[symbol_upper] = resolved_data
     return resolved_data, alias_gecko_id, 'coingecko_id_alias'
-
-
-def _build_active_ranking_rows(
-    final_results: list[dict],
-    active_after_update: dict[str, dict],
-) -> list[dict]:
-    rows: list[dict] = []
-    active_symbols = set(active_after_update.keys())
-
-    active_rank = 0
-    for coin in final_results:
-        symbol = str(coin.get('symbol', '')).upper()
-        if not symbol or symbol not in active_symbols:
-            continue
-        active_rank += 1
-
-        after_state = active_after_update.get(symbol, {})
-        current_price = float(coin.get('current_price', 0.0) or 0.0)
-        gain_since_entry_pct = _pct_change(current_price, float(after_state.get('entry_price', 0.0) or 0.0))
-        time_on_list = _format_time_on_list(after_state.get('entered_date'))
-
-        rows.append(
-            {
-                'symbol': symbol,
-                'active_rank': active_rank,
-                'current_rank': coin.get('current_rank'),
-                'rank_status': coin.get('rank_status'),
-                'rank_delta': coin.get('rank_delta'),
-                'health_score': coin.get('health_score'),
-                'gain_since_entry_pct': gain_since_entry_pct,
-                'time_on_list': time_on_list,
-            }
-        )
-
-    return rows
 
 
 def _format_signal_age_label(bars_ago: int, timeframe: str) -> str:
@@ -1594,7 +1525,7 @@ def run_scanner():
             and not (quiet and settings.quiet_hours_suppress_event_summary)
         ):
             app_logger.info("\n📱 Sending scanner event summary notification...")
-            active_ranking_rows = _build_active_ranking_rows(
+            active_ranking_rows = build_active_ranking_rows(
                 final_results,
                 active_after_update,
             )
