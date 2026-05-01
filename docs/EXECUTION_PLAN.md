@@ -358,8 +358,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Export file valid; scan unaffected.
   - **Notes:** **`WATCHLIST_EXPORT_ENABLED`** (default **false**); **`WATCHLIST_EXPORT_CSV_FILE`** / **`WATCHLIST_EXPORT_JSON_FILE`**. Near-miss rows from **`compute_watchlist_rows`** (uniformity buffer band + non-positive 30d return with passing score). **`scripts/export_watchlist.py`** prints path/row count.
 
-- [ ] **L4.** **Backtest A/B shadow:** second profile on subset, logs only, **no Telegram** unless opt-in; default off.  
+- [x] **L4.** **Backtest A/B shadow:** second profile on subset, logs only, **no Telegram** unless opt-in; default off.  
   - **Verification:** Off → no extra runtime; on → logs only, same primary alerts.
+  - **Notes:** `main.py` runs optional shadow pass after primary backtests only when **`BACKTEST_AB_SHADOW_ENABLED`** is true. Uses `runner_params_from_settings()` + `dataclasses.replace(...)` to run on a subset with separate artifacts (**`BACKTEST_AB_SHADOW_RESULTS_FILE`**, **`BACKTEST_AB_SHADOW_CHECKPOINT_FILE`**, **`BACKTEST_AB_SHADOW_TELEMETRY_FILE`**), and logs summary only (no Telegram sends). New config knobs in `config/settings.py`: **`BACKTEST_AB_SHADOW_MAX_COINS`**, **`BACKTEST_AB_SHADOW_MAX_PARAM_COMBOS`**, **`BACKTEST_AB_SHADOW_TRAILING_STOP_MIN/MAX/STEP`**.
 
 ---
 
@@ -647,7 +648,7 @@ Outstanding milestones are still listed in **Progress summary** and in **Master 
 | I | DB docs / main split | **I1** done; **I2** in progress (first `scanner/` extract) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
 | K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
-| L | Data & strategy | **L0–L3** done; **L4** pending |
+| L | Data & strategy | **L0–L4** done |
 | M | Engineering quality | **M1** pytest, **M2** pre-commit, **M3** compose smoke |
 | N | Security & compliance | **N1** Gitleaks in CI (**push protection** still admin); **N2** pending |
 | O | Product & research | Not started |

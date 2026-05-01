@@ -81,6 +81,15 @@ class Settings:
             'BACKTEST_TRAILING_STOP_MIN': 2,
             'BACKTEST_TRAILING_STOP_MAX': 20,
             'BACKTEST_TRAILING_STOP_STEP': 2,
+            'BACKTEST_AB_SHADOW_ENABLED': False,
+            'BACKTEST_AB_SHADOW_MAX_COINS': 3,
+            'BACKTEST_AB_SHADOW_MAX_PARAM_COMBOS': 25,
+            'BACKTEST_AB_SHADOW_TRAILING_STOP_MIN': 2,
+            'BACKTEST_AB_SHADOW_TRAILING_STOP_MAX': 20,
+            'BACKTEST_AB_SHADOW_TRAILING_STOP_STEP': 2,
+            'BACKTEST_AB_SHADOW_RESULTS_FILE': 'backtest_shadow_results.json',
+            'BACKTEST_AB_SHADOW_CHECKPOINT_FILE': 'backtest_shadow_checkpoint.json',
+            'BACKTEST_AB_SHADOW_TELEMETRY_FILE': 'backtest_shadow_telemetry.jsonl',
             'BACKTEST_RESUME_ENABLED': True,
             'BACKTEST_CHECKPOINT_FILE': 'backtest_checkpoint.json',
             'BACKTEST_TELEMETRY_FILE': 'backtest_telemetry.jsonl',
@@ -213,6 +222,7 @@ class Settings:
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
             'SCAN_COSTS_ENABLED',
             'DEGRADE_SKIP_BACKTEST_ENABLED',
+            'BACKTEST_AB_SHADOW_ENABLED',
             'CMC_SLUG_MAP_ENABLED',
             'SCANNER_DIAG_COMMANDS_ENABLED',
             'QUIET_HOURS_ENABLED',
@@ -242,6 +252,11 @@ class Settings:
             ('BACKTEST_TRAILING_STOP_MIN', 1, 100),
             ('BACKTEST_TRAILING_STOP_MAX', 0, 100),
             ('BACKTEST_TRAILING_STOP_STEP', 1, 20),
+            ('BACKTEST_AB_SHADOW_MAX_COINS', 1, 500),
+            ('BACKTEST_AB_SHADOW_MAX_PARAM_COMBOS', 1, 5000),
+            ('BACKTEST_AB_SHADOW_TRAILING_STOP_MIN', 1, 100),
+            ('BACKTEST_AB_SHADOW_TRAILING_STOP_MAX', 0, 100),
+            ('BACKTEST_AB_SHADOW_TRAILING_STOP_STEP', 1, 20),
             ('BACKTEST_FAILURE_SAMPLES_LIMIT', 10, 5000),
             ('OHLCV_MIN_1H_BARS_PER_DAY', 1, 48),
             ('OHLCV_MIN_1H_BARS_SLACK', 0, 5000),
@@ -300,6 +315,11 @@ class Settings:
         stop_max = int(normalized.get('BACKTEST_TRAILING_STOP_MAX', 20))
         if stop_max < stop_min:
             errors.append('BACKTEST_TRAILING_STOP_MAX must be >= BACKTEST_TRAILING_STOP_MIN')
+
+        shadow_stop_min = int(normalized.get('BACKTEST_AB_SHADOW_TRAILING_STOP_MIN', 1))
+        shadow_stop_max = int(normalized.get('BACKTEST_AB_SHADOW_TRAILING_STOP_MAX', 20))
+        if shadow_stop_max < shadow_stop_min:
+            errors.append('BACKTEST_AB_SHADOW_TRAILING_STOP_MAX must be >= BACKTEST_AB_SHADOW_TRAILING_STOP_MIN')
 
         require_number('BACKTEST_STARTING_CAPITAL', min_value=1.0)
         require_number('BACKTEST_FEE_BPS_ROUND_TRIP', min_value=0.0, max_value=1000.0)
@@ -608,6 +628,45 @@ class Settings:
     @property
     def backtest_trailing_stop_step(self) -> int:
         return int(self._config.get('BACKTEST_TRAILING_STOP_STEP', 1))
+
+    @property
+    def backtest_ab_shadow_enabled(self) -> bool:
+        return bool(self._config.get('BACKTEST_AB_SHADOW_ENABLED', False))
+
+    @property
+    def backtest_ab_shadow_max_coins(self) -> int:
+        return int(self._config.get('BACKTEST_AB_SHADOW_MAX_COINS', 3))
+
+    @property
+    def backtest_ab_shadow_max_param_combos(self) -> int:
+        return int(self._config.get('BACKTEST_AB_SHADOW_MAX_PARAM_COMBOS', 25))
+
+    @property
+    def backtest_ab_shadow_trailing_stop_min(self) -> int:
+        return int(self._config.get('BACKTEST_AB_SHADOW_TRAILING_STOP_MIN', 2))
+
+    @property
+    def backtest_ab_shadow_trailing_stop_max(self) -> int:
+        return int(self._config.get('BACKTEST_AB_SHADOW_TRAILING_STOP_MAX', 20))
+
+    @property
+    def backtest_ab_shadow_trailing_stop_step(self) -> int:
+        return int(self._config.get('BACKTEST_AB_SHADOW_TRAILING_STOP_STEP', 2))
+
+    @property
+    def backtest_ab_shadow_results_file(self) -> Path:
+        raw_path = str(self._config.get('BACKTEST_AB_SHADOW_RESULTS_FILE', 'backtest_shadow_results.json')).strip()
+        return self.DATA_DIR / raw_path
+
+    @property
+    def backtest_ab_shadow_checkpoint_file(self) -> Path:
+        raw_path = str(self._config.get('BACKTEST_AB_SHADOW_CHECKPOINT_FILE', 'backtest_shadow_checkpoint.json')).strip()
+        return self.DATA_DIR / raw_path
+
+    @property
+    def backtest_ab_shadow_telemetry_file(self) -> Path:
+        raw_path = str(self._config.get('BACKTEST_AB_SHADOW_TELEMETRY_FILE', 'backtest_shadow_telemetry.jsonl')).strip()
+        return self.DATA_DIR / raw_path
 
     @property
     def backtest_resume_enabled(self) -> bool:

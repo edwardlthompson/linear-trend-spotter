@@ -5,6 +5,7 @@ import sys
 import json
 import io
 from html import escape as html_escape
+from dataclasses import replace
 from urllib.parse import quote
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
@@ -24,6 +25,7 @@ from notifications.image_renderer import (
 )
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
+from backtesting.params import runner_params_from_settings
 from backtesting.report import notification_rows_for_symbol
 from utils.insights import (
     compute_data_reliability,
@@ -731,6 +733,41 @@ def run_scanner():
             except Exception as backtest_error:
                 app_logger.error(f"   ❌ Backtesting failed: {backtest_error}")
                 app_logger.info("   ℹ️ Continuing scanner flow despite backtesting failure")
+
+        if settings.backtest_ab_shadow_enabled and settings.backtest_enabled and not skip_backtest and final_results:
+            shadow_subset = final_results[: max(1, int(settings.backtest_ab_shadow_max_coins))]
+            app_logger.info(
+                "\n🧪 Running shadow A/B backtest (L4): subset=%s max_param_combos=%s",
+                len(shadow_subset),
+                int(settings.backtest_ab_shadow_max_param_combos),
+            )
+            try:
+                base_params = runner_params_from_settings()
+                shadow_params = replace(
+                    base_params,
+                    backtest_resume_enabled=False,
+                    backtest_max_coins_per_run=len(shadow_subset),
+                    backtest_max_param_combos=int(settings.backtest_ab_shadow_max_param_combos),
+                    backtest_trailing_stop_min=int(settings.backtest_ab_shadow_trailing_stop_min),
+                    backtest_trailing_stop_max=int(settings.backtest_ab_shadow_trailing_stop_max),
+                    backtest_trailing_stop_step=int(settings.backtest_ab_shadow_trailing_stop_step),
+                    backtest_checkpoint_file=settings.backtest_ab_shadow_checkpoint_file,
+                    backtest_telemetry_file=settings.backtest_ab_shadow_telemetry_file,
+                )
+                shadow_summary = run_backtests_for_final_results(
+                    shadow_subset,
+                    output_path=settings.backtest_ab_shadow_results_file,
+                    params=shadow_params,
+                )
+                app_logger.info(
+                    "   ✅ Shadow A/B complete (logs-only): eligible=%s processed=%s failed=%s rows=%s",
+                    shadow_summary.get("coins_eligible", 0),
+                    shadow_summary.get("coins_processed", 0),
+                    shadow_summary.get("coins_failed", 0),
+                    shadow_summary.get("rows_generated", 0),
+                )
+            except Exception as shadow_error:
+                app_logger.warning("   ⚠️ Shadow A/B backtest failed (ignored): %s", shadow_error)
 
         if backtest_summary:
             for coin in final_results:
