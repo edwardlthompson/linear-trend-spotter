@@ -968,11 +968,24 @@
     }
     try {
       const res = await fetch(url.trim(), { credentials: "omit" });
+      const text = await res.text();
       if (!res.ok) {
-        if (showErrors) showError(`HTTP ${res.status} loading snapshot`);
+        if (showErrors) {
+          let msg = `HTTP ${res.status} loading snapshot`;
+          if (res.status === 503) {
+            try {
+              const errBody = JSON.parse(text);
+              if (errBody && errBody.error) msg += ` (${errBody.error})`;
+            } catch {
+              /* body may not be JSON */
+            }
+            msg +=
+              ". The relay is running but has no file yet. After a worker scan completes, it POSTs JSON here (worker env QUALIFIED_SNAPSHOT_RELAY_URL + QUALIFIED_SNAPSHOT_RELAY_SECRET matching the snapshot service; worker config PUBLIC_QUALIFIED_SNAPSHOT_ENABLED true). Wait for the next scan or check Render worker logs for relay errors.";
+          }
+          showError(msg);
+        }
         return;
       }
-      const text = await res.text();
       let data;
       try {
         data = JSON.parse(text);
