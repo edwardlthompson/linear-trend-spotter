@@ -254,6 +254,18 @@ th.sort-desc .sort-btn::after {
   margin-bottom: 0.75rem;
 }
 
+.empty-banner {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--color-text);
+  background: var(--diff-bg);
+  border: 1px solid var(--diff-border);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  margin-bottom: 0.75rem;
+  max-width: 52rem;
+}
+
 tr.coin-row {
   cursor: pointer;
 }

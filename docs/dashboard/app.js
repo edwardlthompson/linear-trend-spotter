@@ -134,6 +134,7 @@
   const elMeta = document.getElementById("meta");
   const elTbody = document.getElementById("tbody");
   const elDiffBanner = document.getElementById("diffBanner");
+  const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
   const elHealthStrip = document.getElementById("healthStrip");
   const elInput = document.getElementById("apiInput");
@@ -293,6 +294,10 @@
     if (elHealthStrip) {
       elHealthStrip.hidden = true;
       elHealthStrip.textContent = "";
+    }
+    if (elEmptyBanner) {
+      elEmptyBanner.hidden = true;
+      elEmptyBanner.textContent = "";
     }
   }
 
@@ -840,6 +845,14 @@
       alertSuffix = ` · Tier-A update alerts on (${pollIntervalHumanPhrase(getPollIntervalMs())})`;
     }
     elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${nextHint}${alertSuffix}`;
+
+    if (elEmptyBanner) {
+      elEmptyBanner.hidden = coins.length > 0;
+      elEmptyBanner.textContent =
+        coins.length === 0
+          ? "Snapshot loaded OK — the JSON has zero qualified coins. GitHub Pages only shows what is committed as docs/qualified_public_snapshot.json. After a scan writes qualified_public_snapshot.json under your DATA_DIR, run python scripts/sync_snapshot_to_docs.py from the repo root, then git add, commit, and push that file."
+          : "";
+    }
 
     const prevSyms = readPrevSymbolSet();
     const prevSchema = localStorage.getItem(LS_PREV_SCHEMA) ?? "";
