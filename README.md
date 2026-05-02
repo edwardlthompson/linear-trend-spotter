@@ -28,6 +28,14 @@ Read-only **PWA** for the hourly qualified snapshot: sort, filter, theme, export
 
 If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet (or the first deploy is still running—wait 1–2 minutes and hard-refresh). See **step 3** below and the **404 checklist** right after it. Full behavior and CORS notes live in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
 
+**You do not need GitHub Pages.** Pick what matches how you want to work:
+
+| Goal | What to do |
+|------|------------|
+| **Alerts and summaries in Telegram only** | Set **`DELIVERY_MODE`** to **`telegram`** and **`TELEGRAM_ENABLED`** to **`true`** in `config.json` (plus bot token and chat id in `.env`). Leave the public website out of it — see [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
+| **Table-style dashboard on this PC only** | After a scan writes `qualified_public_snapshot.json` under your **`DATA_DIR`**, run **`python scripts/local_dashboard.py`** — opens a browser at `http://127.0.0.1:8765/dashboard/` using your local JSON (no git push, no Render relay). |
+| **Public website on github.io** | Use **Option A** below (`sync_snapshot_to_docs.py` + push). |
+
 **404 checklist**
 
 | Fix | Where |
