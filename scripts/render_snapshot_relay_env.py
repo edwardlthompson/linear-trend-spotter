@@ -57,6 +57,7 @@ def _headers(token: str) -> dict[str, str]:
 
 
 def list_services(session: requests.Session, token: str) -> list[dict[str, Any]]:
+    """Flatten Render's paginated response (each row is often ``{cursor, service}``)."""
     out: list[dict[str, Any]] = []
     cursor: str | None = None
     while True:
@@ -67,14 +68,29 @@ def list_services(session: requests.Session, token: str) -> list[dict[str, Any]]
         r.raise_for_status()
         data = r.json()
         if isinstance(data, list):
-            out.extend(data)
-            return out
-        items = data.get("service") or data.get("services") or data.get("items") or []
-        if isinstance(items, list):
-            out.extend(items)
-        cursor = data.get("cursor") or data.get("nextCursor") if isinstance(data, dict) else None
-        if not cursor:
-            break
+            page_cursor: str | None = None
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                svc = item.get("service")
+                if isinstance(svc, dict):
+                    out.append(svc)
+                elif item.get("id"):
+                    out.append(item)
+                page_cursor = item.get("cursor") or page_cursor
+            cursor = page_cursor
+            if not cursor:
+                break
+            continue
+        if isinstance(data, dict):
+            items = data.get("service") or data.get("services") or data.get("items") or []
+            if isinstance(items, list):
+                out.extend(items)
+            cursor = data.get("cursor") or data.get("nextCursor")
+            if not cursor:
+                break
+            continue
+        break
     return out
 
 
@@ -196,8 +212,10 @@ def main() -> None:
     if args.generate_secret:
         secret = secrets.token_hex(32)
         print(f"Generated QUALIFIED_SNAPSHOT_RELAY_SECRET (save this): {secret}")
-    if not secret:
+    if args.apply and not secret:
         sys.exit("Provide --secret, set QUALIFIED_SNAPSHOT_RELAY_SECRET, or use --generate-secret.")
+    if not secret:
+        secret = "__dry_run_placeholder__"
 
     if args.apply and args.dry_run:
         sys.exit("Use only one of --apply or --dry-run.")
