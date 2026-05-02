@@ -12,4 +12,4 @@
  * Set worker env QUALIFIED_SNAPSHOT_RELAY_URL + QUALIFIED_SNAPSHOT_RELAY_SECRET so each scan POSTs JSON to the relay.
  */
 window.__SNAPSHOT_URL__ =
-  "https://YOUR-SNAPSHOT-SERVICE.onrender.com/qualified_public_snapshot.json";
+  "https://linear-trend-spotter-snapshot.onrender.com/qualified_public_snapshot.json";
