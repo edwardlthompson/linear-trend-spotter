@@ -27,8 +27,16 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS_JSON = ROOT / "docs" / "qualified_public_snapshot.json"
 DEFAULT_NAME = "qualified_public_snapshot.json"
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None  # type: ignore[misc, assignment]
+
 
 def main() -> int:
+    if load_dotenv:
+        load_dotenv(ROOT / ".env")
+
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument(
         "--data-dir",
