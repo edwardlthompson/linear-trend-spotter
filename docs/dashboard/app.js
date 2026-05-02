@@ -26,8 +26,15 @@
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
+  /** Treat snapshot timestamps before this as invalid for age/stale (epoch placeholders, corrupt data). */
+  const MIN_VALID_SNAPSHOT_MS = Date.UTC(2000, 0, 1, 0, 0, 0, 0);
 
   const ALLOWED_POLL_MS = new Set(POLL_INTERVAL_OPTIONS.map((o) => o.ms));
+
+  /** @param {number} t ms since epoch from Date.parse */
+  function isValidSnapshotTimeMs(t) {
+    return Number.isFinite(t) && t >= MIN_VALID_SNAPSHOT_MS;
+  }
 
   function parseStoredPollMs(raw) {
     const n = Number(raw);
@@ -559,7 +566,7 @@
 
   function formatUpdatedHuman(iso) {
     const t = Date.parse(iso);
-    if (!Number.isFinite(t)) return String(iso || "—");
+    if (!isValidSnapshotTimeMs(t)) return "—";
     const d = Math.max(0, Date.now() - t);
     const mins = Math.round(d / 60000);
     if (mins < 1) return "just now";
@@ -597,7 +604,7 @@
       return;
     }
     const snapTs = Date.parse(iso);
-    if (!Number.isFinite(snapTs)) {
+    if (!isValidSnapshotTimeMs(snapTs)) {
       elStaleBanner.hidden = true;
       elStaleBanner.textContent = "";
       return;
@@ -823,7 +830,7 @@
     let nextHint = "";
     if (updatedRaw) {
       const snapTs = Date.parse(updatedRaw);
-      if (Number.isFinite(snapTs) && intervalSec > 0) {
+      if (isValidSnapshotTimeMs(snapTs) && intervalSec > 0) {
         const nextIso = new Date(snapTs + intervalSec * 1000).toISOString();
         nextHint = ` · next scan ${formatNextScanLabel(nextIso)} (${nextIso.slice(0, 19)}Z)`;
       }
