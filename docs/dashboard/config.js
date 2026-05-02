@@ -1,15 +1,10 @@
 /**
- * Public snapshot JSON (HTTPS). Not a secret — browsers fetch this URL.
+ * Public snapshot JSON. Not a secret — browsers fetch this URL.
  *
- * Use the snapshot **relay** web service (`snapshot_server/` in repo, `linear-trend-spotter-snapshot`
- * in render.yaml), not the worker — Render background workers do not serve HTTP files.
+ * **Default (GitHub Pages):** same-origin file `docs/qualified_public_snapshot.json` → no CORS, no Render relay.
+ * Update it after a scan: `python scripts/sync_snapshot_to_docs.py` then commit + push.
  *
- * Example: https://linear-trend-spotter-snapshot.onrender.com/qualified_public_snapshot.json
- *
- * Or omit this file’s assignment and open the dashboard with:
- *   ?api=https%3A%2F%2Fyour-snapshot-service.onrender.com%2Fqualified_public_snapshot.json
- *
- * Set worker env QUALIFIED_SNAPSHOT_RELAY_URL + QUALIFIED_SNAPSHOT_RELAY_SECRET so each scan POSTs JSON to the relay.
+ * **Optional remote relay:** set to `https://…-snapshot.onrender.com/qualified_public_snapshot.json` if you use
+ * `snapshot_server/` + worker POST (see README). Or override with `?api=` on the dashboard URL.
  */
-window.__SNAPSHOT_URL__ =
-  "https://linear-trend-spotter-snapshot.onrender.com/qualified_public_snapshot.json";
+window.__SNAPSHOT_URL__ = "../qualified_public_snapshot.json";

@@ -39,28 +39,33 @@ If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet
 
 ### How to enable the dashboard
 
-1. **Worker writes the public JSON**  
-   In `config.json` on the Render worker (or local `DATA_DIR`):
+**Option A — GitHub Pages + JSON in this repo (simplest, no Render relay for the site)**  
+The static site can load a file **from the same GitHub repository** so there is **no CORS** and no extra host to wire up for the read-only list.
 
-   - Set **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** to **`true`**.  
-   - Keep or set **`PUBLIC_QUALIFIED_SNAPSHOT_FILE`** (default `qualified_public_snapshot.json` under `DATA_DIR`).  
-   - Optionally set **`PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET`** to `minimal` or `full` (see `config/settings.py` / Milestone Q3 in `docs/EXECUTION_PLAN.md`).
+1. **Turn on GitHub Pages**  
+   **Settings → Pages** → **Source:** branch **`main`**, folder **`/docs`**. The site is at  
+   `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/`.
 
-2. **Serve the JSON over HTTPS with CORS**  
-   The Render **background worker** does not receive HTTP traffic: a URL like `https://…-worker.onrender.com/qualified_public_snapshot.json` will not work. Deploy the small **`snapshot_server/`** web service from [`render.yaml`](render.yaml) (`linear-trend-spotter-snapshot`). Set the **same** random secret on the snapshot service and the worker as **`QUALIFIED_SNAPSHOT_RELAY_SECRET`**, and set the worker to **`QUALIFIED_SNAPSHOT_RELAY_URL`** = `https://<your-snapshot-service>.onrender.com` (no path). After each successful scan, the worker POSTs the file to the relay; **GitHub Pages** then `fetch()`s `https://<your-snapshot-service>.onrender.com/qualified_public_snapshot.json` (CORS is enabled by default on the relay). For other hosts, configure **`Access-Control-Allow-Origin`** and **`Cache-Control`** as in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+2. **Publish `docs/qualified_public_snapshot.json`**  
+   Committed default is a tiny placeholder (empty `coins`). After you run a scan locally (or wherever `qualified_public_snapshot.json` is written under `DATA_DIR`):
 
-3. **Turn on GitHub Pages**  
-   In the GitHub repo: **Settings → Pages → Build and deployment → Source:** deploy from branch **`main`** with folder **`/docs`**. After the first successful build, the dashboard is at  
-   `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/`  
-   (static files live under [`docs/dashboard/`](docs/dashboard/) in this repo).
+   ```bash
+   python scripts/sync_snapshot_to_docs.py
+   git add docs/qualified_public_snapshot.json
+   git commit -m "Update qualified snapshot for Pages"
+   git push
+   ```
 
-4. **Point the UI at your snapshot URL**  
-   - Easiest: open the site with a query string, e.g.  
-     `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/?api=https%3A%2F%2Fyour-snapshot-service.onrender.com%2Fqualified_public_snapshot.json`  
-   - For GitHub Pages builds, copy [`docs/dashboard/config.example.js`](docs/dashboard/config.example.js) to **`docs/dashboard/config.js`**, set **`window.__SNAPSHOT_URL__`** to that HTTPS JSON URL (the **snapshot relay**, not the worker hostname), commit, and redeploy Pages (see Milestone **Q6** in `docs/EXECUTION_PLAN.md`). **Do not** put API keys in `config.js`; the snapshot URL is public by design.
+   Wait ~1–2 minutes for Pages to rebuild; hard-refresh the dashboard.
 
-5. **Optional: Tier-B Web Push (off-device scan alerts)**  
-   Deploy the **`push_server/`** Render web service from [`render.yaml`](render.yaml), set **VAPID** and relay secrets, set worker env **`WEB_PUSH_NOTIFY_URL`**, **`WEB_PUSH_INTERNAL_SECRET`**, **`WEB_PUSH_DASHBOARD_URL`**, then add **`__PUSH_API_BASE__`** and **`__VAPID_PUBLIC_KEY__`** to dashboard `config.js` as documented in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+3. **Dashboard URL**  
+   [`docs/dashboard/config.js`](docs/dashboard/config.js) defaults to **`../qualified_public_snapshot.json`** (same origin). No secrets in that file.
+
+**Option B — Render snapshot relay (optional)**  
+If you want the JSON updated from a **Render worker** without committing files, deploy **`snapshot_server/`** from [`render.yaml`](render.yaml), set **`QUALIFIED_SNAPSHOT_RELAY_*`** on worker + relay service, and point **`window.__SNAPSHOT_URL__`** (or **`?api=`**) at `https://<your-snapshot-service>.onrender.com/qualified_public_snapshot.json`. See [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md) for CORS and cache notes.
+
+**Optional: Tier-B Web Push (off-device scan alerts)**  
+Deploy **`push_server/`** from [`render.yaml`](render.yaml), set worker **`WEB_PUSH_*`** env vars, and add **`__PUSH_API_BASE__`** / **`__VAPID_PUBLIC_KEY__`** to dashboard `config.js` per [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
 
 ---
 

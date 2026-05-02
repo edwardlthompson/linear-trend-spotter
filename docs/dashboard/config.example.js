@@ -1,6 +1,5 @@
-/** Same as committed `config.js`: public snapshot URL (or use `?api=` on the dashboard URL). Use the snapshot relay web service, not the worker. */
-window.__SNAPSHOT_URL__ =
-  "https://linear-trend-spotter-snapshot.onrender.com/qualified_public_snapshot.json";
+/** Same as committed `config.js`: default is same-origin JSON on GitHub Pages (`../qualified_public_snapshot.json`). */
+window.__SNAPSHOT_URL__ = "../qualified_public_snapshot.json";
 
 /** Optional Tier-B Web Push (Q21): public relay base (no trailing slash), VAPID public key, optional subscribe token. */
 // window.__PUSH_API_BASE__ = "https://YOUR-PUSH-SERVICE.onrender.com";
