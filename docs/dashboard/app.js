@@ -4,7 +4,19 @@
  * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
-  const POLL_INTERVAL_MS = 15 * 60 * 1000;
+  /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
+  const POLL_INTERVAL_OPTIONS = [
+    { ms: 60 * 60 * 1000, label: "1h" },
+    { ms: 2 * 60 * 60 * 1000, label: "2h" },
+    { ms: 3 * 60 * 60 * 1000, label: "3h" },
+    { ms: 4 * 60 * 60 * 1000, label: "4h" },
+    { ms: 6 * 60 * 60 * 1000, label: "6h" },
+    { ms: 8 * 60 * 60 * 1000, label: "8h" },
+    { ms: 12 * 60 * 60 * 1000, label: "12h" },
+    { ms: 24 * 60 * 60 * 1000, label: "1D" },
+  ];
+  const DEFAULT_POLL_MS = 60 * 60 * 1000;
+  const LS_POLL_INTERVAL_MS = "qualified_dash_poll_interval_ms";
   const LS_DIGEST = "qualified_dash_last_snap_digest";
   const LS_PREV_SYMBOLS = "qualified_dash_prev_symbols_json";
   const LS_PREV_SCHEMA = "qualified_dash_prev_schema_version";
@@ -14,6 +26,48 @@
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
+
+  const ALLOWED_POLL_MS = new Set(POLL_INTERVAL_OPTIONS.map((o) => o.ms));
+
+  function parseStoredPollMs(raw) {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !ALLOWED_POLL_MS.has(n)) return DEFAULT_POLL_MS;
+    return n;
+  }
+
+  function getPollIntervalMs() {
+    try {
+      return parseStoredPollMs(localStorage.getItem(LS_POLL_INTERVAL_MS));
+    } catch {
+      return DEFAULT_POLL_MS;
+    }
+  }
+
+  /** @param {number} ms */
+  function pollIntervalHumanPhrase(ms) {
+    const opt = POLL_INTERVAL_OPTIONS.find((o) => o.ms === ms);
+    if (opt) return `every ${opt.label}`;
+    return `every ${Math.round(ms / 3600000)}h`;
+  }
+
+  function populatePollIntervalSelect() {
+    if (!elPollInterval) return;
+    elPollInterval.innerHTML = "";
+    for (const o of POLL_INTERVAL_OPTIONS) {
+      const opt = document.createElement("option");
+      opt.value = String(o.ms);
+      opt.textContent = o.label;
+      elPollInterval.appendChild(opt);
+    }
+    elPollInterval.value = String(getPollIntervalMs());
+  }
+
+  function persistPollIntervalFromUi() {
+    if (!elPollInterval) return;
+    const ms = parseStoredPollMs(elPollInterval.value);
+    localStorage.setItem(LS_POLL_INTERVAL_MS, String(ms));
+    elPollInterval.value = String(ms);
+  }
 
   function getSavedThemeMode() {
     const v = localStorage.getItem(LS_THEME);
@@ -78,6 +132,7 @@
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
+  const elPollInterval = document.getElementById("pollIntervalSelect");
   const elSearch = document.getElementById("searchInput");
   const elThemeCycle = document.getElementById("themeCycleBtn");
   const elExportCsv = document.getElementById("exportCsvBtn");
@@ -110,6 +165,7 @@
   if (elInput) {
     elInput.value = snapshotUrl;
   }
+  populatePollIntervalSelect();
 
   function getSnapshotUrl() {
     return (elInput && elInput.value.trim()) || snapshotUrl || "";
@@ -772,7 +828,11 @@
         nextHint = ` · next scan ${formatNextScanLabel(nextIso)} (${nextIso.slice(0, 19)}Z)`;
       }
     }
-    elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${nextHint}`;
+    let alertSuffix = "";
+    if (notifyAlertsEnabled) {
+      alertSuffix = ` · Tier-A update alerts on (${pollIntervalHumanPhrase(getPollIntervalMs())})`;
+    }
+    elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${nextHint}${alertSuffix}`;
 
     const prevSyms = readPrevSymbolSet();
     const prevSchema = localStorage.getItem(LS_PREV_SCHEMA) ?? "";
@@ -927,7 +987,23 @@
         localStorage.setItem(LS_DIGEST, await digestHex(text));
       }
     } catch (e) {
-      if (showErrors) showError(String(e && e.message ? e.message : e));
+      if (!showErrors) return;
+      const raw = String(e && e.message ? e.message : e);
+      const low = raw.toLowerCase();
+      const u = url.trim();
+      let hint = "";
+      if (u.includes("YOUR-SNAPSHOT-SERVICE") || u.includes("YOUR-SERVICE")) {
+        hint =
+          " Replace the placeholder in docs/dashboard/config.js with your snapshot relay HTTPS URL (see README).";
+      } else if (
+        low.includes("failed to fetch") ||
+        low.includes("networkerror") ||
+        low.includes("load failed")
+      ) {
+        hint =
+          " Often CORS, a bad URL, or pointing at the worker — use the snapshot web relay (not the background worker), HTTPS, and CORS allowing this origin.";
+      }
+      showError(raw + hint);
     }
   }
 
@@ -949,9 +1025,10 @@
 
   function startPoll() {
     stopPoll();
+    const ms = getPollIntervalMs();
     pollTimer = window.setInterval(() => {
       loadSnapshot({ showErrors: false, forNotify: true });
-    }, POLL_INTERVAL_MS);
+    }, ms);
   }
 
   document.querySelectorAll("thead .sort-btn").forEach((btn) => {
@@ -1027,6 +1104,16 @@
     });
   }
 
+  if (elPollInterval) {
+    elPollInterval.addEventListener("change", () => {
+      persistPollIntervalFromUi();
+      if (notifyAlertsEnabled) {
+        startPoll();
+        if (lastPayload) render(lastPayload);
+      }
+    });
+  }
+
   if (elNotify) {
     elNotify.addEventListener("click", async () => {
       if (!("Notification" in window)) {
@@ -1045,12 +1132,11 @@
       }
       await registerServiceWorker();
       notifyAlertsEnabled = true;
+      persistPollIntervalFromUi();
       localStorage.removeItem(LS_POLL_FILTERED_SYMS);
       clearError();
       await loadSnapshot({ showErrors: true, forNotify: false });
       startPoll();
-      elMeta.textContent =
-        (elMeta.textContent || "") + " · Update alerts on (poll every 15 min)";
       syncPushTierBVisibility();
       void refreshPushTierBLabel();
     });

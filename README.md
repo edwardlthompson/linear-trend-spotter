@@ -2,11 +2,13 @@
 
 Automated full-exchange scanner focused on identifying sustained trend quality (not one-candle pumps), with integrated multi-strategy backtesting to validate and rank opportunities before alerting.
 
+**Default delivery** is the **public qualified dashboard** (snapshot JSON + GitHub Pages UI); Telegram alerts are **optional** (`DELIVERY_MODE`). See [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md) and [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md).
+
 ## Key Features
 
 1. **Trend Identification (Primary):** Evaluates the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
 2. **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and ranks opportunities for alerts.
-3. **Actionable Telegram Alerts:** Sends enriched entry/exit notifications and event-driven dashboard summaries (on entry/exit).
+3. **Qualified dashboard & alerts:** Read-only **PWA** with snapshot-driven tables, optional Tier-A/Tier-B notifications; **optional Telegram** entry/exit messaging when `DELIVERY_MODE` is `telegram`.
 4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity, enforcing strict OOM memory clipping for low-RAM remote deployments (e.g. Render Basic plans).
 5. **Insights Layer:** Persists rank history, outcome analytics, data reliability, and portfolio simulation.
 6. **Deterministic TSL-Only Backtesting:** Deterministic backtesting engine optimizes with trailing stop loss only (no TP/TTP sweep) using bounded hill-climbing search for fast convergence.
@@ -44,8 +46,8 @@ If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet
    - Keep or set **`PUBLIC_QUALIFIED_SNAPSHOT_FILE`** (default `qualified_public_snapshot.json` under `DATA_DIR`).  
    - Optionally set **`PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET`** to `minimal` or `full` (see `config/settings.py` / Milestone Q3 in `docs/EXECUTION_PLAN.md`).
 
-2. **Expose the JSON over HTTPS with CORS**  
-   Browsers must be allowed to `fetch()` the snapshot from the **origin** that hosts the dashboard (e.g. `https://edwardlthompson.github.io`). Configure **`Access-Control-Allow-Origin`** (and sensible **`Cache-Control`**) on the response that serves `qualified_public_snapshot.json`—for example via Render static headers, a tiny read-only proxy, or the same host that already serves your worker artifacts.
+2. **Serve the JSON over HTTPS with CORS**  
+   The Render **background worker** does not receive HTTP traffic: a URL like `https://…-worker.onrender.com/qualified_public_snapshot.json` will not work. Deploy the small **`snapshot_server/`** web service from [`render.yaml`](render.yaml) (`linear-trend-spotter-snapshot`). Set the **same** random secret on the snapshot service and the worker as **`QUALIFIED_SNAPSHOT_RELAY_SECRET`**, and set the worker to **`QUALIFIED_SNAPSHOT_RELAY_URL`** = `https://<your-snapshot-service>.onrender.com` (no path). After each successful scan, the worker POSTs the file to the relay; **GitHub Pages** then `fetch()`s `https://<your-snapshot-service>.onrender.com/qualified_public_snapshot.json` (CORS is enabled by default on the relay). For other hosts, configure **`Access-Control-Allow-Origin`** and **`Cache-Control`** as in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
 
 3. **Turn on GitHub Pages**  
    In the GitHub repo: **Settings → Pages → Build and deployment → Source:** deploy from branch **`main`** with folder **`/docs`**. After the first successful build, the dashboard is at  
@@ -54,8 +56,8 @@ If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet
 
 4. **Point the UI at your snapshot URL**  
    - Easiest: open the site with a query string, e.g.  
-     `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/?api=https%3A%2F%2FYOUR-SERVICE.onrender.com%2Fqualified_public_snapshot.json`  
-   - For GitHub Pages builds, copy [`docs/dashboard/config.example.js`](docs/dashboard/config.example.js) to **`docs/dashboard/config.js`**, set **`window.__SNAPSHOT_URL__`** to that HTTPS JSON URL, commit, and redeploy Pages (see Milestone **Q6** in `docs/EXECUTION_PLAN.md`). **Do not** put API keys in `config.js`; the snapshot URL is public by design.
+     `https://edwardlthompson.github.io/linear-trend-spotter/dashboard/?api=https%3A%2F%2Fyour-snapshot-service.onrender.com%2Fqualified_public_snapshot.json`  
+   - For GitHub Pages builds, copy [`docs/dashboard/config.example.js`](docs/dashboard/config.example.js) to **`docs/dashboard/config.js`**, set **`window.__SNAPSHOT_URL__`** to that HTTPS JSON URL (the **snapshot relay**, not the worker hostname), commit, and redeploy Pages (see Milestone **Q6** in `docs/EXECUTION_PLAN.md`). **Do not** put API keys in `config.js`; the snapshot URL is public by design.
 
 5. **Optional: Tier-B Web Push (off-device scan alerts)**  
    Deploy the **`push_server/`** Render web service from [`render.yaml`](render.yaml), set **VAPID** and relay secrets, set worker env **`WEB_PUSH_NOTIFY_URL`**, **`WEB_PUSH_INTERNAL_SECRET`**, **`WEB_PUSH_DASHBOARD_URL`**, then add **`__PUSH_API_BASE__`** and **`__VAPID_PUBLIC_KEY__`** to dashboard `config.js` as documented in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
@@ -64,12 +66,26 @@ If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet
 
 ## Recent engineering additions (changelog-style)
 
+Release announcements with dates: **[`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md)**.
+
 | Area | What shipped |
 |------|----------------|
 | **Public dashboard (Q)** | Static `docs/dashboard/` PWA: snapshot-driven table, health strip (**Q20**), Tier-A polling alerts, Tier-B Web Push client (**Q21**), docs in `docs/WEB_DASHBOARD.md`. |
 | **Web Push relay (Q21)** | Optional `push_server/` Flask + `pywebpush`; second service in `render.yaml`; worker calls relay after each successful scan when env vars are set. |
+| **Snapshot relay (Q4+)** | Optional `snapshot_server/` Flask; third web service in `render.yaml`; worker POSTs JSON after each scan when `QUALIFIED_SNAPSHOT_RELAY_*` are set so GitHub Pages can `GET` the file with CORS. |
+| **Web-first default (2026-05)** | Repo defaults: **`DELIVERY_MODE`** **`web`**, **`TELEGRAM_ENABLED`** **`false`**, public snapshot **on** in `config.json.example`; Render blueprint matches. See [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md). |
 | **Backtesting library (P2)** | `backtesting/params.py` — inject **`BacktestLoaderParams`** / **`BacktestRunnerParams`** so hosts avoid the full `settings` object; lazy exports in `backtesting/__init__.py`. |
 | **CI / tests** | `tests/conftest.py` redirects read-only **`DATA_DIR=/var/data`** during pytest collection on Render-style builds. |
+
+### Delivery mode (current default: web / dashboard)
+
+Canonical reference: **[`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md)**.
+
+The repository **defaults** to **`DELIVERY_MODE`** **`web`** and **`TELEGRAM_ENABLED`** **`false`** (`config/settings.py`, `config.json.example`, **`render.yaml`** worker env). The scanner **does not** initialize the Telegram client; **`scripts/run_render_worker.sh`** does **not** start **`telegram_bot.py`**. Use the **[qualified dashboard](#public-qualified-coin-dashboard-website)** with **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** and the **[snapshot relay](#how-to-enable-the-dashboard)** (`snapshot_server/`) so GitHub Pages can load JSON.
+
+**Switching back to Telegram:** set **`DELIVERY_MODE`** to **`telegram`**, **`TELEGRAM_ENABLED`** to **`true`**, set **`TELEGRAM_BOT_TOKEN`** and **`TELEGRAM_CHAT_ID`**, redeploy, and ensure the worker environment matches (see `docs/RELEASE_NOTES.md` for a short checklist).
+
+Routine “Telegram skipped” startup detail is logged at **DEBUG** when delivery is web-only.
 
 ---
 

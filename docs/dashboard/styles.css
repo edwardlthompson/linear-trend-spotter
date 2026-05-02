@@ -99,6 +99,15 @@ h1 {
   margin-bottom: 1rem;
 }
 
+.toolbar label.poll-toolbar select {
+  margin-left: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
 input[type="url"],
 input[type="search"] {
   color: var(--color-text);

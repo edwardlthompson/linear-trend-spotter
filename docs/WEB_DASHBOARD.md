@@ -1,5 +1,7 @@
 # Public qualified-coin dashboard (Milestone Q)
 
+For **Telegram vs website-only delivery** (snapshots, env vars, Render), see **[DELIVERY_MODE.md](DELIVERY_MODE.md)**.
+
 ## Data source
 
 The static UI under `docs/dashboard/` loads **only** the JSON snapshot written by the Render worker (`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`, `PUBLIC_QUALIFIED_SNAPSHOT_FILE`). Browsers must **not** call market APIs.
@@ -13,7 +15,7 @@ cd docs/dashboard
 python -m http.server 8765
 ```
 
-Open `http://localhost:8765/?api=https%3A%2F%2Fyour-worker.example%2Fqualified_public_snapshot.json` (replace with your real snapshot GET URL).
+Open `http://localhost:8765/?api=https%3A%2F%2Fyour-snapshot-relay.example%2Fqualified_public_snapshot.json` (use the **snapshot relay** GET URL, not the background worker).
 
 ## Dashboard UI extensions
 
@@ -27,7 +29,11 @@ See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md): exchange column + filter, 7d
 
 ## CORS (Q5)
 
-The origin that hosts `index.html` (e.g. `https://YOURNAME.github.io`) must be allowed by **`Access-Control-Allow-Origin`** on the HTTP response that serves `qualified_public_snapshot.json`. Configure that on Render (static file headers) or a small read-only proxy. Set **`Cache-Control: public, max-age=`** to slightly under your `SCAN_INTERVAL_SECONDS` so repeat visitors do not refetch every second.
+The origin that hosts `index.html` (e.g. `https://YOURNAME.github.io`) must be allowed by **`Access-Control-Allow-Origin`** on the HTTP response that serves `qualified_public_snapshot.json`.
+
+**Recommended:** deploy **`snapshot_server/`** from root [`render.yaml`](render.yaml) (`linear-trend-spotter-snapshot`). It sends **`Access-Control-Allow-Origin`** (default `*`) on **`GET /qualified_public_snapshot.json`** and **`POST /internal/ingest-snapshot`** for the worker. Set **`QUALIFIED_SNAPSHOT_RELAY_URL`** and **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on the worker (same secret as on the relay). Background workers do **not** serve HTTP.
+
+Alternatively, configure CORS on another HTTPS host (static headers, reverse proxy, object storage). Set **`Cache-Control: public, max-age=`** to slightly under your `SCAN_INTERVAL_SECONDS` so repeat visitors do not refetch every second.
 
 ## PWA and notifications (Q7–Q9)
 
@@ -35,7 +41,7 @@ Implemented under `docs/dashboard/`:
 
 - **Manifest & icons:** `manifest.webmanifest`, `icons/icon-192.png`, `icons/icon-512.png` (regenerate with `python scripts/gen_dashboard_pwa_icons.py` if you change sizes or colors).
 - **Service worker:** `sw.js` — static shell **cache-first**; same-origin `*.json` **network-only**. Cross-origin snapshot URLs (typical Render/GitHub setup) are **not** handled by this SW, so the qualified list is never served from an asset cache. After editing cached files, bump **`CACHE_VERSION`** inside `sw.js` so clients drop old caches.
-- **Tier-A alerts:** **Enable update alerts** in the UI requests notification permission, registers the SW, then polls the snapshot URL every **15 minutes** (and on `visibilitychange` when the tab wakes). A **SHA-256** digest of the snapshot body is compared to the previous fetch (`localStorage` key `qualified_dash_last_snap_digest`); on change, **`registration.showNotification`** is used when the SW is active.
+- **Tier-A alerts:** **Enable update alerts** in the UI requests notification permission, registers the SW, then polls the snapshot URL on the interval you choose in **Alert poll** — **1h, 2h, 3h, 4h, 6h, 8h, 12h, or 1D** (TradingView-style steps; default **1h**). The choice is stored in `localStorage` as `qualified_dash_poll_interval_ms`. The tab also rechecks when it becomes visible again (`visibilitychange`). A **SHA-256** digest of the snapshot body is compared to the previous fetch (`qualified_dash_last_snap_digest`); on change, **`registration.showNotification`** is used when the SW is active.
 - **iOS Safari:** Web Notifications are limited; users often need **Add to Home Screen** and a user gesture. The dashboard shows a short hint if permission is not granted.
 
 ### Tier-B Web Push (Q21)

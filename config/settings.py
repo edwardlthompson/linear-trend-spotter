@@ -140,6 +140,8 @@ class Settings:
             'SCAN_INTERVAL_SECONDS': 3600,
             'SCAN_COSTS_ENABLED': False,
             'SCAN_COSTS_FILE': 'scan_costs.json',
+            'DELIVERY_MODE': 'web',
+            'TELEGRAM_ENABLED': False,
             'TELEGRAM_BOT_MODE': 'polling',
             'TELEGRAM_WEBHOOK_PORT': 8080,
             'TELEGRAM_WEBHOOK_PATH': '/telegram/webhook',
@@ -237,6 +239,7 @@ class Settings:
             'WEEKLY_DIGEST_ENABLED',
             'SCAN_HEARTBEAT_ENABLED',
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
+            'TELEGRAM_ENABLED',
             'SCAN_COSTS_ENABLED',
             'DEGRADE_SKIP_BACKTEST_ENABLED',
             'BACKTEST_AB_SHADOW_ENABLED',
@@ -409,6 +412,12 @@ class Settings:
         else:
             normalized['TELEGRAM_WEBHOOK_PATH'] = webhook_path
 
+        delivery_mode = str(normalized.get('DELIVERY_MODE', 'web')).strip().lower()
+        if delivery_mode not in {'telegram', 'web'}:
+            errors.append('DELIVERY_MODE must be one of: telegram, web')
+        else:
+            normalized['DELIVERY_MODE'] = delivery_mode
+
         indicators = normalized.get('BACKTEST_INDICATORS', [])
         if not isinstance(indicators, list):
             errors.append('BACKTEST_INDICATORS must be a list')
@@ -530,6 +539,35 @@ class Settings:
         raw = str(self._config.get('STILL_QUALIFYING_STATE_FILE', 'still_qualifying_telegram.json')).strip()
         name = raw or 'still_qualifying_telegram.json'
         return self.DATA_DIR / name
+
+    @property
+    def delivery_mode(self) -> str:
+        """Where alerts and summaries go: ``telegram`` or ``web`` (dashboard/snapshot only).
+
+        Environment ``DELIVERY_MODE`` overrides config when set to ``web`` or ``telegram``.
+        See ``docs/DELIVERY_MODE.md``.
+        """
+        env_m = os.getenv('DELIVERY_MODE', '').strip().lower()
+        if env_m in ('web', 'telegram'):
+            return env_m
+        raw = str(self._config.get('DELIVERY_MODE', 'web')).strip().lower()
+        return raw if raw in ('web', 'telegram') else 'web'
+
+    @property
+    def telegram_enabled(self) -> bool:
+        """Telegram client + notifications + bot process.
+
+        False when ``delivery_mode`` is ``web``, or when ``TELEGRAM_ENABLED`` is off via
+        config/environment (see ``docs/DELIVERY_MODE.md``).
+        """
+        if self.delivery_mode == 'web':
+            return False
+        env_raw = os.getenv('TELEGRAM_ENABLED', '').strip().lower()
+        if env_raw in ('0', 'false', 'no', 'off'):
+            return False
+        if env_raw in ('1', 'true', 'yes', 'on'):
+            return True
+        return bool(self._config.get('TELEGRAM_ENABLED', False))
 
     @property
     def telegram(self) -> Optional[Dict[str, str]]:

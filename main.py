@@ -55,6 +55,7 @@ from scanner.weekly_digest import (
     save_weekly_digest_state,
 )
 from scanner.web_push_notify import maybe_notify_web_push_scan
+from scanner.snapshot_relay_notify import maybe_push_qualified_snapshot_relay
 from scanner.runtime_init import initialize_runtime_components
 from scanner.top_coins_stage import fetch_top_coins_dataset
 from scanner.exchange_universe import load_exchange_symbol_universe
@@ -781,6 +782,10 @@ def run_scanner():
                     },
                 )
                 app_logger.info("📤 Public qualified snapshot written")
+                maybe_push_qualified_snapshot_relay(
+                    settings.DATA_DIR,
+                    settings.public_qualified_snapshot_file,
+                )
             except Exception as snap_err:
                 app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
 

@@ -393,6 +393,11 @@ class TelegramBotHandler:
             server.server_close()
 
 def main():
+    if not settings.telegram_enabled:
+        setup_logger("telegram_bot").info(
+            "Telegram bot not started (DELIVERY_MODE=web or TELEGRAM_ENABLED=false). See docs/DELIVERY_MODE.md.",
+        )
+        return
     handler = TelegramBotHandler()
     if handler.bot_mode == "webhook":
         handler.run_webhook()

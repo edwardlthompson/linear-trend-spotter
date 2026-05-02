@@ -10,6 +10,10 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
+      - key: TELEGRAM_ENABLED
+        value: "false"
+      - key: DELIVERY_MODE
+        value: "web"
       - key: DATA_DIR
         value: /var/data
       - key: SCAN_INTERVAL_SECONDS
@@ -35,6 +39,10 @@ services:
       - key: WEB_PUSH_INTERNAL_SECRET
         sync: false
       - key: WEB_PUSH_DASHBOARD_URL
+        sync: false
+      - key: QUALIFIED_SNAPSHOT_RELAY_URL
+        sync: false
+      - key: QUALIFIED_SNAPSHOT_RELAY_SECRET
         sync: false
     disk:
       name: app-data
@@ -66,4 +74,26 @@ services:
       - key: WEB_PUSH_INTERNAL_SECRET
         sync: false
       - key: WEB_PUSH_SUBSCRIBE_TOKEN
+        sync: false
+
+  # Public qualified snapshot (Q4): GitHub Pages dashboard GETs JSON here with CORS.
+  # Worker POSTs after each scan (QUALIFIED_SNAPSHOT_RELAY_*). Workers do not serve HTTP.
+  - type: web
+    name: linear-trend-spotter-snapshot
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    autoDeployTrigger: commit
+    rootDir: snapshot_server
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: SNAPSHOT_RELAY_CORS_ORIGINS
+        value: "*"
+      - key: SNAPSHOT_RELAY_STORE
+        value: /tmp/qualified_public_snapshot.json
+      - key: QUALIFIED_SNAPSHOT_RELAY_SECRET
         sync: false

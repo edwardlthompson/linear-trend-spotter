@@ -62,12 +62,17 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
         app_logger.warning("⚠️ No Chart-IMG API key - charts disabled")
 
     telegram = None
-    if settings.telegram:
+    if settings.telegram_enabled and settings.telegram:
         telegram = TelegramClient(
             settings.telegram["bot_token"],
             settings.telegram["chat_id"],
         )
         app_logger.info("✅ Telegram client initialized")
+    elif not settings.telegram_enabled:
+        app_logger.debug(
+            "Skipping Telegram client (delivery_mode=%s)",
+            settings.delivery_mode,
+        )
     else:
         app_logger.warning("⚠️ Telegram credentials missing - notifications disabled")
 
@@ -86,7 +91,7 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
                 not cmc_slug_resolver.by_symbol
                 or cmc_slug_resolver.map_cache_is_stale(settings.cmc_slug_map_max_age_hours)
             ):
-                app_logger.info("📥 Refreshing CMC cryptocurrency map cache (Telegram CMC deep links)...")
+                app_logger.info("📥 Refreshing CMC cryptocurrency map cache (symbol→slug metadata)...")
                 if not cmc_slug_resolver.refresh_map_from_api(cmc):
                     app_logger.warning(
                         "⚠️ CMC map refresh failed or empty; CMC deep links may fall back to CoinGecko until the map loads"

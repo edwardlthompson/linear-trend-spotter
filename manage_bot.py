@@ -47,6 +47,13 @@ def is_running(pid):
 
 def start():
     """Start the bot"""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from config.settings import settings
+
+    if not settings.telegram_enabled:
+        print("Telegram is disabled (DELIVERY_MODE=web or TELEGRAM_ENABLED=false). See docs/DELIVERY_MODE.md.")
+        return
+
     pid = get_pid()
     if pid and is_running(pid):
         print(f"❌ Bot is already running with PID {pid}")
