@@ -86,21 +86,35 @@ h1 {
 }
 
 .site-header-bar {
-  margin-bottom: 0.35rem;
-}
-
-.app-tab-bar {
-  margin-bottom: 0.85rem;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.35rem;
-}
-
-/** Tabs + flexible search + bell; nowrap keeps one row on narrow viewports (tabs scroll horizontally if needed). */
-.app-tab-bar.app-top-toolbar {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.45rem 0.55rem;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+  min-width: 0;
+}
+
+.site-header-bar h1 {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.site-header-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-tab-bar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.35rem;
   min-width: 0;
 }
 
@@ -111,9 +125,6 @@ h1 {
   margin: 0;
   padding: 0;
   border-bottom: none;
-}
-
-.app-tab-bar.app-top-toolbar .app-tabs {
   flex: 0 1 auto;
   min-width: 0;
   overflow-x: auto;
@@ -130,6 +141,11 @@ h1 {
 
 .topbar-search--toolbar {
   flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
+}
+
+.site-header-actions .topbar-search-input {
   min-width: 0;
   max-width: none;
 }
@@ -157,11 +173,6 @@ h1 {
   border: 1px solid var(--color-border);
   background: var(--color-input-bg);
   color: var(--color-text);
-}
-
-.app-tab-bar.app-top-toolbar .topbar-search-input {
-  min-width: 0;
-  max-width: none;
 }
 
 .topbar-search-input:focus {
