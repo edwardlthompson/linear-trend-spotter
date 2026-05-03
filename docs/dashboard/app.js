@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * stale banner; theme (Q15); export CSV/JSON (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); star = browser watchlist (Qualified vs Watchlist tabs, enter/leave vs full qualified set); UI sort/filters in localStorage. Snapshot URL under collapsible Data source; ?api=… or window.__SNAPSHOT_URL__.
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); star = browser watchlist (Qualified vs Watchlist vs Alerts tabs; ops feed + coin bell drawer); UI sort/filters in localStorage. Snapshot URL under collapsible Data source; ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
@@ -15,6 +15,8 @@
     { ms: 12 * 60 * 60 * 1000, label: "12h" },
     { ms: 24 * 60 * 60 * 1000, label: "1D" },
   ];
+  /** Interpolated sparkline points when snapshot series is short (display-only). */
+  const SPARKLINE_TARGET_POINTS = 120;
   const DEFAULT_POLL_MS = 60 * 60 * 1000;
   const LS_POLL_INTERVAL_MS = "qualified_dash_poll_interval_ms";
   const LS_DIGEST = "qualified_dash_last_snap_digest";
@@ -27,6 +29,7 @@
   const LS_UI_SORT_KEY = "qualified_dash_ui_sort_key";
   const LS_UI_SORT_DIR = "qualified_dash_ui_sort_dir";
   const LS_UI_HEALTH_MIN = "qualified_dash_ui_health_min";
+  const LS_UI_UNIFORMITY_MIN = "qualified_dash_ui_uniformity_min";
   const LS_UI_SEARCH = "qualified_dash_ui_search";
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
@@ -37,8 +40,12 @@
   const LS_PINNED_WAS_QUALIFIED_JSON = "qualified_dash_pinned_was_qualified_json";
   /** ``qualified`` | ``watchlist`` — which main tab is active. */
   const LS_UI_ACTIVE_VIEW = "qualified_dash_active_view";
-  /** Session: hide scan health / relay / regime / diff strip cluster until tab closes. */
+  /** Session: hide scan health / relay / regime strip cluster until tab closes. */
   const LS_SNAPSHOT_TELEMETRY_DISMISSED = "qualified_dash_snapshot_telemetry_dismissed";
+  /** Milliseconds: operational feed items at or before this time count as read (Alerts tab badge). */
+  const LS_OPS_LAST_ACK_MS = "qualified_dash_ops_last_ack_ms";
+  /** Digest of coin-only banners last acknowledged with the bell drawer (localStorage). */
+  const LS_COIN_ALERTS_ACK_DIGEST = "qualified_dash_coin_alerts_ack_digest";
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
@@ -85,6 +92,7 @@
       const opt = document.createElement("option");
       opt.value = String(o.ms);
       opt.textContent = o.label;
+      opt.title = `Re-fetch snapshot ${pollIntervalHumanPhrase(o.ms)} while Tier-A alerts are on`;
       elPollInterval.appendChild(opt);
     }
     elPollInterval.value = String(getPollIntervalMs());
@@ -156,6 +164,7 @@
   const elApiBudgetPanel = document.getElementById("apiBudgetPanel");
   const elExchangeFilterDetails = document.getElementById("exchangeFilterDetails");
   const elExchangeFilterApply = document.getElementById("exchangeFilterApply");
+  const elExchangeFilterSelectAll = document.getElementById("exchangeFilterSelectAll");
   const elTbody = document.getElementById("tbody");
   const elDiffBanner = document.getElementById("diffBanner");
   const elWatchLeaveBanner = document.getElementById("watchLeaveBanner");
@@ -163,6 +172,7 @@
   const elWatchLeaveBannerDismiss = document.getElementById("watchLeaveBannerDismiss");
   const elMainHeading = document.getElementById("mainHeading");
   const elHealthMinSelect = document.getElementById("healthMinSelect");
+  const elUniformityMinSelect = document.getElementById("uniformityMinSelect");
   const elWatchlistBadge = document.getElementById("watchlistBadge");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
@@ -170,8 +180,13 @@
   const elRelayHealthStrip = document.getElementById("relayHealthStrip");
   const elRegimeStrip = document.getElementById("regimeStrip");
   const elSnapshotTelemetryPanel = document.getElementById("snapshotTelemetryPanel");
-  const elTelemetryDismissRow = document.getElementById("telemetryDismissRow");
   const elTelemetryStripDismiss = document.getElementById("telemetryStripDismiss");
+  const elOpsMarkReadBtn = document.getElementById("opsMarkReadBtn");
+  const elCoinAlertsBell = document.getElementById("coinAlertsBell");
+  const elCoinAlertsDrawer = document.getElementById("coinAlertsDrawer");
+  const elCoinAlertsBadge = document.getElementById("coinAlertsBadge");
+  const elCoinAlertsToolbarSlot = document.getElementById("coinAlertsToolbarSlot");
+  const elOpsTabBadge = document.getElementById("opsTabBadge");
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
@@ -195,6 +210,8 @@
   let sortDir = -1;
   /** @type {number | null} */
   let filterHealthMin = null;
+  /** @type {number | null} */
+  let filterUniformityMin = null;
   let searchQuery = "";
   let searchDebounceTimer = null;
   /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
@@ -209,8 +226,43 @@
   let pinEnterClearTimer = 0;
   let prevPollWatchLeaveSig = "__init__";
   let suppressedWatchLeaveSig = "";
-  /** @type {"qualified" | "watchlist"} */
+  /** @type {"qualified" | "watchlist" | "alerts"} */
   let activeView = "qualified";
+  /** @type {{ t: number, iso: string, html: string }[]} */
+  let opsFeedItems = [];
+  const opsFeedDedupe = new Set();
+  let opsSummaryDebounceTimer = 0;
+  let lastStaleBannerShown = false;
+
+  function getOpsLastAckMs() {
+    try {
+      const n = Number(localStorage.getItem(LS_OPS_LAST_ACK_MS));
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function setOpsLastAckToNow() {
+    try {
+      localStorage.setItem(LS_OPS_LAST_ACK_MS, String(Date.now()));
+    } catch (e) {
+      console.warn("ops ack", e);
+    }
+  }
+
+  function ackOpsNotificationsFromUi() {
+    setOpsLastAckToNow();
+    syncOpsTabBadge();
+  }
+
+  function syncOpsTabBadge() {
+    if (!elOpsTabBadge) return;
+    const ack = getOpsLastAckMs();
+    const unread = opsFeedItems.filter((i) => i.t > ack).length;
+    elOpsTabBadge.hidden = unread === 0;
+    elOpsTabBadge.textContent = unread > 99 ? "99+" : String(unread);
+  }
 
   /** Reset Tier-A poll diff baseline so filter changes do not fire bogus in/out alerts. */
   function resetTierAPollBaselineIfAlerts() {
@@ -228,6 +280,8 @@
       localStorage.setItem(LS_UI_SORT_DIR, String(sortDir));
       if (filterHealthMin == null) localStorage.removeItem(LS_UI_HEALTH_MIN);
       else localStorage.setItem(LS_UI_HEALTH_MIN, String(filterHealthMin));
+      if (filterUniformityMin == null) localStorage.removeItem(LS_UI_UNIFORMITY_MIN);
+      else localStorage.setItem(LS_UI_UNIFORMITY_MIN, String(filterUniformityMin));
       localStorage.setItem(LS_UI_SEARCH, searchQuery);
       if (filterExchangeSet.size === 0) {
         localStorage.removeItem(LS_UI_EXCHANGES_JSON);
@@ -256,6 +310,14 @@
         else if (n === 60 || n === 70) filterHealthMin = n;
         else filterHealthMin = null;
       }
+      const um = localStorage.getItem(LS_UI_UNIFORMITY_MIN);
+      if (um === null || um === "") filterUniformityMin = null;
+      else {
+        const nu = Number(um);
+        if (Number.isNaN(nu)) filterUniformityMin = null;
+        else if (nu === 60 || nu === 65) filterUniformityMin = nu;
+        else filterUniformityMin = null;
+      }
       const sq = localStorage.getItem(LS_UI_SEARCH);
       if (sq != null) searchQuery = sq;
       filterExchangeSet = new Set();
@@ -281,7 +343,7 @@
         }
       }
       const av = localStorage.getItem(LS_UI_ACTIVE_VIEW);
-      if (av === "watchlist" || av === "qualified") activeView = av;
+      if (av === "watchlist" || av === "qualified" || av === "alerts") activeView = av;
     } catch (e) {
       console.warn("restoreUiPreferences", e);
     }
@@ -293,6 +355,12 @@
     elHealthMinSelect.value = v === "60" || v === "70" ? v : "";
   }
 
+  function syncUniformityMinSelect() {
+    if (!elUniformityMinSelect) return;
+    const v = filterUniformityMin == null ? "" : String(filterUniformityMin);
+    elUniformityMinSelect.value = v === "60" || v === "65" ? v : "";
+  }
+
   function updateWatchlistBadge() {
     if (!elWatchlistBadge) return;
     const n = getPinnedSet().size;
@@ -302,25 +370,46 @@
 
   function syncTabVisuals() {
     const onQ = activeView === "qualified";
+    const onW = activeView === "watchlist";
+    const onA = activeView === "alerts";
     const tq = document.getElementById("tabQualified");
     const tw = document.getElementById("tabWatchlist");
-    const panel = document.getElementById("mainPanel");
-    if (tq && tw) {
+    const ta = document.getElementById("tabOps");
+    const mainP = document.getElementById("mainDataPanel");
+    const opsP = document.getElementById("opsPanel");
+    if (tq && tw && ta) {
       tq.classList.toggle("is-active", onQ);
-      tw.classList.toggle("is-active", !onQ);
+      tw.classList.toggle("is-active", onW);
+      ta.classList.toggle("is-active", onA);
       tq.setAttribute("aria-selected", onQ ? "true" : "false");
-      tw.setAttribute("aria-selected", onQ ? "false" : "true");
+      tw.setAttribute("aria-selected", onW ? "true" : "false");
+      ta.setAttribute("aria-selected", onA ? "true" : "false");
     }
-    if (panel) panel.setAttribute("aria-labelledby", onQ ? "tabQualified" : "tabWatchlist");
-    if (elMainHeading) elMainHeading.textContent = onQ ? "Qualified list" : "Watchlist";
+    if (mainP) {
+      mainP.hidden = onA;
+      mainP.setAttribute("aria-labelledby", onW ? "tabWatchlist" : "tabQualified");
+    }
+    if (opsP) opsP.hidden = !onA;
+    if (elMainHeading) {
+      elMainHeading.textContent = onA ? "Alerts" : onW ? "Watchlist" : "Qualified list";
+    }
+    if (elCoinAlertsToolbarSlot) elCoinAlertsToolbarSlot.hidden = onA;
+    if (onA && elCoinAlertsDrawer) {
+      elCoinAlertsDrawer.hidden = true;
+      if (elCoinAlertsBell) elCoinAlertsBell.setAttribute("aria-expanded", "false");
+    }
     updateWatchlistBadge();
+    syncOpsTabBadge();
+    syncCoinBellBadge();
   }
 
   function setActiveView(view) {
-    activeView = view === "watchlist" ? "watchlist" : "qualified";
+    if (view === "alerts") activeView = "alerts";
+    else activeView = view === "watchlist" ? "watchlist" : "qualified";
+    if (activeView === "alerts") ackOpsNotificationsFromUi();
     syncTabVisuals();
     persistUiPreferences();
-    applyTableView();
+    if (activeView !== "alerts") applyTableView();
   }
 
   function syncExchangeCheckboxesFromSet() {
@@ -350,6 +439,7 @@
   restoreUiPreferences();
   if (elSearch) elSearch.value = searchQuery;
   syncHealthMinSelect();
+  syncUniformityMinSelect();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
   syncTabVisuals();
@@ -504,22 +594,34 @@
     }
   }
 
+  /** Session: hide scan / relay / regime strips in the Alerts tab only. */
+  function dismissOpsScanStripsForSession() {
+    setSnapshotTelemetryDismissed();
+    syncSnapshotTelemetryPanel();
+  }
+
+  function dismissWatchLeaveOnly() {
+    if (elWatchLeaveBanner) elWatchLeaveBanner.hidden = true;
+    if (elWatchLeaveBannerText) elWatchLeaveBannerText.textContent = "";
+    suppressedWatchLeaveSig = watchLeaveSig(lastPinWatchDelta.left);
+    syncCoinBellBadge();
+  }
+
   function syncSnapshotTelemetryPanel() {
     if (!elSnapshotTelemetryPanel) return;
     if (snapshotTelemetryDismissed()) {
       elSnapshotTelemetryPanel.hidden = true;
-      if (elTelemetryDismissRow) elTelemetryDismissRow.hidden = true;
       return;
     }
-    const strips = [elHealthStrip, elRelayHealthStrip, elRegimeStrip, elDiffBanner].filter(Boolean);
+    const strips = [elHealthStrip, elRelayHealthStrip, elRegimeStrip].filter(Boolean);
     const anyVisible = strips.some((el) => !el.hidden);
     elSnapshotTelemetryPanel.hidden = !anyVisible;
-    if (elTelemetryDismissRow) elTelemetryDismissRow.hidden = !anyVisible;
   }
 
   function showError(msg) {
     elError.textContent = msg;
     elError.hidden = false;
+    appendOpsFeedDeduped(`err|${String(msg).slice(0, 200)}`, "—", `Load error: ${msg}`);
     elTbody.innerHTML = "";
     if (elDiffBanner) {
       elDiffBanner.hidden = true;
@@ -556,6 +658,7 @@
       elApiBudgetPanel.innerHTML = "";
     }
     syncSnapshotTelemetryPanel();
+    syncCoinBellBadge();
   }
 
   function clearError() {
@@ -703,20 +806,22 @@
     if (!left.length) {
       elWatchLeaveBanner.hidden = true;
       elWatchLeaveBannerText.textContent = "";
+      syncCoinBellBadge();
       return;
     }
     if (sig === suppressedWatchLeaveSig) {
       elWatchLeaveBanner.hidden = true;
+      syncCoinBellBadge();
       return;
     }
     elWatchLeaveBanner.hidden = false;
     elWatchLeaveBannerText.textContent = `Watched symbols left the qualified list: ${left.join(", ")}`;
+    syncCoinBellBadge();
   }
 
-  function updateDiffBanner(data, added, dropped, prevSchema) {
+  /** Qualified-set additions and removals only (schema changes go to the Alerts feed). */
+  function updateCoinListDiffBanner(added, dropped) {
     if (!elDiffBanner) return;
-    const curSchema = String(data.schema_version ?? "");
-    const schemaChanged = prevSchema !== "" && prevSchema !== curSchema;
     const parts = [];
     if (added.length) {
       parts.push(
@@ -728,16 +833,15 @@
         `${dropped.length} dropped: ${dropped.slice(0, 14).join(", ")}${dropped.length > 14 ? "…" : ""}`,
       );
     }
-    if (schemaChanged) {
-      parts.push(`schema_version ${prevSchema} → ${curSchema}`);
-    }
     if (!parts.length) {
       elDiffBanner.hidden = true;
       elDiffBanner.textContent = "";
+      syncCoinBellBadge();
       return;
     }
     elDiffBanner.hidden = false;
     elDiffBanner.textContent = parts.join(" · ");
+    syncCoinBellBadge();
   }
 
   function coinG30(c) {
@@ -749,6 +853,12 @@
     if (c.health_score == null || c.health_score === "") return null;
     const n = Number(c.health_score);
     return Number.isFinite(n) ? n : null;
+  }
+
+  function coinUniformity(c) {
+    const u = c.uniformity_score;
+    if (typeof u !== "number" || !Number.isFinite(u)) return null;
+    return u;
   }
 
   function coinG7(c) {
@@ -793,7 +903,7 @@
       keys.length > 8
         ? `<tr><td colspan="2" class="cell-muted">+${keys.length - 8} more</td></tr>`
         : "";
-    return `<table class="exch-sheet"><thead><tr><th scope="col">Exch</th><th scope="col">Vol</th></tr></thead><tbody>${rows}${more}</tbody></table>`;
+    return `<table class="exch-sheet"><thead><tr><th scope="col" title="Exchange venue">Exch</th><th scope="col" title="Approximate 24h volume on that venue from snapshot">Vol</th></tr></thead><tbody>${rows}${more}</tbody></table>`;
   }
 
   function sortCoinsInPlace(rows) {
@@ -875,6 +985,13 @@
         if (c._watchlist_only) return true;
         const h = coinHealth(c);
         return h != null && h >= filterHealthMin;
+      });
+    }
+    if (filterUniformityMin != null) {
+      rows = rows.filter((c) => {
+        if (c._watchlist_only) return true;
+        const u = coinUniformity(c);
+        return u != null && u >= filterUniformityMin;
       });
     }
     if (filterExchangeSet.size > 0) {
@@ -998,12 +1115,14 @@
     if (!iso) {
       elStaleBanner.hidden = true;
       elStaleBanner.textContent = "";
+      lastStaleBannerShown = false;
       return;
     }
     const snapTs = Date.parse(iso);
     if (!isValidSnapshotTimeMs(snapTs)) {
       elStaleBanner.hidden = true;
       elStaleBanner.textContent = "";
+      lastStaleBannerShown = false;
       return;
     }
     const ageSec = Math.max(0, (Date.now() - snapTs) / 1000);
@@ -1011,11 +1130,16 @@
     elStaleBanner.hidden = !stale;
     if (!stale) {
       elStaleBanner.textContent = "";
+      lastStaleBannerShown = false;
       return;
     }
     const ageMin = Math.round(ageSec / 60);
     const nomMin = Math.round(intervalSec / 60);
     elStaleBanner.textContent = `Snapshot looks stale (${ageMin} min old). Expected refresh about every ${nomMin} min — check the worker or snapshot URL.`;
+    if (stale && !lastStaleBannerShown) {
+      appendOpsFeedDeduped(`stale|${iso}`, iso, elStaleBanner.textContent);
+    }
+    lastStaleBannerShown = stale;
   }
 
   function formatApiCostPanelLines(panel) {
@@ -1084,11 +1208,12 @@
         riskText =
           "Configure monthly HTTP caps in the scanner (SCAN_COSTS + per-vendor cap settings) to see a green/yellow/red traffic-light vs overage risk.";
       }
-      let li = `<li><strong>${name}</strong>: ${n} HTTP this scan`;
+      const riskTitle = escapeAttr(riskText);
+      let li = `<li title="${riskTitle}"><strong>${name}</strong>: ${n} HTTP this scan`;
       if (sub) li += `<br/><span class="api-budget-sub">${sub}</span>`;
-      li += `<br/><span class="${riskClass}">${escapeHtml(riskText)}</span>`;
+      li += `<br/><span class="${riskClass}" title="${riskTitle}">${escapeHtml(riskText)}</span>`;
       if (pricing) {
-        li += `<br/><a href="${escapeAttr(pricing)}" class="api-budget-link" rel="noopener noreferrer" target="_blank">Vendor pricing</a>`;
+        li += `<br/><a href="${escapeAttr(pricing)}" class="api-budget-link" rel="noopener noreferrer" target="_blank" title="Open vendor pricing page">Vendor pricing</a>`;
       }
       li += `</li>`;
       items.push(li);
@@ -1103,7 +1228,7 @@
         ? `<p class="api-budget-note">${escapeHtml(String(panel.note))}</p>`
         : "";
     elApiBudgetPanel.hidden = false;
-    elApiBudgetPanel.innerHTML = `<h2 class="api-budget-heading">API usage &amp; budget</h2>${note}<ul class="api-budget-list">${items.join("")}</ul>`;
+    elApiBudgetPanel.innerHTML = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
   }
 
   function updateHealthStrip(data) {
@@ -1221,6 +1346,7 @@
     } finally {
       window.clearTimeout(to);
       syncSnapshotTelemetryPanel();
+      if (lastPayload) scheduleOpsFeedSnapshotSummary(lastPayload);
     }
   }
 
@@ -1254,6 +1380,110 @@
 
   function escapeAttr(s) {
     return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  function renderOpsFeedList() {
+    const ul = document.getElementById("opsFeedList");
+    const empty = document.getElementById("opsFeedEmpty");
+    if (!ul) return;
+    ul.innerHTML = "";
+    for (const it of opsFeedItems) {
+      const li = document.createElement("li");
+      li.className = "ops-feed-item";
+      const isoEsc = escapeHtml(it.iso);
+      li.innerHTML = `<time class="ops-feed-time" datetime="${escapeAttr(it.iso)}">${isoEsc}</time><div class="ops-feed-body">${it.html}</div>`;
+      ul.appendChild(li);
+    }
+    if (empty) empty.hidden = opsFeedItems.length > 0;
+  }
+
+  /** Append one operational feed row (deduped by key). Plain text is escaped; use only trusted DOM-derived strings. */
+  function appendOpsFeedDeduped(key, iso, plainText) {
+    if (!plainText || !String(plainText).trim()) return;
+    if (opsFeedDedupe.has(key)) return;
+    opsFeedDedupe.add(key);
+    if (opsFeedDedupe.size > 200) {
+      opsFeedDedupe.clear();
+      opsFeedDedupe.add(key);
+    }
+    const html = escapeHtml(String(plainText).trim()).replace(/\n/g, "<br/>");
+    opsFeedItems.unshift({ t: Date.now(), iso: iso || "—", html: html });
+    opsFeedItems = opsFeedItems.slice(0, 50);
+    renderOpsFeedList();
+    if (activeView === "alerts") setOpsLastAckToNow();
+    syncOpsTabBadge();
+  }
+
+  function buildOpsSummaryPlain() {
+    const bits = [];
+    if (elHealthStrip && !elHealthStrip.hidden) {
+      const t = (elHealthStrip.textContent || "").trim();
+      const head = t.split(/\n\n/)[0].trim();
+      if (head) bits.push(head);
+    }
+    if (elRelayHealthStrip && !elRelayHealthStrip.hidden) bits.push((elRelayHealthStrip.textContent || "").trim());
+    if (elRegimeStrip && !elRegimeStrip.hidden) bits.push((elRegimeStrip.textContent || "").trim());
+    if (elStaleBanner && !elStaleBanner.hidden) bits.push((elStaleBanner.textContent || "").trim());
+    if (elEmptyBanner && !elEmptyBanner.hidden) bits.push((elEmptyBanner.textContent || "").trim());
+    if (elApiBudgetPanel && !elApiBudgetPanel.hidden) {
+      const t = (elApiBudgetPanel.textContent || "").trim().slice(0, 1200);
+      if (t) bits.push(`API / budget: ${t}`);
+    }
+    return bits.join("\n\n");
+  }
+
+  function tryAppendOpsSnapshotSummaryForIso(iso) {
+    if (!lastPayload || String(lastPayload.updated_at || "") !== iso) return;
+    const body = buildOpsSummaryPlain();
+    if (!body.trim()) return;
+    appendOpsFeedDeduped(`summary|${iso}`, iso, body);
+  }
+
+  function scheduleOpsFeedSnapshotSummary(data) {
+    const iso = data && data.updated_at ? String(data.updated_at) : "";
+    if (!iso) return;
+    window.clearTimeout(opsSummaryDebounceTimer);
+    opsSummaryDebounceTimer = window.setTimeout(() => {
+      opsSummaryDebounceTimer = 0;
+      tryAppendOpsSnapshotSummaryForIso(iso);
+    }, 900);
+  }
+
+  function coinSignalsDigest() {
+    const d = elDiffBanner && !elDiffBanner.hidden ? (elDiffBanner.textContent || "").trim() : "";
+    const w =
+      elWatchLeaveBanner && !elWatchLeaveBanner.hidden
+        ? (elWatchLeaveBannerText && elWatchLeaveBannerText.textContent
+            ? elWatchLeaveBannerText.textContent.trim()
+            : "")
+        : "";
+    return `${d}\n---\n${w}`;
+  }
+
+  function readCoinAlertsAckDigest() {
+    try {
+      return localStorage.getItem(LS_COIN_ALERTS_ACK_DIGEST) || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function writeCoinAlertsAckDigest(dig) {
+    try {
+      localStorage.setItem(LS_COIN_ALERTS_ACK_DIGEST, dig);
+    } catch (e) {
+      console.warn("coin alerts ack", e);
+    }
+  }
+
+  function syncCoinBellBadge() {
+    if (!elCoinAlertsBadge) return;
+    const dig = coinSignalsDigest();
+    const ack = readCoinAlertsAckDigest();
+    const drawerOpen = elCoinAlertsDrawer && !elCoinAlertsDrawer.hidden;
+    const show = Boolean(dig) && dig !== ack && !drawerOpen;
+    elCoinAlertsBadge.hidden = !show;
+    elCoinAlertsBadge.textContent = show ? "!" : "0";
   }
 
   function coinListingUrl(c) {
@@ -1312,6 +1542,26 @@
       if (nums.length >= 2) return nums;
     }
     return effectiveCloses30d(c);
+  }
+
+  /** Linearly upsample for smoother sparklines when the snapshot has few points (e.g. synthetic 30d). */
+  function densifySparklinePoints(closes, targetLen) {
+    if (!Array.isArray(closes) || closes.length < 2) return closes || [];
+    const seq = closes.map((x) => Number(x)).filter((x) => Number.isFinite(x));
+    if (seq.length < 2) return seq;
+    const target = Math.max(targetLen, seq.length);
+    if (seq.length >= target) return seq;
+    const out = [];
+    const n = seq.length - 1;
+    for (let i = 0; i < target; i++) {
+      const pos = (i / (target - 1)) * n;
+      const j = Math.floor(pos);
+      const t = pos - j;
+      const a = seq[j];
+      const b = seq[Math.min(j + 1, n)];
+      out.push(a + (b - a) * t);
+    }
+    return out;
   }
 
   function sparklineSvg(closes, w, h) {
@@ -1375,7 +1625,9 @@
       ...allKeys.filter((k) => !preferred.includes(k)).sort(),
     ];
     if (!useKeys.length) return '<p class="detail-muted">No columns.</p>';
-    const th = useKeys.map((k) => `<th scope="col">${escapeHtml(k)}</th>`).join("");
+    const th = useKeys
+      .map((k) => `<th scope="col" title="${escapeAttr(`Backtest optimizer field: ${k}`)}">${escapeHtml(k)}</th>`)
+      .join("");
     const tb = rows
       .map((r) => {
         if (!r || typeof r !== "object") return "";
@@ -1391,7 +1643,7 @@
     if (typeof chartRaw === "string" && /^https:\/\//i.test(chartRaw.trim())) {
       const u = chartRaw.trim();
       parts.push(
-        `<p class="bt-modal-chart"><a href="${escapeAttr(u)}" target="_blank" rel="noopener noreferrer">Open backtest chart image</a></p>`,
+        `<p class="bt-modal-chart"><a href="${escapeAttr(u)}" target="_blank" rel="noopener noreferrer" title="Open full-size backtest chart in a new tab">Open backtest chart image</a></p>`,
       );
       const symLabel = escapeAttr(String(c.symbol || "coin"));
       parts.push(
@@ -1414,12 +1666,12 @@
     if (hasChart) {
       const u = chartRaw.trim();
       parts.push(
-        `<a href="${escapeAttr(u)}" class="bt-chart-link" rel="noopener noreferrer" target="_blank">Chart</a>`,
+        `<a href="${escapeAttr(u)}" class="bt-chart-link" rel="noopener noreferrer" target="_blank" title="Open backtest chart image in a new tab">Chart</a>`,
       );
     }
     if (hasSheet) {
       parts.push(
-        `<button type="button" class="bt-sheet-btn secondary" data-symbol="${rawSym}">Results</button>`,
+        `<button type="button" class="bt-sheet-btn secondary" data-symbol="${rawSym}" title="View strategy table and buy/hold summary for this symbol">Results</button>`,
       );
     }
     if (!parts.length) return '<span class="cell-muted">—</span>';
@@ -1448,7 +1700,7 @@
         if (watchOnly) {
           const sym = escapeHtml(String(c.symbol || ""));
           const pinLabel = `Remove ${rawSym} from watchlist`;
-          const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="Remove from watchlist">\u2605</button>`;
+          const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">\u2605</button>`;
           const dash = '<span class="cell-muted">\u2014</span>';
           return `<tr class="coin-row coin-row--watchlist-only" data-symbol="${escapeAttr(rawSym)}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong></span></td>
@@ -1473,14 +1725,15 @@
         const g = c.gains || {};
         const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
         const g30pct = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
-        const closes = effectiveSparklineCloses(c);
+        const rawSpark = effectiveSparklineCloses(c);
+        const closes = densifySparklinePoints(rawSpark, SPARKLINE_TARGET_POINTS);
         const has1h = Array.isArray(c.closes_1h) && c.closes_1h.length >= 2;
         const hasRealDaily = Array.isArray(c.closes_30d) && c.closes_30d.length >= 2;
         const g30Title = has1h
-          ? "30-day % from snapshot; sparkline uses recent 1h closes (same resolution family as Telegram charts)"
+          ? "30-day % from snapshot; sparkline uses recent 1h closes (interpolated for display when needed)"
           : hasRealDaily
-            ? "30-day % and price trend from snapshot daily closes"
-            : "30-day % and approximate trend from 7d/30d returns (scanner adds closes_1h or closes_30d when available)";
+            ? "30-day % and price trend from snapshot daily closes (interpolated for display when needed)"
+            : "30-day % from snapshot; trend line is estimated from 7d/30d returns then smoothed for display until the scanner adds closes_1h or closes_30d";
         const spark = sparklineSvg(closes, 168, 44);
         const g30Cell = `<div class="g30-cell" title="${escapeAttr(g30Title)}"><span class="g30-pct"><span class="visually-hidden">30-day gain </span>${g30pct}%</span>${spark}</div>`;
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
@@ -1496,24 +1749,24 @@
             : "—";
         const listing = coinListingUrl(c);
         const nameCell = listing
-          ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}">${name}</a>`
-          : `<span>${name}</span>`;
+          ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}" title="Open listing or reference page in a new tab">${name}</a>`
+          : `<span title="Name from snapshot (no listing URL)">${name}</span>`;
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
         const pinLabel = isPinned ? `Remove ${rawSym} from watchlist` : `Add ${rawSym} to watchlist`;
         const pinChar = isPinned ? "\u2605" : "\u2606";
-        const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="Watchlist (this browser)">${pinChar}</button>`;
+        const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">${pinChar}</button>`;
         const exchHtml = exchangeVolumeCellHtml(c);
         const btHtml = backtestCellHtml(c);
         return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong>${badge}</span></td>
           <td headers="col-name">${nameCell}</td>
-          <td headers="col-g7" class="num"><span class="visually-hidden">7-day gain </span>${g7}%</td>
+          <td headers="col-g7" class="num"><span class="visually-hidden">7-day gain </span><span title="7-day percentage gain from snapshot">${g7}%</span></td>
           <td headers="col-g30" class="num">${g30Cell}</td>
-          <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span>${u}</td>
-          <td headers="col-health" class="num"><span class="visually-hidden">Health </span>${h}</td>
-          <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span>${volStr}</td>
+          <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${u}</span></td>
+          <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${h}</span></td>
+          <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span><span title="Volume vs baseline window from snapshot">${volStr}</span></td>
           <td headers="col-exch" class="exch-col">${exchHtml}</td>
           <td headers="col-backtest">${btHtml}</td>
         </tr>`;
@@ -1634,7 +1887,7 @@
       } else {
         elEmptyBanner.hidden = false;
         elEmptyBanner.textContent = regimeBlocked
-          ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see strip above). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
+          ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see the Regime strip on the Alerts tab). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
           : "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file.";
       }
     }
@@ -1653,13 +1906,25 @@
       prevSyms.size === 0 ? [] : [...prevSyms].filter((s) => !currSet.has(s)).sort();
     lastAddedSet = new Set(added);
 
-    updateDiffBanner(data, added, dropped, prevSchema);
+    const curSchema = String(data.schema_version ?? "");
+    const schemaChanged = prevSchema !== "" && prevSchema !== curSchema;
+    if (schemaChanged) {
+      appendOpsFeedDeduped(
+        `schema|${prevSchema}|${curSchema}`,
+        updatedRaw || "—",
+        `schema_version ${prevSchema} → ${curSchema}`,
+      );
+    }
+
+    updateCoinListDiffBanner(added, dropped);
     updateStaleBanner(data);
     updateHealthStrip(data);
     updateRegimeStrip(data.regime_gate);
     void refreshRelayHealthStrip();
 
     syncSnapshotTelemetryPanel();
+    scheduleOpsFeedSnapshotSummary(data);
+    syncCoinBellBadge();
 
     applyTableView();
     updateWatchlistBadge();
@@ -1920,6 +2185,26 @@
       const raw = elHealthMinSelect.value;
       filterHealthMin = raw === "" ? null : Number(raw);
       if (filterHealthMin != null && !Number.isFinite(filterHealthMin)) filterHealthMin = null;
+      if (filterHealthMin != null && filterHealthMin !== 60 && filterHealthMin !== 70) {
+        filterHealthMin = null;
+      }
+      syncHealthMinSelect();
+      applyTableView();
+      persistUiPreferences();
+      resetTierAPollBaselineIfAlerts();
+      void syncPushNotifyExchangesIfSubscribed();
+    });
+  }
+
+  if (elUniformityMinSelect) {
+    elUniformityMinSelect.addEventListener("change", () => {
+      const raw = elUniformityMinSelect.value;
+      filterUniformityMin = raw === "" ? null : Number(raw);
+      if (filterUniformityMin != null && !Number.isFinite(filterUniformityMin)) filterUniformityMin = null;
+      if (filterUniformityMin != null && filterUniformityMin !== 60 && filterUniformityMin !== 65) {
+        filterUniformityMin = null;
+      }
+      syncUniformityMinSelect();
       applyTableView();
       persistUiPreferences();
       resetTierAPollBaselineIfAlerts();
@@ -1934,6 +2219,24 @@
   }
   if (tabW) {
     tabW.addEventListener("click", () => setActiveView("watchlist"));
+  }
+  const tabA = document.getElementById("tabOps");
+  if (tabA) {
+    tabA.addEventListener("click", () => setActiveView("alerts"));
+  }
+
+  if (elOpsMarkReadBtn) {
+    elOpsMarkReadBtn.addEventListener("click", () => ackOpsNotificationsFromUi());
+  }
+
+  if (elCoinAlertsBell && elCoinAlertsDrawer) {
+    elCoinAlertsBell.addEventListener("click", () => {
+      const open = elCoinAlertsDrawer.hidden;
+      elCoinAlertsDrawer.hidden = !open;
+      elCoinAlertsBell.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) writeCoinAlertsAckDigest(coinSignalsDigest());
+      syncCoinBellBadge();
+    });
   }
 
   if (elSearch) {
@@ -1969,6 +2272,15 @@
   if (elExchangeFilterApply && elExchangeFilterDetails) {
     elExchangeFilterApply.addEventListener("click", () => {
       elExchangeFilterDetails.open = false;
+    });
+  }
+
+  if (elExchangeFilterSelectAll) {
+    elExchangeFilterSelectAll.addEventListener("click", () => {
+      document.querySelectorAll("input[data-exchange-cb]").forEach((inp) => {
+        inp.checked = true;
+      });
+      onExchangeCheckboxChange();
     });
   }
 
@@ -2134,17 +2446,11 @@
   wireDonateCopyButtons();
 
   if (elWatchLeaveBannerDismiss) {
-    elWatchLeaveBannerDismiss.addEventListener("click", () => {
-      if (elWatchLeaveBanner) elWatchLeaveBanner.hidden = true;
-      suppressedWatchLeaveSig = watchLeaveSig(lastPinWatchDelta.left);
-    });
+    elWatchLeaveBannerDismiss.addEventListener("click", () => dismissWatchLeaveOnly());
   }
 
   if (elTelemetryStripDismiss) {
-    elTelemetryStripDismiss.addEventListener("click", () => {
-      setSnapshotTelemetryDismissed();
-      syncSnapshotTelemetryPanel();
-    });
+    elTelemetryStripDismiss.addEventListener("click", () => dismissOpsScanStripsForSession());
   }
 
   syncSnapshotTelemetryPanel();

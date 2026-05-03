@@ -13,16 +13,17 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <h1 id="mainHeading">Qualified list</h1>
-    <nav class="app-tabs" role="tablist" aria-label="Main views">
+    <h1 id="mainHeading" title="Current view: Qualified list, Watchlist, or Alerts (scanner feed)">Qualified list</h1>
+    <nav class="app-tabs" role="tablist" aria-label="Main views" title="Qualified table, watchlist, or operational alerts feed">
       <button
         type="button"
         class="app-tab is-active"
         role="tab"
         id="tabQualified"
         aria-selected="true"
-        aria-controls="mainPanel"
+        aria-controls="mainDataPanel"
         data-view="qualified"
+        title="Scanner-qualified coins from the latest snapshot (filters apply)"
       >
         Qualified
       </button>
@@ -32,34 +33,58 @@
         role="tab"
         id="tabWatchlist"
         aria-selected="false"
-        aria-controls="mainPanel"
+        aria-controls="mainDataPanel"
         data-view="watchlist"
+        title="Symbols you starred; includes rows not in this snapshot so you can remove stars"
       >
         Watchlist
-        <span id="watchlistBadge" class="tab-badge" hidden></span>
+        <span id="watchlistBadge" class="tab-badge" hidden title="Number of starred symbols"></span>
+      </button>
+      <button
+        type="button"
+        class="app-tab"
+        role="tab"
+        id="tabOps"
+        aria-selected="false"
+        aria-controls="opsPanel"
+        data-view="alerts"
+        title="Scanner health, relay, regime, stale snapshot, API budget, and history"
+      >
+        Alerts
+        <span id="opsTabBadge" class="tab-badge tab-badge--alert" hidden title="Operational alerts since you last opened this tab">0</span>
       </button>
     </nav>
 
-    <p class="toolbar toolbar-primary">
+    <p class="toolbar toolbar-primary" title="Toolbar: data reload, alerts, theme, export">
       <details class="toolbar-advanced">
-        <summary class="toolbar-advanced-summary">Data source</summary>
+        <summary class="toolbar-advanced-summary" title="Show or hide snapshot JSON URL and reload">Data source</summary>
         <span class="toolbar-advanced-body">
-          <label>
+          <label title="HTTPS URL to qualified_public_snapshot.json (relay or static file)">
             Snapshot JSON URL
-            <input id="apiInput" type="url" placeholder="https://…/qualified_public_snapshot.json" />
+            <input
+              id="apiInput"
+              type="url"
+              placeholder="https://…/qualified_public_snapshot.json"
+              title="HTTPS URL to qualified_public_snapshot.json. Override with ?api= in the page URL."
+            />
           </label>
-          <button id="loadBtn" type="button">Reload</button>
+          <button id="loadBtn" type="button" title="Fetch the snapshot again from the URL above">
+            Reload
+          </button>
         </span>
       </details>
-      <label class="poll-toolbar">
+      <label class="poll-toolbar" title="How often to re-fetch when Tier-A update alerts are enabled">
         Alert poll
-        <select id="pollIntervalSelect" title="Tier-A: how often to re-fetch the snapshot and compare (1h–1D, TradingView-style)"></select>
+        <select
+          id="pollIntervalSelect"
+          title="Tier-A: how often to re-fetch the snapshot and compare (1h–1D, TradingView-style)"
+        ></select>
       </label>
       <button
         id="notifyBtn"
         type="button"
         class="secondary"
-        title="Tier-A: alerts when your filtered table changes (Exchanges, Health, Search). Rows hidden by filters do not trigger an alert — e.g. only Kraken checked means no alert for a new coin listed only on MEXC. Watchlist enter/leave uses the full qualified set."
+        title="Tier-A: browser notifications when your filtered Qualified table changes (Exchanges, Health, Uniformity, Search). Hidden rows do not trigger alerts. Watchlist in/out uses the full qualified set."
       >
         Enable update alerts
       </button>
@@ -72,79 +97,118 @@
       >
         List change push…
       </button>
-      <button id="themeCycleBtn" type="button" class="secondary" title="Cycle theme: system, light, dark">
+      <button
+        id="themeCycleBtn"
+        type="button"
+        class="secondary"
+        title="Cycle theme: system → light → dark (saved in this browser)"
+      >
         Theme: system
       </button>
-      <span class="export-toolbar" title="Export the current tab (filtered rows)">
+      <span class="export-toolbar" title="Download the current tab’s filtered rows in the chosen format">
         <label class="visually-hidden" for="exportFormatSelect">Export format</label>
-        <select id="exportFormatSelect" class="toolbar-select" aria-label="Export format">
+        <select
+          id="exportFormatSelect"
+          class="toolbar-select"
+          aria-label="Export format"
+          title="Comma-separated values or JSON array of coin objects"
+        >
           <option value="csv">CSV</option>
           <option value="json">JSON</option>
         </select>
-        <button id="exportBtn" type="button" class="secondary">Export</button>
+        <button id="exportBtn" type="button" class="secondary" title="Download export file for the current tab and filters">
+          Export
+        </button>
+      </span>
+      <span class="toolbar-coin-alerts-slot" id="coinAlertsToolbarSlot" title="Qualified-list changes (not scanner ops)">
+        <button
+          type="button"
+          id="coinAlertsBell"
+          class="coin-alerts-bell secondary"
+          aria-expanded="false"
+          aria-controls="coinAlertsDrawer"
+          aria-label="Coin list notifications"
+          title="Show or hide messages about symbols added or removed from the qualified list, or watchlist symbols that left the list"
+        >
+          <svg class="coin-bell-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+          </svg>
+          <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread coin-list messages">0</span>
+        </button>
       </span>
     </p>
-    <div id="mainPanel" role="tabpanel" aria-labelledby="tabQualified">
-      <p class="toolbar filters">
-        <label>
+    <div id="coinAlertsDrawer" class="coin-alerts-drawer" role="region" aria-label="Coin list notifications" hidden>
+      <div id="diffBanner" class="diff-banner diff-banner--coin" role="status" hidden></div>
+      <div id="watchLeaveBanner" class="watch-banner watch-banner--coin" role="status" hidden>
+        <span id="watchLeaveBannerText"></span>
+        <button
+          type="button"
+          id="watchLeaveBannerDismiss"
+          class="secondary"
+          title="Dismiss this watchlist notice until the set of symbols that left the list changes"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+    <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
+      <p class="toolbar filters" title="Search and venue filters apply to the active tab’s table">
+        <label title="Filter rows by symbol or name (case-insensitive substring)">
           Search
-          <input id="searchInput" type="search" placeholder="Symbol or name" autocomplete="off" />
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Symbol or name"
+            autocomplete="off"
+            title="Filter by symbol or name; combines with exchange and column filters"
+          />
         </label>
         <div class="exchange-filter-wrap">
-          <span id="exchangeFilterLabel" class="exchange-filter-label">Exchanges</span>
+          <span id="exchangeFilterLabel" class="exchange-filter-label" title="Require listing on at least one checked venue"
+            >Exchanges</span
+          >
           <details id="exchangeFilterDetails" class="exchange-filter-details">
-            <summary class="exchange-filter-summary" title="Filter by where the coin is listed (matches scanner target exchanges)">
+            <summary
+              class="exchange-filter-summary"
+              title="Open venue checklist. No boxes checked = all venues. One or more checked = coin must list on at least one of them."
+            >
               <span id="exchangeFilterSummary">All exchanges</span>
             </summary>
             <div
               class="exchange-filter-panel"
               role="group"
               aria-labelledby="exchangeFilterLabel"
+              title="Target exchanges from the scanner"
             >
-              <label class="exchange-cb-row"
+              <label class="exchange-cb-row" title="Require Coinbase listing (or combine with other checked venues)"
                 ><input type="checkbox" data-exchange-cb value="coinbase" /> Coinbase</label
               >
-              <label class="exchange-cb-row"
+              <label class="exchange-cb-row" title="Require Kraken listing (or combine with other checked venues)"
                 ><input type="checkbox" data-exchange-cb value="kraken" /> Kraken</label
               >
-              <label class="exchange-cb-row"
+              <label class="exchange-cb-row" title="Require MEXC listing (or combine with other checked venues)"
                 ><input type="checkbox" data-exchange-cb value="mexc" /> MEXC</label
               >
               <div class="exchange-filter-actions">
-                <button type="button" id="exchangeFilterApply" class="secondary">Apply</button>
+                <button
+                  type="button"
+                  id="exchangeFilterSelectAll"
+                  class="secondary"
+                  title="Check Coinbase, Kraken, and MEXC (coins listed on any of them pass the filter)"
+                >
+                  Select all
+                </button>
+                <button type="button" id="exchangeFilterApply" class="secondary" title="Close this menu">
+                  Apply
+                </button>
               </div>
             </div>
           </details>
         </div>
       </p>
-      <div id="error" class="error" hidden></div>
-      <p id="meta" class="meta"></p>
-      <div
-        id="apiBudgetPanel"
-        class="api-budget-panel"
-        role="region"
-        aria-label="API usage and monthly budget estimate"
-        hidden
-      ></div>
-      <div id="staleBanner" class="stale-banner" role="status" hidden></div>
-      <div id="snapshotTelemetryPanel" class="snapshot-telemetry-panel">
-        <div id="healthStrip" class="health-strip" role="status" hidden></div>
-        <div id="relayHealthStrip" class="health-strip relay-health-strip" role="status" hidden></div>
-        <div id="regimeStrip" class="regime-strip" role="status" hidden></div>
-        <div id="diffBanner" class="diff-banner" role="status" hidden></div>
-        <div id="telemetryDismissRow" class="telemetry-dismiss-row" hidden>
-          <button type="button" id="telemetryStripDismiss" class="secondary">
-            Dismiss
-          </button>
-        </div>
-      </div>
-      <div id="watchLeaveBanner" class="watch-banner" role="status" hidden>
-        <span id="watchLeaveBannerText"></span>
-        <button type="button" id="watchLeaveBannerDismiss" class="secondary" title="Hide watched-symbol notice">
-          Got it
-        </button>
-      </div>
-      <div id="emptyBanner" class="empty-banner" role="status" hidden></div>
+      <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
+      <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
       <div class="table-scroll">
         <table class="qualified-grid">
           <caption class="visually-hidden">
@@ -153,38 +217,88 @@
           </caption>
           <thead>
             <tr>
-              <th scope="col" id="col-symbol">
-                <button type="button" class="sort-btn" data-sort="symbol" aria-label="Sort by symbol">
+              <th scope="col" id="col-symbol" title="Ticker and watchlist star">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="symbol"
+                  aria-label="Sort by symbol"
+                  title="Sort by symbol A–Z or Z–A"
+                >
                   Symbol
                 </button>
               </th>
-              <th scope="col" id="col-name">
-                <button type="button" class="sort-btn" data-sort="name" aria-label="Sort by name">Name</button>
+              <th scope="col" id="col-name" title="Asset name and listing link when available">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="name"
+                  aria-label="Sort by name"
+                  title="Sort by coin name"
+                >
+                  Name
+                </button>
               </th>
-              <th scope="col" id="col-g7">
-                <button type="button" class="sort-btn" data-sort="g7" aria-label="Sort by 7-day gain">
+              <th scope="col" id="col-g7" title="Seven-day percentage gain from snapshot">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="g7"
+                  aria-label="Sort by 7-day gain"
+                  title="Sort by 7-day % gain"
+                >
                   7d
                 </button>
               </th>
-              <th scope="col" id="col-g30">
-                <button type="button" class="sort-btn" data-sort="g30" aria-label="Sort by 30-day gain">
+              <th scope="col" id="col-g30" title="Thirty-day gain and price trend sparkline">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="g30"
+                  aria-label="Sort by 30-day gain"
+                  title="Sort by 30-day % gain (sparkline uses 1h or daily closes when present, else a smoothed estimate)"
+                >
                   30d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>
               </th>
-              <th scope="col" id="col-uniformity">
-                <button type="button" class="sort-btn" data-sort="uniformity" aria-label="Sort by uniformity">
-                  Uniformity
-                </button>
+              <th scope="col" id="col-uniformity" title="OHLCV uniformity score and optional minimum filter">
+                <div class="th-split th-split--uniformity">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    data-sort="uniformity"
+                    aria-label="Sort by uniformity"
+                    title="Sort by uniformity score"
+                  >
+                    Uniformity
+                  </button>
+                  <select
+                    id="uniformityMinSelect"
+                    class="th-filter-select"
+                    title="Show rows with uniformity score at or above the threshold"
+                    aria-label="Filter by minimum uniformity score"
+                  >
+                    <option value="">All</option>
+                    <option value="60">≥ 60</option>
+                    <option value="65">≥ 65</option>
+                  </select>
+                </div>
               </th>
-              <th scope="col" id="col-health">
+              <th scope="col" id="col-health" title="Composite health score and optional minimum filter">
                 <div class="th-split th-split--health">
-                  <button type="button" class="sort-btn" data-sort="health" aria-label="Sort by health score">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    data-sort="health"
+                    aria-label="Sort by health score"
+                    title="Sort by health score"
+                  >
                     Health
                   </button>
                   <select
                     id="healthMinSelect"
                     class="th-filter-select"
-                    title="Minimum health (filter rows)"
+                    title="Show rows with health score at or above the threshold"
                     aria-label="Filter by minimum health score"
                   >
                     <option value="">All</option>
@@ -193,13 +307,21 @@
                   </select>
                 </div>
               </th>
-              <th scope="col" id="col-volaccel">
-                <button type="button" class="sort-btn" data-sort="volaccel" aria-label="Sort by volume acceleration">
+              <th scope="col" id="col-volaccel" title="Volume acceleration vs baseline window">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="volaccel"
+                  aria-label="Sort by volume acceleration"
+                  title="Sort by volume acceleration %"
+                >
                   Vol Δ%
                 </button>
               </th>
-              <th scope="col" id="col-exch">Volume / exchanges</th>
-              <th scope="col" id="col-backtest">Backtest</th>
+              <th scope="col" id="col-exch" title="Per-exchange 24h volume from snapshot">Volume / exchanges</th>
+              <th scope="col" id="col-backtest" title="Chart link and optimizer results when snapshot includes backtest">
+                Backtest
+              </th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -207,11 +329,56 @@
       </div>
     </div>
 
+    <div id="opsPanel" role="tabpanel" aria-labelledby="tabOps" class="ops-panel" hidden>
+      <p class="ops-panel-lead" title="Scanner and relay messages are summarized here and in the history list">
+        Operational messages from the scanner run, relay, regime gate, snapshot age, and API usage. List changes (new
+        or dropped symbols) stay on the Qualified / Watchlist tabs — use the bell in the toolbar.
+      </p>
+      <p class="ops-panel-actions">
+        <button type="button" id="opsMarkReadBtn" class="secondary" title="Clear the Alerts tab badge (counts items since you last marked read)">
+          Mark all read
+        </button>
+        <button
+          type="button"
+          id="telemetryStripDismiss"
+          class="secondary"
+          title="Hide scan / relay / regime strips for this browser tab until you clear site data (session)"
+        >
+          Hide scan strips
+        </button>
+      </p>
+      <div id="snapshotTelemetryPanel" class="snapshot-telemetry-panel">
+        <div id="healthStrip" class="health-strip" role="status" hidden></div>
+        <div id="relayHealthStrip" class="health-strip relay-health-strip" role="status" hidden></div>
+        <div id="regimeStrip" class="regime-strip" role="status" hidden></div>
+      </div>
+      <div id="staleBanner" class="stale-banner" role="status" hidden></div>
+      <div id="emptyBanner" class="empty-banner" role="status" hidden></div>
+      <div
+        id="apiBudgetPanel"
+        class="api-budget-panel"
+        role="region"
+        aria-label="API usage and monthly budget estimate"
+        hidden
+      ></div>
+      <section class="ops-feed-section" aria-labelledby="opsFeedHeading">
+        <h2 id="opsFeedHeading" class="ops-feed-heading">History</h2>
+        <p id="opsFeedEmpty" class="ops-feed-empty">New snapshot summaries and warnings will appear here after each load.</p>
+        <ul id="opsFeedList" class="ops-feed-list" title="Chronological operational notifications"></ul>
+      </section>
+    </div>
+
     <dialog id="backtestModal" class="bt-modal">
       <div class="bt-modal-box">
         <header class="bt-modal-head">
           <h2 id="backtestModalTitle" class="bt-modal-title">Backtest results</h2>
-          <button type="button" class="bt-modal-close" id="backtestModalClose" aria-label="Close">
+          <button
+            type="button"
+            class="bt-modal-close"
+            id="backtestModalClose"
+            aria-label="Close"
+            title="Close backtest dialog"
+          >
             ×
           </button>
         </header>
