@@ -83,50 +83,52 @@ h1 {
 }
 
 .site-header-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.site-header-bar h1 {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
-.site-header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-  flex-shrink: 0;
+  margin-bottom: 0.35rem;
 }
 
 .app-tab-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
   margin-bottom: 0.85rem;
   border-bottom: 1px solid var(--color-border);
   padding-bottom: 0.35rem;
 }
 
+/** Tabs + flexible search + bell; nowrap keeps one row on narrow viewports (tabs scroll horizontally if needed). */
+.app-tab-bar.app-top-toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+  min-width: 0;
+}
+
 .app-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.25rem;
   margin: 0;
+  padding: 0;
   border-bottom: none;
-  padding-bottom: 0;
+}
+
+.app-tab-bar.app-top-toolbar .app-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .topbar-search {
   position: relative;
   display: block;
   margin: 0;
+}
+
+.topbar-search--toolbar {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: none;
 }
 
 .topbar-search-icon {
@@ -152,6 +154,11 @@ h1 {
   border: 1px solid var(--color-border);
   background: var(--color-input-bg);
   color: var(--color-text);
+}
+
+.app-tab-bar.app-top-toolbar .topbar-search-input {
+  min-width: 0;
+  max-width: none;
 }
 
 .topbar-search-input:focus {
@@ -272,6 +279,7 @@ html[data-theme="dark"] .notify-tier-a-btn--on {
 }
 
 .app-tab {
+  flex-shrink: 0;
   font: inherit;
   padding: 0.35rem 0.75rem;
   border: 1px solid transparent;
