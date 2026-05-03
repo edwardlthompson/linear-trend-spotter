@@ -759,7 +759,7 @@ def run_scanner():
             except Exception as hb_err:
                 app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
 
-        if settings.public_qualified_snapshot_enabled and final_results:
+        if settings.public_qualified_snapshot_enabled:
             try:
                 finished_at = datetime.now(timezone.utc)
                 wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())

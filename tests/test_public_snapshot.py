@@ -24,6 +24,14 @@ def test_full_field_set_includes_scan_interval_and_backtest() -> None:
     assert payload["coins"][0]["backtest_buy_hold"] == {"return_pct": 1.2}
 
 
+def test_empty_snapshot_is_valid_successful_scan_payload() -> None:
+    payload = build_public_qualified_snapshot([], field_set="full", scan_interval_seconds=1800)
+
+    assert payload["coins"] == []
+    assert payload["scan_interval_seconds"] == 1800
+    assert payload["field_set"] == "full"
+
+
 def test_full_includes_https_chart_image_url_only() -> None:
     rows = [
         {
