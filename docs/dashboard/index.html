@@ -13,7 +13,77 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <h1 id="mainHeading" title="Current view">Qualified list</h1>
+    <header class="site-header-bar">
+      <h1 id="mainHeading" title="Current view">Qualified list</h1>
+      <div class="site-header-actions">
+        <label class="topbar-search" title="Filter rows by symbol or name (case-insensitive substring)">
+          <span class="visually-hidden">Search table</span>
+          <svg
+            class="topbar-search-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <input
+            id="searchInput"
+            type="search"
+            class="topbar-search-input"
+            placeholder=""
+            autocomplete="off"
+            title="Filter by symbol or name; combines with column filters"
+          />
+        </label>
+        <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
+          <button
+            type="button"
+            id="coinAlertsBell"
+            class="coin-alerts-bell secondary"
+            aria-expanded="false"
+            aria-haspopup="true"
+            aria-controls="coinAlertsPopover"
+            aria-label="List notifications"
+            title="Open or close messages about symbols added or removed from the qualified list, or watchlist symbols that left the list"
+          >
+            <svg class="coin-bell-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+            </svg>
+            <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread list messages">0</span>
+          </button>
+          <div
+            id="coinAlertsPopover"
+            class="coin-alerts-popover"
+            role="region"
+            aria-label="List notifications"
+            hidden
+          >
+            <div id="diffBanner" class="diff-banner diff-banner--coin" role="status" hidden></div>
+            <div id="watchLeaveBanner" class="watch-banner watch-banner--coin" role="status" hidden>
+              <span id="watchLeaveBannerText"></span>
+              <button
+                type="button"
+                id="watchLeaveBannerDismiss"
+                class="secondary"
+                title="Dismiss this watchlist notice until the set of symbols that left the list changes"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
     <div class="app-tab-bar">
       <nav class="app-tabs" role="tablist" aria-label="Main views" title="Qualified table, watchlist, logs, or settings">
         <button
@@ -67,74 +137,6 @@
           Settings
         </button>
       </nav>
-      <div class="app-tab-bar-end">
-        <label class="topbar-search" title="Filter rows by symbol or name (case-insensitive substring)">
-          <span class="visually-hidden">Search table</span>
-          <svg
-            class="topbar-search-icon"
-            xmlns="http://www.w3.org/2000/svg"
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.3-4.3"></path>
-          </svg>
-          <input
-            id="searchInput"
-            type="search"
-            class="topbar-search-input"
-            placeholder=""
-            autocomplete="off"
-            title="Filter by symbol or name; combines with column filters"
-          />
-        </label>
-        <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
-        <button
-          type="button"
-          id="coinAlertsBell"
-          class="coin-alerts-bell secondary"
-          aria-expanded="false"
-          aria-haspopup="true"
-          aria-controls="coinAlertsPopover"
-          aria-label="List notifications"
-          title="Open or close messages about symbols added or removed from the qualified list, or watchlist symbols that left the list"
-        >
-          <svg class="coin-bell-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
-          </svg>
-          <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread list messages">0</span>
-        </button>
-        <div
-          id="coinAlertsPopover"
-          class="coin-alerts-popover"
-          role="region"
-          aria-label="List notifications"
-          hidden
-        >
-          <div id="diffBanner" class="diff-banner diff-banner--coin" role="status" hidden></div>
-          <div id="watchLeaveBanner" class="watch-banner watch-banner--coin" role="status" hidden>
-            <span id="watchLeaveBannerText"></span>
-            <button
-              type="button"
-              id="watchLeaveBannerDismiss"
-              class="secondary"
-              title="Dismiss this watchlist notice until the set of symbols that left the list changes"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      </div>
-      </div>
     </div>
 
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
@@ -172,13 +174,13 @@
                   Name
                 </button>
               </th>
-              <th scope="col" id="col-g7" title="Seven-day gain and short-horizon price trend sparkline">
+              <th scope="col" id="col-g7" title="Seven-day gain and last-week price trend sparkline">
                 <button
                   type="button"
                   class="sort-btn"
                   data-sort="g7"
                   aria-label="Sort by 7-day gain"
-                  title="Sort by 7-day % gain (sparkline uses last 7 days of 1h closes when present, else last week of daily or a smoothed estimate)"
+                  title="Sort by 7-day % gain (sparkline uses the last 7 snapshot daily closes when present, else up to ~7 days of hourly closes, else a smoothed estimate)"
                 >
                   7d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>
@@ -189,7 +191,7 @@
                   class="sort-btn"
                   data-sort="g30"
                   aria-label="Sort by 30-day gain"
-                  title="Sort by 30-day % gain (sparkline uses 1h or daily closes when present, else a smoothed estimate)"
+                  title="Sort by 30-day % gain (sparkline uses snapshot daily closes when present, else hourly, else a smoothed estimate)"
                 >
                   30d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>

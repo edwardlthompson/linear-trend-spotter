@@ -79,7 +79,29 @@ body {
 
 h1 {
   font-size: 1.25rem;
-  margin: 0 0 0.35rem;
+  margin: 0;
+}
+
+.site-header-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.site-header-bar h1 {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.site-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
 }
 
 .app-tab-bar {
@@ -99,17 +121,6 @@ h1 {
   margin: 0;
   border-bottom: none;
   padding-bottom: 0;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.app-tab-bar-end {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-  flex-shrink: 0;
-  margin-left: auto;
 }
 
 .topbar-search {
