@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * expandable rows; stale banner; theme (Q15); export (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); UI sort/filters in localStorage (refresh-safe). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); pinned-symbol watch (localStorage enter/leave vs full qualified set); UI sort/filters in localStorage (refresh-safe). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
@@ -31,6 +31,10 @@
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
   const LS_UI_EXCHANGES_JSON = "qualified_dash_ui_exchanges_json";
+  /** Uppercase symbols — user watch list; transitions vs full snapshot qualified set (not table filters). */
+  const LS_PINNED_SYMBOLS_JSON = "qualified_dash_pinned_symbols_json";
+  /** Maps symbol → was qualified on last snapshot (boolean). */
+  const LS_PINNED_WAS_QUALIFIED_JSON = "qualified_dash_pinned_was_qualified_json";
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
@@ -147,10 +151,16 @@
   const elMeta = document.getElementById("meta");
   const elTbody = document.getElementById("tbody");
   const elDiffBanner = document.getElementById("diffBanner");
+  const elWatchLeaveBanner = document.getElementById("watchLeaveBanner");
+  const elWatchLeaveBannerText = document.getElementById("watchLeaveBannerText");
+  const elWatchLeaveBannerDismiss = document.getElementById("watchLeaveBannerDismiss");
+  const elWatchSymbolInput = document.getElementById("watchSymbolInput");
+  const elWatchAddBtn = document.getElementById("watchAddBtn");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
   const elHealthStrip = document.getElementById("healthStrip");
   const elRelayHealthStrip = document.getElementById("relayHealthStrip");
+  const elRegimeStrip = document.getElementById("regimeStrip");
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
@@ -181,6 +191,23 @@
   let filterExchangeSet = new Set();
   /** @type {number | null} */
   let hashHighlightTimer = null;
+  /** Pinned symbols that became qualified on this snapshot (row highlight until timeout). */
+  let pinEnterFlashSet = new Set();
+  /** @type {{ entered: string[], left: string[] }} */
+  let lastPinWatchDelta = { entered: [], left: [] };
+  let pinEnterClearTimer = 0;
+  let prevPollWatchLeaveSig = "__init__";
+  let suppressedWatchLeaveSig = "";
+
+  /** Reset Tier-A poll diff baseline so filter changes do not fire bogus in/out alerts. */
+  function resetTierAPollBaselineIfAlerts() {
+    if (!notifyAlertsEnabled) return;
+    try {
+      localStorage.removeItem(LS_POLL_FILTERED_SYMS);
+    } catch (e) {
+      console.warn("reset poll baseline", e);
+    }
+  }
 
   function persistUiPreferences() {
     try {
@@ -330,7 +357,7 @@
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      elPushTierB.textContent = sub ? "Disable remote scan push" : "Enable remote scan push";
+      elPushTierB.textContent = sub ? "Disable list-change push" : "Enable list-change push";
     } catch (e) {
       console.warn("push tier-B state", e);
     }
@@ -377,7 +404,9 @@
     const headers = { "Content-Type": "application/json" };
     const t = pushSubscribeToken();
     if (t) headers.Authorization = `Bearer ${t}`;
-    const payload = { subscription: sub.toJSON() };
+    const notifyExchanges =
+      filterExchangeSet.size > 0 ? [...filterExchangeSet].sort() : [];
+    const payload = { subscription: sub.toJSON(), notify_exchanges: notifyExchanges };
     if (t) payload.token = t;
     const res = await fetch(`${base}/v1/subscribe`, {
       method: "POST",
@@ -388,6 +417,33 @@
     if (!res.ok) {
       await sub.unsubscribe().catch(() => {});
       throw new Error(`Push subscribe relay HTTP ${res.status}`);
+    }
+  }
+
+  /** Re-POST subscription so relay stores current exchange checkboxes as push filter prefs. */
+  async function syncPushNotifyExchangesIfSubscribed() {
+    if (!pushTierBAvailable()) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (!existing) return;
+      const base = pushApiBase();
+      const headers = { "Content-Type": "application/json" };
+      const tok = pushSubscribeToken();
+      if (tok) headers.Authorization = `Bearer ${tok}`;
+      const notifyExchanges =
+        filterExchangeSet.size > 0 ? [...filterExchangeSet].sort() : [];
+      const payload = { subscription: existing.toJSON(), notify_exchanges: notifyExchanges };
+      if (tok) payload.token = tok;
+      const res = await fetch(`${base}/v1/subscribe`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        credentials: "omit",
+      });
+      if (!res.ok) console.warn("push notify_exchanges sync HTTP", res.status);
+    } catch (e) {
+      console.warn("syncPushNotifyExchanges", e);
     }
   }
 
@@ -407,9 +463,18 @@
       elHealthStrip.hidden = true;
       elHealthStrip.textContent = "";
     }
+    if (elRegimeStrip) {
+      elRegimeStrip.hidden = true;
+      elRegimeStrip.textContent = "";
+      elRegimeStrip.classList.remove("is-warn");
+    }
     if (elEmptyBanner) {
       elEmptyBanner.hidden = true;
       elEmptyBanner.textContent = "";
+    }
+    if (elWatchLeaveBanner) {
+      elWatchLeaveBanner.hidden = true;
+      if (elWatchLeaveBannerText) elWatchLeaveBannerText.textContent = "";
     }
   }
 
@@ -437,6 +502,145 @@
     ].sort();
     localStorage.setItem(LS_PREV_SYMBOLS, JSON.stringify(sorted));
     localStorage.setItem(LS_PREV_SCHEMA, String(data.schema_version ?? ""));
+  }
+
+  function normalizeWatchSymbol(raw) {
+    return String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, "");
+  }
+
+  function getPinnedSet() {
+    try {
+      const raw = localStorage.getItem(LS_PINNED_SYMBOLS_JSON);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return new Set();
+      return new Set(arr.map((s) => normalizeWatchSymbol(s)).filter(Boolean));
+    } catch {
+      return new Set();
+    }
+  }
+
+  function persistPinnedSet(set) {
+    const sorted = [...set].sort();
+    if (!sorted.length) localStorage.removeItem(LS_PINNED_SYMBOLS_JSON);
+    else localStorage.setItem(LS_PINNED_SYMBOLS_JSON, JSON.stringify(sorted));
+  }
+
+  function readPinnedWasQualObject() {
+    try {
+      const raw = localStorage.getItem(LS_PINNED_WAS_QUALIFIED_JSON);
+      if (!raw) return {};
+      const o = JSON.parse(raw);
+      return o && typeof o === "object" && !Array.isArray(o) ? o : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function writePinnedWasQualObject(o) {
+    const keys = Object.keys(o);
+    if (!keys.length) localStorage.removeItem(LS_PINNED_WAS_QUALIFIED_JSON);
+    else localStorage.setItem(LS_PINNED_WAS_QUALIFIED_JSON, JSON.stringify(o));
+  }
+
+  /**
+   * Compare each pinned symbol against the full qualified set (unfiltered). Updates stored was-qualified map.
+   * First time a pin appears in storage it baselines without enter/leave.
+   */
+  function reconcilePinnedQualifiedState(currSet) {
+    const pinned = [...getPinnedSet()];
+    const raw = readPinnedWasQualObject();
+    const entered = [];
+    const left = [];
+    const pinSet = new Set(pinned);
+    for (const p of pinned) {
+      const nowQ = currSet.has(p);
+      if (!Object.prototype.hasOwnProperty.call(raw, p)) {
+        raw[p] = nowQ;
+        continue;
+      }
+      const wasQ = raw[p] === true;
+      if (!wasQ && nowQ) entered.push(p);
+      if (wasQ && !nowQ) left.push(p);
+      raw[p] = nowQ;
+    }
+    for (const k of Object.keys(raw)) {
+      if (!pinSet.has(k)) delete raw[k];
+    }
+    writePinnedWasQualObject(raw);
+    entered.sort();
+    left.sort();
+    return { entered, left };
+  }
+
+  function bootstrapPinStateForSymbol(sym) {
+    const s = normalizeWatchSymbol(sym);
+    if (!s || !lastPayload) return;
+    const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
+    const currSet = new Set(coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean));
+    const raw = readPinnedWasQualObject();
+    raw[s] = currSet.has(s);
+    writePinnedWasQualObject(raw);
+  }
+
+  function togglePin(rawSym) {
+    const s = normalizeWatchSymbol(rawSym);
+    if (!s) return;
+    const set = getPinnedSet();
+    if (set.has(s)) {
+      set.delete(s);
+      const raw = readPinnedWasQualObject();
+      delete raw[s];
+      writePinnedWasQualObject(raw);
+    } else {
+      set.add(s);
+      bootstrapPinStateForSymbol(s);
+    }
+    persistPinnedSet(set);
+    if (lastPayload) applyTableView();
+  }
+
+  function watchLeaveSig(arr) {
+    return [...arr]
+      .map((x) => String(x).toUpperCase())
+      .sort()
+      .join(",");
+  }
+
+  function updateWatchLeaveBanner(left) {
+    if (!elWatchLeaveBanner || !elWatchLeaveBannerText) return;
+    const sig = watchLeaveSig(left);
+    if (sig !== prevPollWatchLeaveSig) {
+      suppressedWatchLeaveSig = "";
+    }
+    prevPollWatchLeaveSig = sig;
+    if (!left.length) {
+      elWatchLeaveBanner.hidden = true;
+      elWatchLeaveBannerText.textContent = "";
+      return;
+    }
+    if (sig === suppressedWatchLeaveSig) {
+      elWatchLeaveBanner.hidden = true;
+      return;
+    }
+    elWatchLeaveBanner.hidden = false;
+    elWatchLeaveBannerText.textContent = `Watched symbols left the qualified list: ${left.join(", ")}`;
+  }
+
+  function addWatchFromInput() {
+    if (!elWatchSymbolInput) return;
+    const s = normalizeWatchSymbol(elWatchSymbolInput.value);
+    elWatchSymbolInput.value = "";
+    if (!s) return;
+    const set = getPinnedSet();
+    if (set.has(s)) return;
+    set.add(s);
+    persistPinnedSet(set);
+    bootstrapPinStateForSymbol(s);
+    if (lastPayload) render(lastPayload);
   }
 
   function updateDiffBanner(data, added, dropped, prevSchema) {
@@ -508,17 +712,18 @@
     if (!keys.length) {
       return '<span class="cell-muted">—</span>';
     }
-    const lines = [];
-    for (const ex of keys.slice(0, 7)) {
-      const raw = ev[ex];
-      lines.push(
-        `<span class="exch-line"><strong>${escapeHtml(String(ex))}</strong> ${escapeHtml(formatUsdVolDisplay(raw))}</span>`,
-      );
-    }
-    if (keys.length > 7) {
-      lines.push(`<span class="cell-muted">+${keys.length - 7} more</span>`);
-    }
-    return `<div class="exch-cell">${lines.join("")}</div>`;
+    const slice = keys.slice(0, 8);
+    const rows = slice
+      .map((ex) => {
+        const raw = ev[ex];
+        return `<tr><td>${escapeHtml(String(ex))}</td><td class="num">${escapeHtml(formatUsdVolDisplay(raw))}</td></tr>`;
+      })
+      .join("");
+    const more =
+      keys.length > 8
+        ? `<tr><td colspan="2" class="cell-muted">+${keys.length - 8} more</td></tr>`
+        : "";
+    return `<table class="exch-sheet"><thead><tr><th scope="col">Exch</th><th scope="col">Vol</th></tr></thead><tbody>${rows}${more}</tbody></table>`;
   }
 
   function sortCoinsInPlace(rows) {
@@ -715,6 +920,30 @@
     elStaleBanner.textContent = `Snapshot looks stale (${ageMin} min old). Expected refresh about every ${nomMin} min — check the worker or snapshot URL.`;
   }
 
+  function formatApiCostPanelLines(panel) {
+    if (!panel || !Array.isArray(panel.sources) || !panel.sources.length) return [];
+    const lines = [];
+    for (const s of panel.sources) {
+      const name = s.name != null ? String(s.name) : String(s.id || "API");
+      const n = Number(s.this_scan_http);
+      const total = Number.isFinite(n) ? Math.round(n) : 0;
+      const sub =
+        Array.isArray(s.breakdown) && s.breakdown.length
+          ? s.breakdown.map((b) => `${String(b.suffix || "?")}: ${Math.round(Number(b.count) || 0)}`).join(", ")
+          : "";
+      let line = `• ${name}: ${total} HTTP this scan`;
+      if (sub) line += ` (${sub})`;
+      const cap = s.monthly_budget_http;
+      const pct = s.pct_of_monthly_budget;
+      if (cap != null && Number(cap) > 0 && pct != null && Number.isFinite(Number(pct))) {
+        line += ` · ~${Number(pct).toFixed(3)}% of configured monthly cap (${Math.round(Number(cap))})`;
+      }
+      line += `\n  ${String(s.pricing_url || "").trim()}`;
+      lines.push(line);
+    }
+    return lines;
+  }
+
   function updateHealthStrip(data) {
     if (!elHealthStrip) return;
     const dur = data.scan_duration_s;
@@ -723,7 +952,9 @@
     const hasDur = typeof dur === "number" && Number.isFinite(dur);
     const hasEv = typeof ev === "number" && Number.isFinite(ev);
     const hasErr = typeof err === "number" && Number.isFinite(err);
-    if (!hasDur && !hasEv && !hasErr) {
+    const apiLines = formatApiCostPanelLines(data.api_cost_panel);
+    const hasApi = apiLines.length > 0;
+    if (!hasDur && !hasEv && !hasErr && !hasApi) {
       elHealthStrip.hidden = true;
       elHealthStrip.textContent = "";
       return;
@@ -732,7 +963,11 @@
     if (hasDur) parts.push(`Last scan wall time: ${dur.toFixed(1)}s`);
     if (hasEv) parts.push(`Symbols evaluated: ${Math.round(ev)}`);
     if (hasErr) parts.push(`Metric errors: ${Math.round(err)}`);
-    elHealthStrip.textContent = parts.join(" · ");
+    let text = parts.join(" · ");
+    if (hasApi) {
+      text += `\n\nLast scan API cost estimate (HTTP counts; set monthly caps in config for %):\n${apiLines.join("\n")}`;
+    }
+    elHealthStrip.textContent = text;
     elHealthStrip.hidden = false;
   }
 
@@ -825,6 +1060,26 @@
     }
   }
 
+  /** BTC regime gate from snapshot (`REGIME_FILTER_*`); strip when gate blocked all passes. */
+  function updateRegimeStrip(rg) {
+    if (!elRegimeStrip) return;
+    elRegimeStrip.classList.remove("is-warn");
+    if (!rg || rg.enabled !== true || rg.blocked !== true) {
+      elRegimeStrip.hidden = true;
+      elRegimeStrip.textContent = "";
+      return;
+    }
+    const g7 = Number(rg.btc_7d_pct);
+    const g30 = Number(rg.btc_30d_pct);
+    const min30 = Number(rg.btc_min_30d_gain_pct);
+    const max7 = Number(rg.btc_max_abs_7d_gain_pct);
+    const reason = rg.reason != null ? String(rg.reason) : "";
+    const f = (n) => (Number.isFinite(n) ? n.toFixed(2) : "—");
+    elRegimeStrip.hidden = false;
+    elRegimeStrip.classList.add("is-warn");
+    elRegimeStrip.textContent = `Regime filter blocked all qualifications (BTC gate). BTC 7d: ${f(g7)}% (require |7d| ≤ ${f(max7)}%), 30d: ${f(g30)}% (require ≥ ${f(min30)}%). ${reason}`;
+  }
+
   function escapeHtml(s) {
     return s
       .replace(/&/g, "&amp;")
@@ -837,64 +1092,189 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
-  function detailBlockHtml(c) {
+  function coinListingUrl(c) {
+    const cmc = c.cmc_slug && String(c.cmc_slug).trim();
+    if (cmc) return `https://coinmarketcap.com/currencies/${encodeURIComponent(cmc)}/`;
+    const su = c.source_url && String(c.source_url).trim();
+    if (su && /^https?:\/\//i.test(su)) {
+      if (/coinmarketcap\.com/i.test(su) || /coingecko\.com/i.test(su)) return su;
+    }
+    const slug = c.slug && String(c.slug).trim();
+    if (slug) return `https://www.coingecko.com/en/coins/${encodeURIComponent(slug)}`;
+    if (su && /^https?:\/\//i.test(su)) return su;
+    const sym = String(c.symbol || "").trim();
+    if (sym) return `https://coinmarketcap.com/search/?q=${encodeURIComponent(sym)}`;
+    return "";
+  }
+
+  /** Approximate 30 daily closes from 7d/30d % gains when `closes_30d` is absent. */
+  function syntheticClosesFromGains(c) {
+    const g = c.gains || {};
+    const g7 = typeof g["7d"] === "number" ? g["7d"] : 0;
+    const g30 = typeof g["30d"] === "number" ? g["30d"] : 0;
+    const f7 = 1 + g7 / 100;
+    const f30 = 1 + g30 / 100;
+    if (!Number.isFinite(f7) || !Number.isFinite(f30) || f7 === 0 || f30 === 0) {
+      return [100, 100];
+    }
+    const end = 100;
+    const p22 = end / f7;
+    const p0 = end / f30;
+    const out = [];
+    for (let i = 0; i < 30; i++) {
+      if (i <= 22) {
+        out.push(p0 + (p22 - p0) * (i / 22));
+      } else {
+        out.push(p22 + (end - p22) * ((i - 22) / 7));
+      }
+    }
+    return out;
+  }
+
+  function effectiveCloses30d(c) {
+    const raw = c.closes_30d;
+    if (Array.isArray(raw) && raw.length >= 2) {
+      const nums = raw.map((x) => Number(x)).filter((x) => Number.isFinite(x));
+      if (nums.length >= 2) return nums;
+    }
+    return syntheticClosesFromGains(c);
+  }
+
+  function sparklineSvg(closes, w, h) {
+    if (!closes || closes.length < 2) return '<span class="cell-muted">—</span>';
+    const min = Math.min(...closes);
+    const max = Math.max(...closes);
+    const pad = 2;
+    const iw = w - pad * 2;
+    const ih = h - pad * 2;
+    const normY = (v) => {
+      if (!(max > min)) return pad + ih / 2;
+      return pad + ih - ((v - min) / (max - min)) * ih;
+    };
+    const pts = closes.map((v, i) => {
+      const x = pad + (i / (closes.length - 1)) * iw;
+      const y = normY(v);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    });
+    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.75" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" /></svg><span class="visually-hidden">30-day price trend</span>`;
+  }
+
+  function fmtSheetCell(v) {
+    if (v == null) return "—";
+    if (typeof v === "number" && Number.isFinite(v)) {
+      if (Math.abs(v) >= 1e6 || (Math.abs(v) > 0 && Math.abs(v) < 1e-4)) return v.toExponential(4);
+      return String(Math.round(v * 1e6) / 1e6);
+    }
+    if (typeof v === "object") return JSON.stringify(v);
+    const s = String(v);
+    return s.length > 64 ? `${s.slice(0, 63)}…` : s;
+  }
+
+  function backtestStrategiesTableHtml(rows) {
+    if (!Array.isArray(rows) || !rows.length) {
+      return '<p class="detail-muted">No strategy rows in this snapshot.</p>';
+    }
+    const preferred = ["indicator", "strategy", "net_pct", "win_pct", "trades", "tsl_hits", "rank"];
+    const allKeys = [...new Set(rows.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : [])))];
+    const useKeys = [
+      ...preferred.filter((k) => allKeys.includes(k)),
+      ...allKeys.filter((k) => !preferred.includes(k)).sort(),
+    ];
+    if (!useKeys.length) return '<p class="detail-muted">No columns.</p>';
+    const th = useKeys.map((k) => `<th scope="col">${escapeHtml(k)}</th>`).join("");
+    const tb = rows
+      .map((r) => {
+        if (!r || typeof r !== "object") return "";
+        return `<tr>${useKeys.map((k) => `<td>${escapeHtml(fmtSheetCell(r[k]))}</td>`).join("")}</tr>`;
+      })
+      .join("");
+    return `<table class="sheet-table"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`;
+  }
+
+  function keyValueSheetHtml(obj) {
+    const keys = Object.keys(obj).sort();
+    if (!keys.length) return '<p class="detail-muted">—</p>';
+    const rows = keys
+      .map(
+        (k) =>
+          `<tr><th scope="row">${escapeHtml(k)}</th><td>${escapeHtml(fmtSheetCell(obj[k]))}</td></tr>`,
+      )
+      .join("");
+    return `<table class="sheet-table kv-sheet"><tbody>${rows}</tbody></table>`;
+  }
+
+  function backtestModalHtml(c) {
     const parts = [];
-    const u = c.uniformity_score;
-    const h = c.health_score;
-    parts.push(
-      `<div class="detail-grid"><div><strong>Uniformity</strong> ${escapeHtml(u != null ? String(u) : "—")}</div>` +
-        `<div><strong>Health</strong> ${escapeHtml(h != null && h !== "" ? String(h) : "—")}</div></div>`,
-    );
     const chartRaw = c.chart_image_url;
     if (typeof chartRaw === "string" && /^https:\/\//i.test(chartRaw.trim())) {
-      const chartUrl = chartRaw.trim();
+      const u = chartRaw.trim();
+      parts.push(
+        `<p class="bt-modal-chart"><a href="${escapeAttr(u)}" target="_blank" rel="noopener noreferrer">Open backtest chart image</a></p>`,
+      );
       const symLabel = escapeAttr(String(c.symbol || "coin"));
-      parts.push('<div class="detail-heading">Chart</div>');
       parts.push(
-        `<p class="detail-chart"><img class="chart-thumb" src="${escapeAttr(chartUrl)}" alt="${symLabel} chart thumbnail" loading="lazy" width="320" height="180" /></p>`,
+        `<p class="bt-modal-thumb"><img class="chart-thumb-modal" src="${escapeAttr(u)}" alt="${symLabel} backtest chart" loading="lazy" width="480" /></p>`,
       );
     }
-    const bt = c.backtest_top_strategies;
-    if (Array.isArray(bt) && bt.length) {
-      parts.push('<div class="detail-heading">Backtest top strategies</div>');
-      parts.push(`<pre class="detail-pre">${escapeHtml(JSON.stringify(bt, null, 2))}</pre>`);
-    } else {
-      parts.push(
-        '<p class="detail-muted">No backtest strategy rows in this snapshot (field_set <code>full</code> after a scan includes them when available).</p>',
-      );
-    }
-    const bh = c.backtest_buy_hold;
-    if (bh != null && (typeof bh === "object" || typeof bh === "number")) {
-      parts.push('<div class="detail-heading">Buy &amp; hold</div>');
-      parts.push(`<pre class="detail-pre">${escapeHtml(JSON.stringify(bh, null, 2))}</pre>`);
+    parts.push('<h3 class="sheet-heading">Top strategies</h3>');
+    parts.push(backtestStrategiesTableHtml(Array.isArray(c.backtest_top_strategies) ? c.backtest_top_strategies : []));
+    if (c.backtest_buy_hold != null && typeof c.backtest_buy_hold === "object") {
+      parts.push('<h3 class="sheet-heading">Buy &amp; hold</h3>');
+      parts.push(keyValueSheetHtml(c.backtest_buy_hold));
     }
     return parts.join("");
   }
 
-  function toggleRowDetail(row) {
-    const id = row.getAttribute("aria-controls");
-    const det = id ? document.getElementById(id) : null;
-    if (!det) return;
-    const open = row.getAttribute("aria-expanded") === "true";
-    row.setAttribute("aria-expanded", open ? "false" : "true");
-    det.hidden = open;
+  function backtestCellHtml(c) {
+    const chartRaw = c.chart_image_url;
+    const hasChart = typeof chartRaw === "string" && /^https:\/\//i.test(chartRaw.trim());
+    const strategies = Array.isArray(c.backtest_top_strategies) ? c.backtest_top_strategies : [];
+    const hasBh = c.backtest_buy_hold != null && typeof c.backtest_buy_hold === "object";
+    const hasSheet = strategies.length > 0 || hasBh;
+    const rawSym = escapeAttr(String(c.symbol || ""));
+    const parts = [];
+    if (hasChart) {
+      const u = chartRaw.trim();
+      parts.push(
+        `<a href="${escapeAttr(u)}" class="bt-chart-link" rel="noopener noreferrer" target="_blank">Chart</a>`,
+      );
+    }
+    if (hasSheet) {
+      parts.push(
+        `<button type="button" class="bt-sheet-btn secondary" data-symbol="${rawSym}">Results</button>`,
+      );
+    }
+    if (!parts.length) return '<span class="cell-muted">—</span>';
+    return `<div class="bt-cell">${parts.join("")}</div>`;
   }
 
   const COL_COUNT = 9;
 
-  function renderRowsHtml(coins) {
+  function renderRowsHtml(coins, pinnedSet, pinEnterSet) {
     if (!coins.length) {
       return `<tr><td colspan="${COL_COUNT}" class="empty">No qualified coins match the current filters.</td></tr>`;
     }
     return coins
-      .map((c, idx) => {
+      .map((c) => {
         const rawSym = String(c.symbol || "").toUpperCase();
+        const isPinned = pinnedSet.has(rawSym);
+        const isPinEnter = pinEnterSet.has(rawSym);
+        const rowClasses = ["coin-row"];
+        if (isPinned) rowClasses.push("coin-row--pinned");
+        if (isPinEnter) rowClasses.push("coin-row--pin-enter");
         const sym = escapeHtml(String(c.symbol || ""));
         const nameRaw = String(c.name || "");
         const name = escapeHtml(nameRaw);
         const g = c.gains || {};
         const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
-        const g30 = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
+        const g30pct = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
+        const closes = effectiveCloses30d(c);
+        const hasRealCloses = Array.isArray(c.closes_30d) && c.closes_30d.length >= 2;
+        const g30Title = hasRealCloses
+          ? "30-day % and price trend from snapshot daily closes"
+          : "30-day % and approximate trend from 7d/30d returns (scanner can add closes_30d for exact sparklines)";
+        const spark = sparklineSvg(closes, 128, 40);
+        const g30Cell = `<div class="g30-cell" title="${escapeAttr(g30Title)}"><span class="g30-pct"><span class="visually-hidden">30-day gain </span>${g30pct}%</span>${spark}</div>`;
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
         const h =
           c.health_score != null && c.health_score !== ""
@@ -906,27 +1286,29 @@
           vac != null
             ? `${vac >= 0 ? "+" : ""}${vac.toFixed(0)}%${typeof vwd === "number" ? ` / ${vwd}d` : ""}`
             : "—";
-        const url = c.source_url ? String(c.source_url) : "";
-        const link = url
-          ? `<a href="${escapeAttr(url)}" rel="noopener noreferrer" target="_blank">View</a>`
-          : "—";
+        const listing = coinListingUrl(c);
+        const nameCell = listing
+          ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}">${name}</a>`
+          : `<span>${name}</span>`;
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
-        const detailId = `coin-detail-${idx}`;
-        const detail = detailBlockHtml(c);
+        const pinLabel = isPinned ? `Stop watching ${rawSym}` : `Watch ${rawSym} (qualified in/out)`;
+        const pinChar = isPinned ? "\u2605" : "\u2606";
+        const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="Watch list (this browser)">${pinChar}</button>`;
         const exchHtml = exchangeVolumeCellHtml(c);
-        return `<tr class="coin-row" role="button" tabindex="0" aria-expanded="false" aria-controls="${detailId}" data-symbol="${escapeAttr(rawSym)}">
-          <td headers="col-symbol"><strong>${sym}</strong>${badge}</td>
-          <td headers="col-name"><button type="button" class="coin-name-btn" data-symbol="${escapeAttr(rawSym)}">${name}</button></td>
+        const btHtml = backtestCellHtml(c);
+        return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}">
+          <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong>${badge}</span></td>
+          <td headers="col-name">${nameCell}</td>
           <td headers="col-g7" class="num"><span class="visually-hidden">7-day gain </span>${g7}%</td>
-          <td headers="col-g30" class="num"><span class="visually-hidden">30-day gain </span>${g30}%</td>
+          <td headers="col-g30" class="num">${g30Cell}</td>
           <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span>${u}</td>
           <td headers="col-health" class="num"><span class="visually-hidden">Health </span>${h}</td>
           <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span>${volStr}</td>
           <td headers="col-exch" class="exch-col">${exchHtml}</td>
-          <td headers="col-link">${link}</td>
-        </tr><tr class="coin-detail" id="${detailId}" hidden><td colspan="${COL_COUNT}" class="detail-cell">${detail}</td></tr>`;
+          <td headers="col-backtest">${btHtml}</td>
+        </tr>`;
       })
       .join("");
   }
@@ -934,9 +1316,16 @@
   function applyTableView() {
     if (!lastPayload) return;
     const filtered = getFilteredSortedCoins();
-    elTbody.innerHTML = renderRowsHtml(filtered);
+    const pinned = getPinnedSet();
+    elTbody.innerHTML = renderRowsHtml(filtered, pinned, pinEnterFlashSet);
     updateSortHeaderClasses();
     applyHashHighlight();
+    if (pinEnterFlashSet.size > 0) {
+      window.clearTimeout(pinEnterClearTimer);
+      pinEnterClearTimer = window.setTimeout(() => {
+        document.querySelectorAll("tr.coin-row--pin-enter").forEach((r) => r.classList.remove("coin-row--pin-enter"));
+      }, 12000);
+    }
   }
 
   function downloadBlob(filename, mime, body) {
@@ -1022,14 +1411,22 @@
     if (notifyAlertsEnabled) {
       alertSuffix = ` · Tier-A update alerts on (${pollIntervalHumanPhrase(getPollIntervalMs())})`;
     }
-    elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${nextHint}${alertSuffix}`;
+    const nWatch = getPinnedSet().size;
+    const watchHint = nWatch ? ` · ${nWatch} watched` : "";
+    elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${watchHint}${nextHint}${alertSuffix}`;
 
     if (elEmptyBanner) {
-      elEmptyBanner.hidden = coins.length > 0;
-      elEmptyBanner.textContent =
-        coins.length === 0
-          ? "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file."
-          : "";
+      const rg = data.regime_gate;
+      const regimeBlocked = rg && rg.enabled === true && rg.blocked === true;
+      if (coins.length > 0) {
+        elEmptyBanner.hidden = true;
+        elEmptyBanner.textContent = "";
+      } else {
+        elEmptyBanner.hidden = false;
+        elEmptyBanner.textContent = regimeBlocked
+          ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see strip above). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
+          : "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file.";
+      }
     }
 
     const prevSyms = readPrevSymbolSet();
@@ -1037,6 +1434,9 @@
     const currSet = new Set(
       coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
     );
+    lastPinWatchDelta = reconcilePinnedQualifiedState(currSet);
+    pinEnterFlashSet = new Set(lastPinWatchDelta.entered);
+    updateWatchLeaveBanner(lastPinWatchDelta.left);
     const added =
       prevSyms.size === 0 ? [] : [...currSet].filter((s) => !prevSyms.has(s)).sort();
     const dropped =
@@ -1046,6 +1446,7 @@
     updateDiffBanner(data, added, dropped, prevSchema);
     updateStaleBanner(data);
     updateHealthStrip(data);
+    updateRegimeStrip(data.regime_gate);
     void refreshRelayHealthStrip();
 
     applyTableView();
@@ -1054,30 +1455,27 @@
 
   if (elTbody) {
     elTbody.addEventListener("click", (ev) => {
-      const nameBtn = ev.target.closest(".coin-name-btn");
-      if (nameBtn) {
+      const pinBtn = ev.target.closest(".pin-btn");
+      if (pinBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        const sym = nameBtn.getAttribute("data-symbol") || "";
+        togglePin(pinBtn.getAttribute("data-symbol") || "");
+        return;
+      }
+      const sheetBtn = ev.target.closest(".bt-sheet-btn");
+      if (sheetBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const sym = sheetBtn.getAttribute("data-symbol") || "";
         const coins = getFilteredSortedCoins();
         const coin = coins.find((x) => String(x.symbol || "").toUpperCase() === sym.toUpperCase());
         if (coin && elBacktestModal && elBacktestModalTitle && elBacktestModalBody) {
           elBacktestModalTitle.textContent = `${String(coin.symbol || "")} · ${String(coin.name || "")}`;
-          elBacktestModalBody.innerHTML = detailBlockHtml(coin);
+          elBacktestModalBody.innerHTML = backtestModalHtml(coin);
           elBacktestModal.showModal();
         }
         return;
       }
-      const row = ev.target.closest("tr.coin-row");
-      if (!row || ev.target.closest("a")) return;
-      toggleRowDetail(row);
-    });
-    elTbody.addEventListener("keydown", (ev) => {
-      if (ev.key !== "Enter" && ev.key !== " ") return;
-      const row = ev.target.closest("tr.coin-row");
-      if (!row || row !== ev.target) return;
-      ev.preventDefault();
-      toggleRowDetail(row);
     });
     elTbody.addEventListener("focusin", (ev) => {
       const row = ev.target.closest("tr.coin-row");
@@ -1102,7 +1500,7 @@
     return String(text.length) + ":" + text.slice(0, 2000);
   }
 
-  /** Tier-A alerts: only when the **filtered** list (search, health, **exchanges**) changes vs last poll. */
+  /** Tier-A alerts: only when the **filtered** list (search, health, **exchanges**) changes vs last poll — same membership rule as the table (e.g. Kraken-only hides MEXC-only coins). */
   async function notifySnapshotChangedFiltered(text, data) {
     const coins = Array.isArray(data.coins) ? data.coins : [];
     const filtered = applyFilters(coins);
@@ -1161,6 +1559,44 @@
     }
   }
 
+  /** Tier-A: notify when a watched symbol enters or leaves the full qualified set (independent of table filters). */
+  async function notifyPinnedWatch(entered, left) {
+    if (!notifyAlertsEnabled || (!entered.length && !left.length)) return;
+    const coins = Array.isArray(lastPayload?.coins) ? lastPayload.coins : [];
+    const filtered = applyFilters(coins);
+    const filteredSet = new Set(
+      filtered.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
+    );
+    const enteredFiltered = entered
+      .map((s) => String(s || "").toUpperCase())
+      .filter((s) => filteredSet.has(s));
+    const parts = [];
+    if (enteredFiltered.length) {
+      parts.push(
+        `In: ${enteredFiltered.slice(0, 12).join(", ")}${enteredFiltered.length > 12 ? "…" : ""}`,
+      );
+    }
+    if (left.length) {
+      parts.push(`Out: ${left.slice(0, 12).join(", ")}${left.length > 12 ? "…" : ""}`);
+    }
+    if (!parts.length) return;
+    const body = `Watch · ${parts.join(" · ")}`;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification("Watched symbols (qualified set)", {
+          body,
+          tag: "qualified-pinned-watch",
+          renotify: true,
+        });
+      } else if (typeof Notification === "function") {
+        new Notification("Watched symbols (qualified set)", { body });
+      }
+    } catch (e) {
+      console.warn("pinned watch notification failed", e);
+    }
+  }
+
   async function loadSnapshot(options) {
     const showErrors = options && options.showErrors;
     const forNotify = options && options.forNotify;
@@ -1201,6 +1637,7 @@
       render(data);
       if (forNotify && notifyAlertsEnabled) {
         await notifySnapshotChangedFiltered(text, data);
+        await notifyPinnedWatch(lastPinWatchDelta.entered, lastPinWatchDelta.left);
       } else {
         localStorage.setItem(LS_DIGEST, await digestHex(text));
       }
@@ -1273,6 +1710,8 @@
       btn.classList.add("is-active");
       applyTableView();
       persistUiPreferences();
+      resetTierAPollBaselineIfAlerts();
+      void syncPushNotifyExchangesIfSubscribed();
     });
   });
 
@@ -1283,6 +1722,8 @@
         searchQuery = elSearch.value || "";
         applyTableView();
         persistUiPreferences();
+        resetTierAPollBaselineIfAlerts();
+        void syncPushNotifyExchangesIfSubscribed();
       }, SEARCH_DEBOUNCE_MS);
     });
   }
@@ -1296,6 +1737,8 @@
     updateExchangeFilterSummary();
     applyTableView();
     persistUiPreferences();
+    resetTierAPollBaselineIfAlerts();
+    void syncPushNotifyExchangesIfSubscribed();
   }
 
   document.querySelectorAll("input[data-exchange-cb]").forEach((inp) => {
@@ -1467,6 +1910,24 @@
   }
 
   wireDonateCopyButtons();
+
+  if (elWatchAddBtn) {
+    elWatchAddBtn.addEventListener("click", () => addWatchFromInput());
+  }
+  if (elWatchSymbolInput) {
+    elWatchSymbolInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        addWatchFromInput();
+      }
+    });
+  }
+  if (elWatchLeaveBannerDismiss) {
+    elWatchLeaveBannerDismiss.addEventListener("click", () => {
+      if (elWatchLeaveBanner) elWatchLeaveBanner.hidden = true;
+      suppressedWatchLeaveSig = watchLeaveSig(lastPinWatchDelta.left);
+    });
+  }
 
   if (snapshotUrl) {
     loadSnapshot({ showErrors: true, forNotify: false });

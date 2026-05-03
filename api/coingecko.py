@@ -14,6 +14,9 @@ from utils.coingecko_usage import record_coingecko_http
 # CoinGecko `/coins/*/tickers` `exchange_ids` uses exchange **identifier** strings.
 # Map config `TARGET_EXCHANGES` tokens to CG identifiers when they differ.
 _COINGECKO_TICKER_EXCHANGE_IDS: dict[str, str] = {
+    # CoinGecko still uses the legacy exchange id "gdax" for Coinbase Exchange.
+    # Passing "coinbase" as exchange_ids does not filter tickers (returns mixed venues).
+    "coinbase": "gdax",
     "mexc": "mxc",
 }
 

@@ -33,10 +33,19 @@ from utils.scan_artifacts import (
     write_public_qualified_snapshot,
     write_scan_heartbeat,
 )
-from utils.scan_costs import read_last_completed_coingecko_http_total, write_scan_costs_file
+from utils.scan_costs import (
+    build_api_cost_panel_for_snapshot,
+    read_last_completed_coingecko_http_total,
+    write_scan_costs_file,
+)
 from utils.watchlist_export import compute_watchlist_rows, write_watchlist_exports
 from utils.portfolio_multi import write_multi_portfolio_simulation
 from utils.alert_backtest_report import write_alert_backtest_report
+from utils.backtest_strategy_diff import (
+    build_event_summary_backtest_diff_line,
+    load_top_strategy_state,
+    save_top_strategy_state,
+)
 from utils.quiet_hours import is_within_utc_quiet_window
 from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
@@ -54,7 +63,7 @@ from scanner.weekly_digest import (
     load_weekly_digest_state,
     save_weekly_digest_state,
 )
-from scanner.web_push_notify import maybe_notify_web_push_scan
+from scanner.web_push_notify import maybe_notify_web_push_qualified_changes
 from scanner.snapshot_relay_notify import maybe_push_qualified_snapshot_relay
 from scanner.runtime_init import initialize_runtime_components
 from scanner.top_coins_stage import fetch_top_coins_dataset
@@ -256,7 +265,7 @@ def run_scanner():
             coins_with_cg_count=len(coins_with_cg_ids),
         )
 
-        uniformity_passed, uniformity_passed_symbols = apply_uniformity_pass_and_regime(
+        uniformity_passed, uniformity_passed_symbols, regime_meta = apply_uniformity_pass_and_regime(
             all_processed,
             all_cmc_coins,
             settings=settings,
@@ -481,6 +490,7 @@ def run_scanner():
             app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
 
         active_after_update = active_db.get_active()
+        bt_top_state_path = settings.base_dir / "backtest_top_strategy_state.json"
         final_symbol_set = {str(c.get("symbol", "")).upper() for c in final_results if c.get("symbol")}
         watchlist_rows = compute_watchlist_rows(
             all_processed,
@@ -547,6 +557,25 @@ def run_scanner():
             quiet_hours_end_hour_utc=settings.quiet_hours_end_hour_utc,
             is_within_utc_quiet_window=is_within_utc_quiet_window,
         )
+        if (
+            telegram
+            and regime_meta
+            and regime_meta.get("blocked")
+            and not (quiet and settings.quiet_hours_suppress_regime_gate)
+        ):
+            try:
+                rg = regime_meta
+                regime_msg = (
+                    "🌦️ <b>Regime filter</b> blocked qualifications (BTC 7d/30d gate). "
+                    f"BTC 7d: {float(rg['btc_7d_pct']):.2f}% (max |7d| {float(rg['btc_max_abs_7d_gain_pct']):.2f}%), "
+                    f"30d: {float(rg['btc_30d_pct']):.2f}% (min {float(rg['btc_min_30d_gain_pct']):.2f}%). "
+                    f"<i>{html_escape(str(rg.get('reason', ''))[:220])}</i>"
+                )
+                if telegram.send_message(regime_msg):
+                    metrics.increment("notifications_sent")
+            except Exception as regime_notify_err:
+                app_logger.warning("   ⚠️ Regime filter Telegram notice failed: %s", regime_notify_err)
+
         if telegram and entered and settings.entry_notifications:
             with timed_block('notifications'):
                 app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
@@ -660,6 +689,19 @@ def run_scanner():
                 final_results,
                 active_after_update,
             )
+            still_qualified_for_bt_diff = (
+                {str(k).upper() for k in active_before_update}
+                & {str(k).upper() for k in active_after_update}
+                & final_symbol_set
+            )
+            prev_bt_top = load_top_strategy_state(bt_top_state_path)
+            backtest_diff_plain = build_event_summary_backtest_diff_line(
+                previous_by_symbol=prev_bt_top,
+                final_results=final_results,
+                still_qualified_symbols=still_qualified_for_bt_diff,
+            )
+            if backtest_diff_plain:
+                app_logger.info("   %s", backtest_diff_plain.replace("\n", " ")[:500])
             sent_summary_count = 0
             summary_image = build_hourly_summary_image(
                 active_rows=active_ranking_rows,
@@ -669,6 +711,7 @@ def run_scanner():
                     io.BytesIO(summary_image),
                     caption=MessageFormatter.format_summary_caption(
                         active_count=len(active_ranking_rows),
+                        backtest_diff_plain=backtest_diff_plain,
                     ),
                 )
                 if summary_msg_id:
@@ -681,6 +724,11 @@ def run_scanner():
                     f"Entries: {len(entered)} | Exits: {len(exited)} | Cooldown blocked: {len(blocked_by_cooldown)}\n"
                     f"Active: {len(active_ranking_rows)} | Watchlist: {len(watchlist_rows)}"
                 )
+                if backtest_diff_plain:
+                    fallback_summary += (
+                        "\n📉 <b>BT top Δ</b> "
+                        + html_escape(backtest_diff_plain, quote=False)
+                    )
                 fallback_msg_id = telegram.send_message(fallback_summary)
                 if fallback_msg_id:
                     sent_summary_count = 1
@@ -710,6 +758,12 @@ def run_scanner():
         if final_results:
             history_db.save_scan(final_results)
             app_logger.info(f"\n📊 Saved {len(final_results)} results")
+            try:
+                save_top_strategy_state(bt_top_state_path, final_results)
+            except Exception as bt_state_err:
+                app_logger.warning(
+                    "⚠️ Could not persist backtest top-strategy state: %s", bt_state_err
+                )
         
         # Summary
         app_logger.info("\n" + "=" * 60)
@@ -759,7 +813,7 @@ def run_scanner():
             except Exception as hb_err:
                 app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
 
-        if settings.public_qualified_snapshot_enabled and final_results:
+        if settings.public_qualified_snapshot_enabled and (final_results or regime_meta):
             try:
                 finished_at = datetime.now(timezone.utc)
                 wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
@@ -769,6 +823,14 @@ def run_scanner():
                     if isinstance(v, bool) or not isinstance(v, (int, float)):
                         continue
                     err_total += int(v)
+                api_cost_panel = None
+                if settings.scan_costs_enabled:
+                    api_cost_panel = build_api_cost_panel_for_snapshot(
+                        metrics.get_summary(),
+                        coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
+                        polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
+                        cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
+                    )
                 write_public_qualified_snapshot(
                     settings.DATA_DIR,
                     settings.public_qualified_snapshot_file,
@@ -780,6 +842,8 @@ def run_scanner():
                         "coins_evaluated": len(all_symbols),
                         "errors_count": int(err_total),
                     },
+                    regime_gate=regime_meta,
+                    api_cost_panel=api_cost_panel,
                 )
                 app_logger.info("📤 Public qualified snapshot written")
                 maybe_push_qualified_snapshot_relay(
@@ -789,7 +853,7 @@ def run_scanner():
             except Exception as snap_err:
                 app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
 
-        maybe_notify_web_push_scan()
+        maybe_notify_web_push_qualified_changes(entered, exited)
 
         app_logger.info("\n✅ Scan complete")
         

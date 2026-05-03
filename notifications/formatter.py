@@ -426,8 +426,17 @@ class MessageFormatter:
         return text[: max_chars - 20].rstrip() + "\n…truncated"
 
     @staticmethod
-    def format_summary_caption(active_count: int) -> str:
-        return (
+    def format_summary_caption(
+        active_count: int,
+        backtest_diff_plain: str | None = None,
+    ) -> str:
+        base = (
             "🖼️ <b>Scanner Event Dashboard</b>\n"
             f"Active: {active_count}"
         )
+        if backtest_diff_plain:
+            base += (
+                "\n📉 <b>BT top Δ</b> "
+                + MessageFormatter._tg_html_text(backtest_diff_plain)
+            )
+        return base

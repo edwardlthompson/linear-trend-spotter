@@ -2,7 +2,7 @@
 
 This project can deliver qualified-coin **alerts and scan summaries** through **Telegram**, through the **read-only web dashboard** (and optional **Web Push**), or both. Use this page as the single reference for how that choice is configured.
 
-**Blueprint defaults (`config.json.example` + `render.yaml` worker, as of 2026-05):** **`DELIVERY_MODE`** = **`telegram`**, **`TELEGRAM_ENABLED`** = **`true`**. For web/dashboard-only delivery, set **`DELIVERY_MODE=web`** (and optionally **`TELEGRAM_ENABLED=false`**) in Render and/or `config.json`.
+**Blueprint defaults (`config.json.example` + `render.yaml` worker):** **`DELIVERY_MODE`** = **`web`**, **`TELEGRAM_ENABLED`** = **`false`**. To use Telegram again, set **`DELIVERY_MODE=telegram`**, supply bot credentials, and set **`TELEGRAM_ENABLED=true`** (see matrix below).
 
 ## Modes
 
@@ -30,7 +30,7 @@ This project can deliver qualified-coin **alerts and scan summaries** through **
 - `DELIVERY_MODE` is **not** `web`, and  
 - `TELEGRAM_ENABLED` is **not** `false` / `0`.
 
-The blueprint includes **`DELIVERY_MODE`** / **`TELEGRAM_ENABLED`** (telegram defaults). Override in the Render dashboard if you want **`DELIVERY_MODE=web`** (and optionally **`TELEGRAM_ENABLED=false`**).
+The blueprint ships **`DELIVERY_MODE=web`** / **`TELEGRAM_ENABLED=false`**. Override in the Render dashboard if you want Telegram delivery again.
 
 ## Render worker: operational matrix (environment variables only)
 

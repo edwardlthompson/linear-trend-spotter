@@ -140,8 +140,11 @@ class Settings:
             'SCAN_INTERVAL_SECONDS': 3600,
             'SCAN_COSTS_ENABLED': False,
             'SCAN_COSTS_FILE': 'scan_costs.json',
-            'DELIVERY_MODE': 'telegram',
-            'TELEGRAM_ENABLED': True,
+            'SCAN_COST_PANEL_COINGECKO_MONTHLY_HTTP_CAP': 0,
+            'SCAN_COST_PANEL_POLYGON_MONTHLY_HTTP_CAP': 0,
+            'SCAN_COST_PANEL_CMC_MONTHLY_HTTP_CAP': 0,
+            'DELIVERY_MODE': 'web',
+            'TELEGRAM_ENABLED': False,
             'TELEGRAM_BOT_MODE': 'polling',
             'TELEGRAM_WEBHOOK_PORT': 8080,
             'TELEGRAM_WEBHOOK_PATH': '/telegram/webhook',
@@ -161,6 +164,7 @@ class Settings:
             'QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST': True,
             'QUIET_HOURS_SUPPRESS_EVENT_SUMMARY': True,
             'QUIET_HOURS_SUPPRESS_STILL_QUALIFYING': True,
+            'QUIET_HOURS_SUPPRESS_REGIME_GATE': True,
             'STILL_QUALIFYING_EDIT_ENABLED': False,
             'STILL_QUALIFYING_STATE_FILE': 'still_qualifying_telegram.json',
         }
@@ -250,6 +254,7 @@ class Settings:
             'QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST',
             'QUIET_HOURS_SUPPRESS_EVENT_SUMMARY',
             'QUIET_HOURS_SUPPRESS_STILL_QUALIFYING',
+            'QUIET_HOURS_SUPPRESS_REGIME_GATE',
             'STILL_QUALIFYING_EDIT_ENABLED',
         ]:
             require_bool(bool_key)
@@ -296,6 +301,9 @@ class Settings:
             ('QUIET_HOURS_END_HOUR_UTC', 0, 23),
             ('TELEGRAM_WEBHOOK_PORT', 1, 65535),
             ('ALERT_BACKTEST_REPORT_TOP_N', 1, 200),
+            ('SCAN_COST_PANEL_COINGECKO_MONTHLY_HTTP_CAP', 0, 100_000_000),
+            ('SCAN_COST_PANEL_POLYGON_MONTHLY_HTTP_CAP', 0, 100_000_000),
+            ('SCAN_COST_PANEL_CMC_MONTHLY_HTTP_CAP', 0, 100_000_000),
         ]:
             require_int(int_key, min_value=lower, max_value=upper)
 
@@ -529,6 +537,11 @@ class Settings:
     @property
     def quiet_hours_suppress_still_qualifying(self) -> bool:
         return bool(self._config.get('QUIET_HOURS_SUPPRESS_STILL_QUALIFYING', True))
+
+    @property
+    def quiet_hours_suppress_regime_gate(self) -> bool:
+        """When True and quiet hours are active, skip the regime-gate Telegram one-liner."""
+        return bool(self._config.get('QUIET_HOURS_SUPPRESS_REGIME_GATE', True))
 
     @property
     def still_qualifying_edit_enabled(self) -> bool:
@@ -1012,6 +1025,18 @@ class Settings:
     def scan_costs_file(self) -> str:
         name = str(self._config.get('SCAN_COSTS_FILE', 'scan_costs.json')).strip()
         return name or 'scan_costs.json'
+
+    @property
+    def scan_cost_panel_coingecko_monthly_http_cap(self) -> int:
+        return int(self._config.get('SCAN_COST_PANEL_COINGECKO_MONTHLY_HTTP_CAP', 0))
+
+    @property
+    def scan_cost_panel_polygon_monthly_http_cap(self) -> int:
+        return int(self._config.get('SCAN_COST_PANEL_POLYGON_MONTHLY_HTTP_CAP', 0))
+
+    @property
+    def scan_cost_panel_cmc_monthly_http_cap(self) -> int:
+        return int(self._config.get('SCAN_COST_PANEL_CMC_MONTHLY_HTTP_CAP', 0))
 
     @property
     def degrade_skip_backtest_enabled(self) -> bool:

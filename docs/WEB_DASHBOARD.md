@@ -52,7 +52,7 @@ Implemented under `docs/dashboard/`:
 
 ### Tier-B Web Push (Q21)
 
-Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere), **not** the scanner worker. The worker only does **one** `POST` per successful scan to `/internal/notify-scan` when `WEB_PUSH_NOTIFY_URL` and `WEB_PUSH_INTERNAL_SECRET` are set (**no** CoinGecko or other market calls on that path). The push **body** is fixed copy plus a **dashboard URL** from `WEB_PUSH_DASHBOARD_URL` — **no** market data or coin list in the notification payload.
+Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere), **not** the scanner worker. When `WEB_PUSH_NOTIFY_URL` and `WEB_PUSH_INTERNAL_SECRET` are set, the worker does **at most one** `POST` per completed scan **only if** at least one coin **entered** or **exited** the qualified active list (same churn as Telegram entry/exit). The relay endpoint is still `/internal/notify-scan`. The push **title/body** are short human-readable lines (which symbols moved) plus **`WEB_PUSH_DASHBOARD_URL`** on click — **no** OHLCV or other market payloads.
 
 **Relay service**
 
@@ -63,15 +63,16 @@ Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere),
 **Worker**
 
 - Set **`WEB_PUSH_NOTIFY_URL`** to the relay origin (no path), **`WEB_PUSH_INTERNAL_SECRET`** to the same value as on the relay, and **`WEB_PUSH_DASHBOARD_URL`** to the page users should open (e.g. your GitHub Pages qualified dashboard URL).
+- The worker POST includes each coin’s **`listed_on`** (plus inferred venues from exchange volumes on exits). The relay stores optional **`notify_exchanges`** from the dashboard subscribe body (same ids as the Exchanges checkboxes; **omit or empty array = all venues**). A subscriber who chose only **Kraken** will not receive a push for a coin that is **only** listed on MEXC.
 
 **Dashboard**
 
-- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **Enable remote scan push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits).
+- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **Enable list-change push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits).
 
 **Privacy / rate**
 
 - Subscriptions are **endpoint URLs and keys** stored by your relay — disclose in your privacy policy if you ship this to users.
-- **Rate:** at most **one** relay request per completed scan per worker; the relay sends **at most one** push per stored subscription per notify call (no client-driven burst).
+- **Rate:** at most **one** relay request per completed scan **when** there is entry/exit churn; the relay sends **at most one** push per stored subscription per notify call (no client-driven burst).
 
 ## New / dropped since last visit (Q10)
 

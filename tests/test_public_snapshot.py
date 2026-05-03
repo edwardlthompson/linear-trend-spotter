@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from utils.scan_artifacts import build_public_qualified_snapshot
+from utils.scan_costs import build_api_cost_panel_for_snapshot
 
 
 def test_full_field_set_includes_scan_interval_and_backtest() -> None:
@@ -54,6 +55,76 @@ def test_full_strips_non_https_chart_url() -> None:
     ]
     payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
     assert "chart_image_url" not in payload["coins"][0]
+
+
+def test_api_cost_panel_optional_top_level() -> None:
+    summary = {
+        "counts": {
+            "coingecko_http_total": 40,
+            "coingecko_http_markets": 30,
+            "coingecko_http_ohlc": 10,
+            "polygon_http_total": 5,
+            "polygon_http_aggs": 4,
+            "polygon_http_other": 1,
+            "cmc_http_total": 12,
+            "cmc_http_listings": 2,
+            "cmc_http_ohlcv": 10,
+        },
+    }
+    panel = build_api_cost_panel_for_snapshot(
+        summary,
+        coingecko_monthly_http_cap=10_000,
+        polygon_monthly_http_cap=0,
+        cmc_monthly_http_cap=50_000,
+    )
+    payload = build_public_qualified_snapshot(
+        [],
+        field_set="full",
+        scan_interval_seconds=3600,
+        api_cost_panel=panel,
+    )
+    assert payload["api_cost_panel"]["sources"][0]["id"] == "coingecko"
+    assert payload["api_cost_panel"]["sources"][0]["this_scan_http"] == 40
+    assert payload["api_cost_panel"]["sources"][0]["pct_of_monthly_budget"] == 0.4
+    assert payload["api_cost_panel"]["sources"][2]["this_scan_http"] == 12
+    assert payload["api_cost_panel"]["sources"][2]["pct_of_monthly_budget"] is not None
+
+
+def test_regime_gate_optional_top_level() -> None:
+    regime = {
+        "enabled": True,
+        "passed": False,
+        "blocked": True,
+        "reason": "btc_30d_below_min (-1.00 < 0.00)",
+        "btc_7d_pct": 2.5,
+        "btc_30d_pct": -1.0,
+        "btc_min_30d_gain_pct": 0.0,
+        "btc_max_abs_7d_gain_pct": 25.0,
+    }
+    payload = build_public_qualified_snapshot(
+        [],
+        field_set="full",
+        scan_interval_seconds=3600,
+        regime_gate=regime,
+    )
+    assert payload["coins"] == []
+    assert payload["regime_gate"] == regime
+
+
+def test_full_includes_closes_30d_when_numeric_series() -> None:
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 0.0, "30d": 0.0},
+            "uniformity_score": 1.0,
+            "health_score": 50,
+            "closes_30d": [100.0, 101.0, 99.5],
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    assert payload["coins"][0].get("closes_30d") == [100.0, 101.0, 99.5]
 
 
 def test_scan_health_fields_optional() -> None:

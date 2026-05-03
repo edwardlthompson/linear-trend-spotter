@@ -2,16 +2,16 @@
 
 Automated full-exchange scanner focused on identifying sustained trend quality (not one-candle pumps), with integrated multi-strategy backtesting to validate and rank opportunities before alerting.
 
-**Defaults (no `config.json` required):** **`DELIVERY_MODE`** is **`telegram`** and **`TELEGRAM_ENABLED`** is **`true`** when you set **`TELEGRAM_BOT_TOKEN`** / **`TELEGRAM_CHAT_ID`**. **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** is **`true`**, so each successful scan writes **`qualified_public_snapshot.json`** under **`DATA_DIR`** and can **POST** it to an optional Render **`snapshot_server/`** relay when **`QUALIFIED_SNAPSHOT_RELAY_*`** env vars are set—see [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md) and [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md). Use **`DELIVERY_MODE=web`** for dashboard-only alerts (no Telegram client).
+**Defaults (no `config.json` required):** **`DELIVERY_MODE`** is **`web`** and **`TELEGRAM_ENABLED`** is **`false`** so the scanner does not create a Telegram client unless you opt in. Set **`TELEGRAM_BOT_TOKEN`** / **`TELEGRAM_CHAT_ID`** and **`DELIVERY_MODE=telegram`** (or **`TELEGRAM_ENABLED=true`** with delivery `telegram`) for group alerts. **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** is **`true`**: each successful scan writes **`qualified_public_snapshot.json`** under **`DATA_DIR`** and can **POST** it to an optional Render **`snapshot_server/`** relay when **`QUALIFIED_SNAPSHOT_RELAY_*`** env vars are set—see [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md) and [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md).
 
 ## Key Features
 
-1. **Trend Identification (Primary):** Evaluates the full exchange universe and identifies sustained, high-quality trends through strict multi-stage qualification.
-2. **Integrated Backtesting (High-Value Validation):** Runs multi-strategy, multi-timeframe backtests only after trend qualification and ranks opportunities for alerts.
-3. **Qualified dashboard & alerts:** Read-only **PWA** with snapshot-driven tables, optional Tier-A/Tier-B notifications; **Telegram** entry/exit messaging when `DELIVERY_MODE` is `telegram` and credentials are present.
-4. **Resilient Data/Fallback Pipeline:** Uses CoinGecko-first data sourcing with fallback paths for continuity, enforcing strict OOM memory clipping for low-RAM remote deployments (e.g. Render Basic plans).
-5. **Insights Layer:** Persists rank history, outcome analytics, data reliability, and portfolio simulation.
-6. **Deterministic TSL-Only Backtesting:** Deterministic backtesting engine optimizes with trailing stop loss only (no TP/TTP sweep) using bounded hill-climbing search for fast convergence.
+1. **Trend identification:** Full target-exchange universe (default Coinbase, Kraken, MEXC), gain/volume gate, CoinGecko ID mapping, per-venue volume enrichment (CoinGecko tickers; Coinbase uses CG exchange id `gdax`), 30-day OHLCV uniformity scoring with Polygon/CMC fallbacks, optional **BTC regime gate** (`REGIME_FILTER_ENABLED`).
+2. **Integrated backtesting:** After final qualification, parallel hill-climb **TSL-only** optimization per indicator/timeframe; confidence-weighted strategy ranking; results on coins, Telegram payloads (when enabled), **`backtest_results.json`**, optional shadow A/B run, optional degrade-skip when prior CoinGecko HTTP load is high.
+3. **Qualified dashboard (PWA):** Read-only snapshot table with sort, health/search/**multi-exchange** filters, dark/light theme, CSV/JSON export, deep links, expandable rows (volumes, backtest sheet + modal), 30d sparkline, pinned-symbol watch list with enter/leave highlights, diff banner vs last visit, **Tier-A** timed poll + digest-based in-browser notifications **scoped to the filtered table** (Kraken-only does not alert on MEXC-only listings), **Tier-B** off-device Web Push (only when the scanner **active** list gains/loses a member; relay honors the same exchange checkboxes as subscribe-time prefs), relay health strip, optional **API cost / budget** line when `SCAN_COSTS_ENABLED`, regime strip when the gate blocks qualifications.
+4. **Delivery & notifications:** **`web`** mode: no Telegram process; use dashboard + optional push relay. **`telegram`** mode: entry/exit images, event summary image, optional weekly digest, anomaly alerts, still-qualifying message, quiet-hours suppressions; event summary can append a **backtest top-strategy delta** line for still-active coins vs last scan (`backtest_top_strategy_state.json`).
+5. **Operations & artifacts:** Rank movement history, exit reason analytics, cooldown re-entry, insights JSON (`scanner_insights.json`), optional watchlist export, portfolio simulation, metrics + scan heartbeat, optional scan-costs file, artifact hygiene / archive, CMC slug learn/cache, anomaly detector.
+6. **Resilience:** Adaptive CoinGecko rate limiting, fail-fast non-critical ticker fetches, memory-conscious batching for constrained hosts, optional Render worker caps on backtest parallelism.
 
 [![Telegram Group](https://img.shields.io/badge/Telegram-Join%20Group-blue?logo=telegram)](https://t.me/+pmZewVhuEFJjYTIx)
 [![CI](https://github.com/edwardlthompson/linear-trend-spotter/actions/workflows/ci.yml/badge.svg)](https://github.com/edwardlthompson/linear-trend-spotter/actions/workflows/ci.yml)
@@ -44,9 +44,10 @@ If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet
 
 | Goal | What to do |
 |------|------------|
-| **Telegram alerts (default path)** | Set **`TELEGRAM_BOT_TOKEN`** and **`TELEGRAM_CHAT_ID`** on the worker (or `.env` locally). Keep **`DELIVERY_MODE=telegram`** (default in `config.json.example`, **`render.yaml`**, **`config/settings.py`**). See **`.env.example`** — [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
-| **Telegram + live website JSON** | Defaults already write **`qualified_public_snapshot.json`** after scans. Deploy **`snapshot_server/`**, set **`QUALIFIED_SNAPSHOT_RELAY_URL`** + **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on worker and relay; point dashboard **`config.js`** at the relay URL — **Option B** below. |
-| **Dashboard only (no Telegram)** | Set **`DELIVERY_MODE=web`** (and optionally **`TELEGRAM_ENABLED=false`**) on the host — [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
+| **Dashboard + snapshot (default path)** | Defaults use **`DELIVERY_MODE=web`**. Deploy **`snapshot_server/`** if you want the worker to push JSON to a URL; set **`QUALIFIED_SNAPSHOT_RELAY_*`** on worker and relay; point dashboard **`config.js`** at the relay — **Option B** below. |
+| **Telegram alerts** | Set **`TELEGRAM_BOT_TOKEN`** and **`TELEGRAM_CHAT_ID`**, and **`DELIVERY_MODE=telegram`** (and **`TELEGRAM_ENABLED=true`**). See **`.env.example`** — [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
+| **Telegram + live website JSON** | Same as above plus relay env vars so Pages or the PWA loads live JSON from **`snapshot_server/`**. |
+| **Dashboard only (already default)** | **`DELIVERY_MODE=web`** in `config.json.example`, **`render.yaml`**, and **`config/settings.py`** — [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
 | **Table-style dashboard on this PC only** | After a scan writes `qualified_public_snapshot.json` under your **`DATA_DIR`**, run **`python scripts/local_dashboard.py`** — opens a browser at `http://127.0.0.1:8765/dashboard/` using your local JSON (no git push, no Render relay). |
 | **Public website on github.io** | **Option A:** commit JSON via **`sync_snapshot_to_docs.py`**. **Option B:** Render relay + set **`window.__SNAPSHOT_URL__`** to the relay `GET` URL. |
 
@@ -86,31 +87,22 @@ The static site can load a file **from the same GitHub repository** so there is 
 **Option B — Render snapshot relay (optional)**  
 If you want the JSON updated from a **Render worker** without committing files, deploy **`snapshot_server/`** from [`render.yaml`](render.yaml), set **`QUALIFIED_SNAPSHOT_RELAY_*`** on worker + relay service, and point **`window.__SNAPSHOT_URL__`** (or **`?api=`**) at `https://<your-snapshot-service>.onrender.com/qualified_public_snapshot.json`. See [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md) for CORS and cache notes.
 
-**Optional: Tier-B Web Push (off-device scan alerts)**  
-Deploy **`push_server/`** from [`render.yaml`](render.yaml), set worker **`WEB_PUSH_*`** env vars, and add **`__PUSH_API_BASE__`** / **`__VAPID_PUBLIC_KEY__`** to dashboard `config.js` per [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md).
+**Optional: Tier-B Web Push (off-device list-change alerts)**  
+Deploy **`push_server/`** from [`render.yaml`](render.yaml), set worker **`WEB_PUSH_NOTIFY_URL`**, **`WEB_PUSH_INTERNAL_SECRET`**, **`WEB_PUSH_DASHBOARD_URL`**, and add **`__PUSH_API_BASE__`** / **`__VAPID_PUBLIC_KEY__`** to dashboard `config.js` per [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md). The worker notifies the relay **only when** the scanner **active** qualified list gains or loses a coin; the relay filters per device using **`listed_on`** and the user’s **Exchanges** checkboxes at subscribe time.
 
 ---
 
-## Recent engineering additions (changelog-style)
+## Release notes and delivery mode
 
-Release announcements with dates: **[`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md)**.
+Dated announcements: **[`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md)**. Dashboard behavior and CORS: **[`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md)**. Backtesting library surface: **[`docs/BACKTESTING_LIBRARY.md`](docs/BACKTESTING_LIBRARY.md)**.
 
-| Area | What shipped |
-|------|----------------|
-| **Public dashboard (Q)** | Static `docs/dashboard/` PWA: snapshot-driven table, health strip (**Q20**), Tier-A polling alerts, Tier-B Web Push client (**Q21**), docs in `docs/WEB_DASHBOARD.md`. |
-| **Web Push relay (Q21)** | Optional `push_server/` Flask + `pywebpush`; second service in `render.yaml`; worker calls relay after each successful scan when env vars are set. |
-| **Snapshot relay (Q4+)** | Optional `snapshot_server/` Flask; third web service in `render.yaml`; worker POSTs JSON after each scan when `QUALIFIED_SNAPSHOT_RELAY_*` are set so GitHub Pages can `GET` the file with CORS. |
-| **Telegram-first defaults (2026-05-02+)** | **`DELIVERY_MODE`** **`telegram`**, **`TELEGRAM_ENABLED`** **`true`**, **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** **`true`** in `config/settings.py` and `config.json.example`; **`render.yaml`** worker env matches. See [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md). |
-| **Backtesting library (P2)** | `backtesting/params.py` — inject **`BacktestLoaderParams`** / **`BacktestRunnerParams`** so hosts avoid the full `settings` object; lazy exports in `backtesting/__init__.py`. |
-| **CI / tests** | `tests/conftest.py` redirects read-only **`DATA_DIR=/var/data`** during pytest collection on Render-style builds. |
-
-### Delivery mode (current default: Telegram + snapshot for web)
+### Delivery mode (current default: web + snapshot)
 
 Canonical reference: **[`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md)**.
 
-The repository **defaults** to **`DELIVERY_MODE`** **`telegram`**, **`TELEGRAM_ENABLED`** **`true`**, and **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** **`true`** (`config/settings.py`, `config.json.example`, **`render.yaml`** worker env). With Telegram credentials set, the scanner initializes **`TelegramClient`** and **`scripts/run_render_worker.sh`** starts **`telegram_bot.py`** unless delivery is web-only or Telegram is explicitly disabled.
+The repository **defaults** to **`DELIVERY_MODE`** **`web`**, **`TELEGRAM_ENABLED`** **`false`**, and **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** **`true`** (`config/settings.py`, `config.json.example`, **`render.yaml`** worker env). The Telegram client is **not** created and **`telegram_bot.py`** is **not** started until you set **`DELIVERY_MODE=telegram`** (and supply credentials if you want alerts).
 
-**Web-only operation:** set **`DELIVERY_MODE=web`** on the host or in **`config.json`**. The Telegram client is not created; **`telegram_bot.py`** is not started. Use the **[qualified dashboard](#public-qualified-coin-dashboard-website)** and optional **`snapshot_server/`** relay so browsers can load JSON.
+**Telegram operation:** set **`DELIVERY_MODE=telegram`**, **`TELEGRAM_ENABLED=true`**, and **`TELEGRAM_BOT_TOKEN`** / **`TELEGRAM_CHAT_ID`**. **`scripts/run_render_worker.sh`** starts **`telegram_bot.py`** when delivery is not web-only and Telegram is enabled.
 
 Routine “Telegram skipped” startup detail is logged at **DEBUG** when delivery is web-only or Telegram is disabled.
 
@@ -118,7 +110,7 @@ Routine “Telegram skipped” startup detail is logged at **DEBUG** when delive
 
 ## CI and deployment
 
-- **GitHub Actions & Render build parity:** Both run **`bash scripts/ci_verify.sh`**, which installs **`requirements-ci.txt`** (no **`TA-Lib`** sdist; **`numpy<2`** like CI), **`ruff`**, then runs **`ruff check .`**, **`python scripts/verify_backtest_env.py`**, and **`python -m compileall -q .`**. The canonical full dependency list (including **TA-Lib** for local installs) stays in **`requirements.txt`** (UTF-8); use `pip install -r requirements.txt` on a machine or image with native TA-Lib headers when you need compiled indicators locally.
+- **GitHub Actions & Render build parity:** Both run **`bash scripts/ci_verify.sh`**, which installs **`requirements-ci.txt`** (no **`TA-Lib`** sdist; **`numpy<2`** like CI), **`ruff`**, then runs **`ruff check .`**, **`mypy`** (narrow scope), **`scripts/check_backtesting_imports.py`**, **`scripts/verify_backtest_env.py`**, **`compileall`**, and **`pytest tests/`**. The canonical full dependency list (including **TA-Lib** for local installs) stays in **`requirements.txt`** (UTF-8); use `pip install -r requirements.txt` on a machine or image with native TA-Lib headers when you need compiled indicators locally.
 - **Docker Compose (M3):** From the repo root, `docker compose config` validates **`docker-compose.yml`**. Run `docker compose run --rm app` for a quick CI-parity smoke (Ruff, import guard, `verify_backtest_env`, `compileall`) inside **`python:3.11-bookworm`** — optional; Render still uses **`render.yaml`**.
 - **Milestone gate:** Before treating a milestone as done (per `docs/EXECUTION_PLAN.md`), confirm **`main`** CI is green and the Render worker deploy for the same commit is **live** when you rely on auto-deploy; locally run `python scripts/check_github_ci.py` (needs `gh auth login` or `GITHUB_TOKEN` with Actions read).
 - **Render:** The worker uses `render.yaml` with `autoDeployTrigger: commit` so merges to the connected branch trigger a deploy. In the Render dashboard, confirm the service is linked to this repository, the correct **branch**, and **Auto-Deploy** is on (see execution plan milestone **A1**).
@@ -146,10 +138,10 @@ Linear Trend Spotter scans all symbols listed across target exchanges (default: 
 5. Exchange-volume enrichment (CoinGecko tickers)
 6. 30-day uniformity scoring from market chart history
 7. **Backtesting stage (featured):** always-on multi-strategy, multi-timeframe backtests on final-stage qualified coins
-8. Entry/exit detection vs active list
-9. Notifications: Telegram (when `DELIVERY_MODE=telegram` and credentials are set) for entry/exit + event summary image when entries/exits occur; optional web push relay; **`qualified_public_snapshot.json`** when **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** is true (default)
-10. Insights persistence (`scanner_insights.json`)
-11. History persistence + metrics/log summary
+8. Entry/exit detection vs active list (with cooldown blocking)
+9. Notifications: **Tier-B** Web Push to relay (when configured) on active-list churn only, with per-subscriber exchange prefs; **Telegram** (when `DELIVERY_MODE=telegram` and credentials are set) for entry/exit + event summary (+ optional backtest param diff for still-active coins); **`qualified_public_snapshot.json`** when **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** is true (default), optional POST to **`snapshot_server/`** relay
+10. Optional: weekly digest, anomaly alerts, still-qualifying Telegram message, regime-gate Telegram line, quiet-hours suppressions
+11. Insights persistence (`scanner_insights.json`), history DB, metrics, optional heartbeat / scan-costs artifact
 
 ---
 
@@ -177,7 +169,12 @@ Qualification determines which coins enter the **backtesting stage** and therefo
 
 ## Notification Behavior
 
-### Entry notifications
+### Dashboard (Tier-A and Tier-B)
+
+- **Tier-A (“Enable update alerts”):** Polls the snapshot on a user-chosen interval; notifies when the **filtered** qualified symbol set changes (Exchanges, Health, Search). Rows hidden by filters do not trigger alerts (e.g. Kraken-only view skips new MEXC-only listings). Pinned-symbol “In” notifications use the same filter rule.
+- **Tier-B (“List change push”):** Off-device push when the scanner **active** list gains or loses a coin. Subscribe with the same **Exchanges** checkboxes as the table; the relay stores `notify_exchanges` and skips coins whose `listed_on` does not intersect. No push on scans with zero entry/exit churn.
+
+### Entry notifications (Telegram)
 
 - Sent once when a coin newly enters qualified state.
 - Includes:
@@ -216,7 +213,7 @@ Example entry notification excerpt:
 🚀 Volume Acceleration: +37% vs prior 7d avg
 ```
 
-### Exit notifications
+### Exit notifications (Telegram)
 
 - Sent once when a previously active coin leaves qualification.
 - Includes precise exit reason (first failed stage), for example:
@@ -236,11 +233,12 @@ Example entry notification excerpt:
   - lifecycle + risk panel (reason, P&L/run-up/drawdown, held duration, health/uniformity)
   - market context panel (entry/exit price, 7d/30d gains, 24h volume, rank, on-list duration, cooldown)
 
-### Event dashboard image
+### Event dashboard image (Telegram)
 
-- A compact event summary image is sent only when there is at least one entry or exit.
+- A compact event summary image is sent only when there is at least one entry or exit (unless quiet-hours suppress it).
 - Event summary shows:
   - active rankings with health, gain since entry, and time-on-list
+- Optional caption line: **backtest top-strategy delta** for still-active coins vs the previous scan (`backtest_top_strategy_state.json` under `DATA_DIR`).
 
 ### Event active ranking summary
 
@@ -295,14 +293,19 @@ The scanner persists a multi-feature insights artifact in `scanner_insights.json
 
 ```env
 CMC_API_KEY=your_cmc_api_key
-DELIVERY_MODE=telegram
-TELEGRAM_ENABLED=true
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
+DELIVERY_MODE=web
+TELEGRAM_ENABLED=false
+# For Telegram alerts, use DELIVERY_MODE=telegram and set:
+# TELEGRAM_BOT_TOKEN=your_bot_token
+# TELEGRAM_CHAT_ID=your_chat_id
 CHART_IMG_API_KEY=your_chart_img_api_key_optional
 # Optional: push snapshot JSON to Render snapshot_server after each scan
 # QUALIFIED_SNAPSHOT_RELAY_URL=https://your-snapshot.onrender.com
 # QUALIFIED_SNAPSHOT_RELAY_SECRET=shared_secret_with_relay_service
+# Optional: Tier-B Web Push (worker → push_server)
+# WEB_PUSH_NOTIFY_URL=https://your-push.onrender.com
+# WEB_PUSH_INTERNAL_SECRET=shared_secret_with_push_service
+# WEB_PUSH_DASHBOARD_URL=https://your-site.github.io/linear-trend-spotter/dashboard/
 ```
 
 ### 2) App config (`config.json`)
@@ -327,8 +330,8 @@ Available parameters (defaults from `config/settings.py`):
 | `NO_CHANGE_NOTIFICATIONS` | `false` | Legacy no-change ping toggle |
 | `ALERT_COOLDOWN_HOURS` | `6` | Re-entry cooldown window after exit |
 | `CMC_SYMBOL_ALIASES` | `{"CRYPGPT":"CGPT"}` | Exchange-symbol to CMC-symbol fallback map used only when `TOP_COINS_PROVIDER` is `cmc` |
-| `DELIVERY_MODE` | `telegram` | `telegram` (alerts + optional snapshot) or `web` (no Telegram client) — env `DELIVERY_MODE` overrides when set |
-| `TELEGRAM_ENABLED` | `true` | Master switch when `DELIVERY_MODE` is `telegram` — env `TELEGRAM_ENABLED` overrides when set |
+| `DELIVERY_MODE` | `web` | `web` (dashboard / snapshot primary) or `telegram` (Telegram client + alerts) — env `DELIVERY_MODE` overrides when set |
+| `TELEGRAM_ENABLED` | `false` | Master switch when `DELIVERY_MODE` is `telegram` — env `TELEGRAM_ENABLED` overrides when set |
 | `PUBLIC_QUALIFIED_SNAPSHOT_ENABLED` | `true` | After each successful scan, write `qualified_public_snapshot.json` under `DATA_DIR` (and POST to relay when `QUALIFIED_SNAPSHOT_RELAY_*` are set on the worker) |
 | `PORTFOLIO_SIM_ENABLED` | `true` | Enable alert-following portfolio simulation state updates |
 | `PORTFOLIO_SIM_STARTING_CAPITAL` | `10000` | Starting capital for portfolio simulation |
@@ -488,8 +491,12 @@ Suggested cadence:
 - `trend_scanner.log` — full pipeline runtime log and summaries
 - `bot_output.log` — Telegram/bot-side output
 - `metrics.json` — persisted metrics snapshot
+- `qualified_public_snapshot.json` — public dashboard payload (under `DATA_DIR` when enabled)
+- `backtest_results.json` / `backtest_checkpoint.json` / `backtest_telemetry.jsonl` — backtest artifacts
+- `backtest_top_strategy_state.json` — previous-scan top-strategy fingerprints for Telegram event-summary diff
 - `exit_reason_analytics.json` — cumulative exit reason breakdowns
 - `scanner_insights.json` — rank persistence, outcomes, and portfolio simulation
+- `scan_costs.json` — optional per-scan API cost snapshot when `SCAN_COSTS_ENABLED`
 
 ---
 
@@ -497,18 +504,3 @@ Suggested cadence:
 
 - If Chart-IMG key is missing or unavailable, notifications can still use cached OHLCV fallback chart when present.
 - If public CoinGecko limit pressure is high, scanner degrades gracefully using cache + fail-fast behavior on non-critical ticker fetches.
-
----
-
-## Suggested future features
-
-Ideas that fit the existing architecture (scanner → artifacts → Telegram / snapshot / dashboard):
-
-1. **Dual delivery without flipping modes** — `DELIVERY_MODE=telegram` already pairs with default snapshot + relay; see **“Render worker: operational matrix”** in [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md).
-2. **Snapshot relay health in dashboard** — Shipped: `snapshot_server` **`GET /relay-health`** + dashboard strip (see [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md)).
-3. **Per-symbol watch from the site** — Tier-A alerts already poll; extend with user-stored “pinned symbols” in `localStorage` and highlight rows when they enter or leave the qualified set.
-4. **Regime filter UX** — `REGIME_FILTER_*` exists but is off by default; add a dashboard strip or Telegram one-liner when the filter blocks passes (BTC 7d/30d gate).
-5. **Scan cost / API budget panel** — `SCAN_COSTS_ENABLED` and metrics exist; expose a read-only “last scan API cost estimate” line on the dashboard health strip.
-6. **Webhook or Slack mirror** — Optional second channel mirroring entry/exit captions (same formatter output) for teams that do not use Telegram.
-7. **Historical snapshot versions** — Optional relay or worker artifact that retains the last *N* snapshot files or S3 uploads for auditing trend lists over time.
-8. **Backtest “what changed” diff** — Between scans, diff top strategy params for still-qualified coins and append a compact line to the event summary.

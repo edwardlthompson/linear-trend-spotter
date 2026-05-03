@@ -108,6 +108,23 @@ h1 {
   color: var(--color-text);
 }
 
+.watch-toolbar-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.watch-toolbar-wrap input {
+  margin-left: 0.25rem;
+  max-width: 7rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
 .exchange-filter-wrap {
   display: inline-flex;
   flex-wrap: wrap;
@@ -306,6 +323,93 @@ th.sort-desc .sort-btn::after {
   margin-bottom: 0.75rem;
 }
 
+.watch-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--stale-fg);
+  background: var(--stale-bg);
+  border: 1px solid var(--stale-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
+  max-width: 52rem;
+}
+
+.sym-cell-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  vertical-align: middle;
+}
+
+.pin-btn {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: 0.1rem 0.2rem;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--color-muted);
+  border-radius: 4px;
+}
+
+.pin-btn:hover {
+  color: var(--color-link);
+  background: var(--color-btn-hover);
+}
+
+.pin-btn:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 1px;
+}
+
+.pin-btn[aria-pressed="true"] {
+  color: #ca8a04;
+}
+
+html[data-theme="dark"] .pin-btn[aria-pressed="true"] {
+  color: #facc15;
+}
+
+tr.coin-row--pinned td.sym-cell {
+  box-shadow: inset 3px 0 0 0 #ca8a04;
+}
+
+html[data-theme="dark"] tr.coin-row--pinned td.sym-cell {
+  box-shadow: inset 3px 0 0 0 #eab308;
+}
+
+@keyframes pin-enter-flash {
+  0% {
+    background-color: rgba(34, 197, 94, 0.38);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes pin-enter-flash-dark {
+  0% {
+    background-color: rgba(34, 197, 94, 0.22);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+tr.coin-row--pin-enter td {
+  animation: pin-enter-flash 2.4s ease-out 1;
+}
+
+html[data-theme="dark"] tr.coin-row--pin-enter td {
+  animation: pin-enter-flash-dark 2.4s ease-out 1;
+}
+
 .stale-banner {
   font-size: 0.85rem;
   color: var(--stale-fg);
@@ -324,9 +428,30 @@ th.sort-desc .sort-btn::after {
   border-radius: 8px;
   padding: 0.4rem 0.65rem;
   margin-bottom: 0.75rem;
+  white-space: pre-line;
+  line-height: 1.45;
+  max-width: 56rem;
 }
 
 .relay-health-strip.is-warn {
+  color: var(--stale-fg);
+  background: var(--stale-bg);
+  border-color: var(--stale-border);
+}
+
+.regime-strip {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  background: var(--diff-bg);
+  border: 1px solid var(--diff-border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.75rem;
+  max-width: 52rem;
+  line-height: 1.4;
+}
+
+.regime-strip.is-warn {
   color: var(--stale-fg);
   background: var(--stale-bg);
   border-color: var(--stale-border);
@@ -443,6 +568,32 @@ table {
   box-shadow: 0 1px 2px var(--shadow);
 }
 
+table.qualified-grid {
+  border: 1px solid var(--color-border);
+}
+
+table.qualified-grid th,
+table.qualified-grid td {
+  border: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+table.qualified-grid tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-th) 8%);
+}
+
+html[data-theme="dark"] table.qualified-grid tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-th) 12%);
+}
+
+.th-sub {
+  font-weight: 500;
+  opacity: 0.75;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.72em;
+}
+
 caption {
   caption-side: top;
   text-align: left;
@@ -464,7 +615,7 @@ th {
   color: var(--color-text);
 }
 
-tbody tr:last-child td {
+table:not(.qualified-grid) tbody tr:last-child td {
   border-bottom: none;
 }
 
@@ -495,36 +646,137 @@ a {
   font-size: 0.85rem;
 }
 
-.exch-cell {
-  font-size: 0.78rem;
-  line-height: 1.35;
-  max-width: 14rem;
+.exch-col {
+  vertical-align: top;
+  max-width: 13rem;
 }
 
-.exch-line {
-  display: block;
+.exch-sheet {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.72rem;
+  background: var(--color-input-bg);
 }
 
-.coin-name-btn {
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  font: inherit;
-  color: var(--color-link);
-  cursor: pointer;
+.exch-sheet th,
+.exch-sheet td {
+  border: 1px solid var(--color-border);
+  padding: 0.2rem 0.35rem;
   text-align: left;
+}
+
+.exch-sheet th {
+  background: var(--color-th);
+  font-weight: 600;
+  font-size: 0.68rem;
+}
+
+.exch-sheet .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.coin-listing-link {
+  color: var(--color-link);
+  font-weight: 500;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.coin-name-btn:hover {
-  opacity: 0.85;
+.coin-listing-link:hover {
+  opacity: 0.88;
+}
+
+.g30-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  min-width: 6.5rem;
+}
+
+.g30-pct {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+
+.spark-svg {
+  display: block;
+  color: var(--color-link);
+}
+
+.bt-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  min-width: 5rem;
+}
+
+.bt-chart-link {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.bt-sheet-btn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.sheet-heading {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.35rem;
+  font-weight: 600;
+}
+
+.sheet-heading:first-child {
+  margin-top: 0;
+}
+
+.sheet-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.78rem;
+  background: var(--color-input-bg);
+}
+
+.sheet-table th,
+.sheet-table td {
+  border: 1px solid var(--color-border);
+  padding: 0.3rem 0.45rem;
+  text-align: left;
+}
+
+.sheet-table th {
+  background: var(--color-th);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sheet-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.bt-modal-thumb {
+  margin: 0.5rem 0 0;
+}
+
+.chart-thumb-modal {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  display: block;
+}
+
+.bt-modal-chart {
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 .bt-modal {
   max-width: calc(100vw - 2rem);
-  width: min(42rem, 100%);
+  width: min(52rem, 100%);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 0;

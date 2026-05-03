@@ -2,7 +2,10 @@
 
 Deploy as a separate Render **Web Service** (see render.yaml). Stores
 PushSubscription JSON on disk (ephemeral unless you mount persistent storage).
-No market data in payloads — only short scan-complete text + dashboard URL.
+No market OHLCV in payloads — short text + dashboard URL. The scanner POSTs when
+the qualified **active** list gains or loses members; each subscription may
+include ``notify_exchanges`` so pushes match the same exchange filter semantics
+as the dashboard (Kraken-only subscribers skip MEXC-only listings).
 """
 
 from __future__ import annotations
@@ -12,9 +15,16 @@ import logging
 import os
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 from flask import Flask, jsonify, request
 from pywebpush import WebPushException, webpush
+
+from push_server.notify_filtering import (
+    filter_events_for_subscriber,
+    format_change_body,
+    normalize_notify_exchange_ids,
+)
 
 app = Flask(__name__)
 _logger = logging.getLogger("push_server")
@@ -38,7 +48,20 @@ def _subs_path() -> Path:
     return Path(os.getenv("PUSH_SUBSCRIPTIONS_FILE", "/tmp/push_subscriptions.json"))
 
 
-def _load_subscriptions() -> list[dict]:
+def _normalize_envelope(raw: dict[str, Any]) -> dict[str, Any]:
+    """Wrap legacy flat PushSubscription dicts as {subscription, notify_exchanges}."""
+    if "subscription" in raw and isinstance(raw.get("subscription"), dict):
+        sub = raw["subscription"]
+        ne = normalize_notify_exchange_ids(raw.get("notify_exchanges"))
+        return {"subscription": sub, "notify_exchanges": ne}
+    if raw.get("endpoint"):
+        inner = {k: raw[k] for k in raw if k in ("endpoint", "keys", "expirationTime")}
+        ne = normalize_notify_exchange_ids(raw.get("notify_exchanges"))
+        return {"subscription": inner, "notify_exchanges": ne}
+    return raw
+
+
+def _load_subscriptions() -> list[dict[str, Any]]:
     p = _subs_path()
     if not p.exists():
         return []
@@ -47,13 +70,19 @@ def _load_subscriptions() -> list[dict]:
             data = json.load(f)
         if not isinstance(data, list):
             return []
-        return [x for x in data if isinstance(x, dict) and x.get("endpoint")]
+        out: list[dict[str, Any]] = []
+        for x in data:
+            if isinstance(x, dict) and x.get("endpoint"):
+                out.append(_normalize_envelope(x))
+            elif isinstance(x, dict) and isinstance(x.get("subscription"), dict) and x["subscription"].get("endpoint"):
+                out.append(_normalize_envelope(x))
+        return out
     except (OSError, json.JSONDecodeError) as e:
         _logger.warning("load subscriptions: %s", e)
         return []
 
 
-def _save_subscriptions(subs: list[dict]) -> None:
+def _save_subscriptions(subs: list[dict[str, Any]]) -> None:
     p = _subs_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
@@ -81,12 +110,19 @@ def _auth_internal() -> bool:
     return auth == f"Bearer {expected}"
 
 
-def _dedupe_merge(subs: list[dict], new_sub: dict) -> list[dict]:
-    ep = new_sub.get("endpoint")
+def _envelope_endpoint(env: dict[str, Any]) -> str | None:
+    sub = env.get("subscription")
+    if isinstance(sub, dict):
+        return str(sub.get("endpoint") or "").strip() or None
+    return None
+
+
+def _dedupe_merge_envelope(subs: list[dict[str, Any]], new_env: dict[str, Any]) -> list[dict[str, Any]]:
+    ep = _envelope_endpoint(new_env)
     if not ep:
         return subs
-    rest = [s for s in subs if s.get("endpoint") != ep]
-    rest.append(new_sub)
+    rest = [s for s in subs if _envelope_endpoint(s) != ep]
+    rest.append(new_env)
     return rest
 
 
@@ -105,9 +141,11 @@ def subscribe():
     sub = body.get("subscription")
     if not isinstance(sub, dict) or not sub.get("endpoint"):
         return jsonify({"error": "subscription object required"}), 400
+    notify_ids = normalize_notify_exchange_ids(body.get("notify_exchanges"))
+    envelope = {"subscription": sub, "notify_exchanges": notify_ids}
     with _lock:
         subs = _load_subscriptions()
-        subs = _dedupe_merge(subs, sub)
+        subs = _dedupe_merge_envelope(subs, envelope)
         _save_subscriptions(subs)
     return jsonify({"ok": True, "count": len(subs)})
 
@@ -124,7 +162,7 @@ def unsubscribe():
         return jsonify({"error": "endpoint required"}), 400
     endpoint = endpoint.strip()
     with _lock:
-        subs = [s for s in _load_subscriptions() if s.get("endpoint") != endpoint]
+        subs = [s for s in _load_subscriptions() if _envelope_endpoint(s) != endpoint]
         _save_subscriptions(subs)
     return jsonify({"ok": True, "count": len(subs)})
 
@@ -134,19 +172,29 @@ def notify_scan():
     if not _auth_internal():
         return jsonify({"error": "unauthorized"}), 401
     body = request.get_json(silent=True) or {}
-    title = str(body.get("title") or "Linear Trend Spotter").strip()[:120]
-    msg = str(
+    title_default = str(body.get("title") or "Qualified list changed").strip()[:120]
+    msg_default = str(
         body.get("body")
-        or "Scan updated — open the qualified dashboard for the latest snapshot.",
+        or "Open the qualified dashboard for the latest snapshot.",
     ).strip()[:240]
     url = str(body.get("url") or "").strip()[:2000]
+
+    entered_coins: list[dict[str, Any]] = []
+    exited_coins: list[dict[str, Any]] = []
+    if "entered_coins" in body or "exited_coins" in body:
+        ec = body.get("entered_coins")
+        if isinstance(ec, list):
+            entered_coins = [x for x in ec if isinstance(x, dict)]
+        xc = body.get("exited_coins")
+        if isinstance(xc, list):
+            exited_coins = [x for x in xc if isinstance(x, dict)]
+
+    structured = bool(entered_coins or exited_coins)
 
     vapid_private = os.getenv("VAPID_PRIVATE_KEY", "").strip()
     vapid_email = os.getenv("VAPID_CONTACT_EMAIL", "").strip()
     if not vapid_private or not vapid_email:
         return jsonify({"error": "VAPID keys not configured on push service"}), 503
-
-    payload = json.dumps({"title": title, "body": msg, "url": url}, separators=(",", ":"))
 
     with _lock:
         subs = _load_subscriptions()
@@ -156,19 +204,35 @@ def notify_scan():
     sent = 0
     failed = 0
     removed = 0
-    kept: list[dict] = []
+    kept: list[dict[str, Any]] = []
 
-    for sub in subs:
+    for env in subs:
+        sub_info = env.get("subscription")
+        if not isinstance(sub_info, dict) or not sub_info.get("endpoint"):
+            continue
+        notify_ids = normalize_notify_exchange_ids(env.get("notify_exchanges"))
+        if structured:
+            ent_f, ext_f = filter_events_for_subscriber(notify_ids, entered_coins, exited_coins)
+            if not ent_f and not ext_f:
+                kept.append(env)
+                continue
+            msg = format_change_body(ent_f, ext_f)
+            title = title_default
+        else:
+            title = title_default
+            msg = msg_default
+
+        payload = json.dumps({"title": title, "body": msg, "url": url}, separators=(",", ":"))
         try:
             webpush(
-                subscription_info=sub,
+                subscription_info=sub_info,
                 data=payload,
                 vapid_private_key=vapid_private,
                 vapid_claims={"sub": f"mailto:{vapid_email}"},
                 ttl=86400,
             )
             sent += 1
-            kept.append(sub)
+            kept.append(env)
         except WebPushException as e:
             status = getattr(e.response, "status_code", None) if e.response else None
             if status in (404, 410):
@@ -176,11 +240,11 @@ def notify_scan():
                 continue
             _logger.warning("webpush failed: %s", e)
             failed += 1
-            kept.append(sub)
+            kept.append(env)
         except Exception as e:
             _logger.warning("webpush error: %s", e)
             failed += 1
-            kept.append(sub)
+            kept.append(env)
 
     with _lock:
         _save_subscriptions(kept)

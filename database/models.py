@@ -460,6 +460,23 @@ class ActiveCoinsDatabase(Database):
         except Exception:
             return None
     
+    @staticmethod
+    def _listed_on_from_volume_fields(coin_info: Dict[str, Any]) -> List[str]:
+        """Infer target-exchange listings from persisted per-venue volume strings (exit rows)."""
+        out: List[str] = []
+        for ex, key in (
+            ('coinbase', 'coinbase_volume'),
+            ('kraken', 'kraken_volume'),
+            ('mexc', 'mexc_volume'),
+        ):
+            v = coin_info.get(key)
+            if v is None:
+                continue
+            s = str(v).strip()
+            if s and s.upper() != 'N/A':
+                out.append(ex)
+        return out
+
     def get_entered_exited(self, current_coins: List[Dict[str, Any]], cooldown_hours: int = 0) -> tuple:
         """
         Compare current coins with active coins to find entries and exits.
@@ -527,6 +544,7 @@ class ActiveCoinsDatabase(Database):
                 'exit_price': last_price if last_price > 0 else None,
                 'peak_price': peak_price if peak_price > 0 else None,
                 'trough_price': trough_price if trough_price > 0 else None,
+                'listed_on': self._listed_on_from_volume_fields(coin_info),
                 **lifecycle,
             })
             self.remove_coin(symbol)

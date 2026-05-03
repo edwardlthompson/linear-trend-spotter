@@ -24,9 +24,22 @@
         Alert poll
         <select id="pollIntervalSelect" title="Tier-A: how often to re-fetch the snapshot and compare (1h–1D, TradingView-style)"></select>
       </label>
-      <button id="notifyBtn" type="button" class="secondary">Enable update alerts</button>
-      <button id="pushTierBBtn" type="button" class="secondary" hidden title="Off-device Web Push after each scan (Q21)">
-        Remote scan push…
+      <button
+        id="notifyBtn"
+        type="button"
+        class="secondary"
+        title="Tier-A: alerts when your filtered table changes (Exchanges, Health, Search). Rows hidden by filters do not trigger an alert — e.g. only Kraken checked means no alert for a new coin listed only on MEXC. Pinned-symbol ‘In’ uses the same filters."
+      >
+        Enable update alerts
+      </button>
+      <button
+        id="pushTierBBtn"
+        type="button"
+        class="secondary"
+        hidden
+        title="Tier-B off-device push when the scanner active list gains or loses a coin that matches your Exchanges checkboxes (none checked = all venues). Preferences update when you change filters while subscribed."
+      >
+        List change push…
       </button>
       <button id="themeCycleBtn" type="button" class="secondary" title="Cycle theme: system, light, dark">
         Theme: system
@@ -72,19 +85,41 @@
         <button type="button" class="chip chip-filter" data-min="60">60</button>
         <button type="button" class="chip chip-filter" data-min="70">70</button>
       </span>
+      <span class="watch-toolbar-wrap">
+        <label>
+          Watch symbol
+          <input
+            id="watchSymbolInput"
+            type="text"
+            maxlength="40"
+            placeholder="e.g. BTC"
+            autocomplete="off"
+            title="Pin a symbol for enter/leave the qualified set (stored in this browser)"
+          />
+        </label>
+        <button type="button" id="watchAddBtn" class="secondary" title="Add to watch list">
+          Add watch
+        </button>
+      </span>
     </p>
     <div id="error" class="error" hidden></div>
     <p id="meta" class="meta"></p>
     <div id="staleBanner" class="stale-banner" role="status" hidden></div>
     <div id="healthStrip" class="health-strip" role="status" hidden></div>
     <div id="relayHealthStrip" class="health-strip relay-health-strip" role="status" hidden></div>
+    <div id="regimeStrip" class="regime-strip" role="status" hidden></div>
     <div id="diffBanner" class="diff-banner" role="status" hidden></div>
+    <div id="watchLeaveBanner" class="watch-banner" role="status" hidden>
+      <span id="watchLeaveBannerText"></span>
+      <button type="button" id="watchLeaveBannerDismiss" class="secondary">Dismiss</button>
+    </div>
     <div id="emptyBanner" class="empty-banner" role="status" hidden></div>
     <div class="table-scroll">
-    <table>
+    <table class="qualified-grid">
       <caption class="visually-hidden">
-        Qualified coins from the scanner snapshot. Sort with column header buttons; expand a row for
-        backtest JSON. To focus a coin, add a hash like #symbol=BTC (or ?symbol=BTC) to the page URL.
+        Qualified coins from the scanner snapshot. Sort with column header buttons. Coin names link to
+        CoinMarketCap or CoinGecko. Backtest column links to the chart image and a results table. Use
+        #symbol=BTC (or ?symbol=BTC) to highlight a row.
       </caption>
       <thead>
         <tr>
@@ -103,7 +138,7 @@
           </th>
           <th scope="col" id="col-g30">
             <button type="button" class="sort-btn" data-sort="g30" aria-label="Sort by 30-day gain">
-              30d
+              30d <span class="th-sub" aria-hidden="true">· trend</span>
             </button>
           </th>
           <th scope="col" id="col-uniformity">
@@ -122,7 +157,7 @@
             </button>
           </th>
           <th scope="col" id="col-exch">Volume / exchanges</th>
-          <th scope="col" id="col-link">Link</th>
+          <th scope="col" id="col-backtest">Backtest</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -132,7 +167,7 @@
     <dialog id="backtestModal" class="bt-modal">
       <div class="bt-modal-box">
         <header class="bt-modal-head">
-          <h2 id="backtestModalTitle" class="bt-modal-title">Backtest detail</h2>
+          <h2 id="backtestModalTitle" class="bt-modal-title">Backtest results</h2>
           <button type="button" class="bt-modal-close" id="backtestModalClose" aria-label="Close">
             ×
           </button>

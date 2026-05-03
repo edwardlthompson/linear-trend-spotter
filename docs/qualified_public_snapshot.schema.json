@@ -31,6 +31,43 @@
       "minimum": 0,
       "description": "Q20: optional sum of metrics error counters for the scan"
     },
+    "regime_gate": {
+      "type": "object",
+      "description": "Present when REGIME_FILTER_ENABLED: BTC 7d/30d gate outcome for dashboard/Telegram UX",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "passed": { "type": "boolean" },
+        "blocked": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "btc_7d_pct": { "type": "number" },
+        "btc_30d_pct": { "type": "number" },
+        "btc_min_30d_gain_pct": { "type": "number" },
+        "btc_max_abs_7d_gain_pct": { "type": "number" }
+      }
+    },
+    "api_cost_panel": {
+      "type": "object",
+      "description": "When SCAN_COSTS_ENABLED: last-scan HTTP usage per provider + optional monthly caps (dashboard)",
+      "properties": {
+        "schema_version": { "type": "integer" },
+        "note": { "type": "string" },
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "pricing_url": { "type": "string" },
+              "this_scan_http": { "type": "integer" },
+              "monthly_budget_http": { "type": ["integer", "null"] },
+              "pct_of_monthly_budget": { "type": ["number", "null"] },
+              "breakdown": { "type": "array" }
+            }
+          }
+        }
+      }
+    },
     "coins": {
       "type": "array",
       "items": {
@@ -69,6 +106,11 @@
           "chart_image_url": {
             "type": "string",
             "description": "Optional HTTPS URL to a chart image; shown in dashboard expanded row when field_set full (Q19)"
+          },
+          "closes_30d": {
+            "type": "array",
+            "items": { "type": "number" },
+            "description": "Optional daily close series (oldest→newest) for dashboard 30d sparkline when scanner attaches it"
           }
         }
       }

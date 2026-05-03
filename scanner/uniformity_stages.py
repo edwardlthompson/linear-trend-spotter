@@ -142,9 +142,12 @@ def apply_uniformity_pass_and_regime(
     *,
     settings: Any,
     app_logger: Any,
-) -> tuple[list[dict[str, Any]], set[str]]:
+) -> tuple[list[dict[str, Any]], set[str], dict[str, Any] | None]:
     """
-    FILTER 3 + optional regime gate. Returns (uniformity_passed, uniformity_passed_symbols).
+    FILTER 3 + optional regime gate.
+
+    Returns (uniformity_passed, uniformity_passed_symbols, regime_gate_or_none).
+    ``regime_gate`` is a JSON-safe dict when ``REGIME_FILTER_ENABLED``; otherwise None.
     """
     app_logger.info(f"\n📐 FILTER 3: Applying uniformity filter (min: {settings.uniformity_min_score})...")
 
@@ -166,18 +169,31 @@ def apply_uniformity_pass_and_regime(
 
     uniformity_passed_symbols = {c["symbol"] for c in uniformity_passed}
 
+    regime_meta: dict[str, Any] | None = None
     if settings.regime_filter_enabled:
         regime_ok, regime_reason, regime_ctx = evaluate_regime_gate(
             all_cmc_coins,
             btc_min_30d_gain=settings.regime_filter_btc_min_30d_gain,
             btc_max_abs_7d_gain=settings.regime_filter_btc_max_abs_7d_gain,
         )
+        g7 = float(regime_ctx.get("btc_7d", 0.0) or 0.0)
+        g30 = float(regime_ctx.get("btc_30d", 0.0) or 0.0)
+        regime_meta = {
+            "enabled": True,
+            "passed": bool(regime_ok),
+            "blocked": not regime_ok,
+            "reason": str(regime_reason),
+            "btc_7d_pct": round(g7, 4),
+            "btc_30d_pct": round(g30, 4),
+            "btc_min_30d_gain_pct": float(settings.regime_filter_btc_min_30d_gain),
+            "btc_max_abs_7d_gain_pct": float(settings.regime_filter_btc_max_abs_7d_gain),
+        }
         if regime_ok:
             if regime_ctx:
                 app_logger.info(
                     "🌦️ Regime filter pass: btc_7d=%.2f%% btc_30d=%.2f%%",
-                    float(regime_ctx.get("btc_7d", 0.0)),
-                    float(regime_ctx.get("btc_30d", 0.0)),
+                    g7,
+                    g30,
                 )
             else:
                 app_logger.info("🌦️ Regime filter pass: %s", regime_reason)
@@ -186,4 +202,4 @@ def apply_uniformity_pass_and_regime(
             uniformity_passed = []
             uniformity_passed_symbols = set()
 
-    return uniformity_passed, uniformity_passed_symbols
+    return uniformity_passed, uniformity_passed_symbols, regime_meta

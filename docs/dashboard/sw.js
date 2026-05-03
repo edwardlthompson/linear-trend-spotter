@@ -2,7 +2,7 @@
  * Qualified dashboard service worker (Milestone Q8).
  * Bump CACHE_VERSION when static assets change so deploys pick up fresh shells.
  */
-const CACHE_VERSION = "qualified-dash-v24";
+const CACHE_VERSION = "qualified-dash-v30";
 const CACHE_NAME = `qualified-dash-assets-${CACHE_VERSION}`;
 const ASSETS = [
   "./index.html",
@@ -40,7 +40,7 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("push", (event) => {
   let title = "Linear Trend Spotter";
-  let body = "Scan updated — open the qualified dashboard for the latest snapshot.";
+  let body = "Open the qualified dashboard for the latest snapshot.";
   let openUrl = self.location.origin + self.location.pathname;
   if (event.data) {
     try {

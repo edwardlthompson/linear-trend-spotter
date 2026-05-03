@@ -3,6 +3,15 @@
 from __future__ import annotations
 
 
+def _ticker_matches_target(target: str, exchange_id: str, exchange_name: str) -> bool:
+    if target in exchange_id or target in exchange_name:
+        return True
+    # CoinGecko ticker `market.identifier` for Coinbase is still "gdax".
+    if target == "coinbase" and exchange_id == "gdax":
+        return True
+    return False
+
+
 def process_tickers(tickers_data, target_exchanges):
     """Process ticker data to extract exchange volumes."""
     volumes = {ex: "N/A" for ex in target_exchanges}
@@ -16,7 +25,7 @@ def process_tickers(tickers_data, target_exchanges):
         volume = float(ticker.get("converted_volume", {}).get("usd", 0))
 
         for target in target_exchanges:
-            if target in exchange_id or target in exchange_name:
+            if _ticker_matches_target(target, exchange_id, exchange_name):
                 if volumes[target] == "N/A" or volume > volumes[target]:
                     volumes[target] = volume
 

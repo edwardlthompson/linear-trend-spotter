@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -80,6 +81,8 @@ def build_public_qualified_snapshot(
     field_set: str = "full",
     scan_interval_seconds: int = 3600,
     scan_health: dict[str, Any] | None = None,
+    regime_gate: dict[str, Any] | None = None,
+    api_cost_panel: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Notification-parity subset for public JSON (Q1/Q2). No secrets.
 
@@ -128,6 +131,14 @@ def build_public_qualified_snapshot(
             chart_url = row.get("chart_image_url")
             if isinstance(chart_url, str) and chart_url.strip().lower().startswith("https://"):
                 coin["chart_image_url"] = chart_url.strip()
+            closes = row.get("closes_30d")
+            if isinstance(closes, list) and len(closes) >= 2:
+                try:
+                    nums = [float(x) for x in closes]
+                    if all(math.isfinite(x) for x in nums):
+                        coin["closes_30d"] = nums
+                except (TypeError, ValueError):
+                    pass
         coins_out.append(coin)
     interval = max(60, int(scan_interval_seconds or 3600))
     body: dict[str, Any] = {
@@ -138,6 +149,10 @@ def build_public_qualified_snapshot(
         "coins": coins_out,
     }
     body.update(_optional_scan_health_fields(scan_health))
+    if regime_gate:
+        body["regime_gate"] = regime_gate
+    if api_cost_panel:
+        body["api_cost_panel"] = api_cost_panel
     return body
 
 
@@ -149,11 +164,15 @@ def write_public_qualified_snapshot(
     field_set: str = "full",
     scan_interval_seconds: int = 3600,
     scan_health: dict[str, Any] | None = None,
+    regime_gate: dict[str, Any] | None = None,
+    api_cost_panel: dict[str, Any] | None = None,
 ) -> None:
     payload = build_public_qualified_snapshot(
         final_results,
         field_set=field_set,
         scan_interval_seconds=scan_interval_seconds,
         scan_health=scan_health,
+        regime_gate=regime_gate,
+        api_cost_panel=api_cost_panel,
     )
     _atomic_write_json(data_dir / filename, payload)
