@@ -134,7 +134,7 @@ class Settings:
             'WEEKLY_DIGEST_STATE_FILE': 'weekly_digest_state.json',
             'SCAN_HEARTBEAT_ENABLED': False,
             'SCAN_HEARTBEAT_FILE': 'scan_heartbeat.json',
-            'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED': False,
+            'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED': True,
             'PUBLIC_QUALIFIED_SNAPSHOT_FILE': 'qualified_public_snapshot.json',
             'PUBLIC_QUALIFIED_SNAPSHOT_FIELD_SET': 'full',
             'SCAN_INTERVAL_SECONDS': 3600,
@@ -980,7 +980,7 @@ class Settings:
 
     @property
     def public_qualified_snapshot_enabled(self) -> bool:
-        return bool(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_ENABLED', False))
+        return bool(self._config.get('PUBLIC_QUALIFIED_SNAPSHOT_ENABLED', True))
 
     @property
     def public_qualified_snapshot_file(self) -> str:

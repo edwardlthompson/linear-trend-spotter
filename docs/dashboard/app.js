@@ -1224,6 +1224,54 @@
     }
   });
 
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      return document.execCommand("copy");
+    } finally {
+      document.body.removeChild(ta);
+    }
+  }
+
+  function wireDonateCopyButtons() {
+    for (const btn of document.querySelectorAll("button[data-donate-copy]")) {
+      const fullLabel = btn.getAttribute("aria-label") || "Copy address";
+      btn.addEventListener("click", async () => {
+        const text = btn.getAttribute("data-donate-copy");
+        if (!text) return;
+        try {
+          const ok = await copyTextToClipboard(text);
+          if (ok) {
+            btn.setAttribute("aria-label", "Copied");
+            btn.classList.add("is-copied");
+            window.setTimeout(() => {
+              btn.setAttribute("aria-label", fullLabel);
+              btn.classList.remove("is-copied");
+            }, 1600);
+          } else {
+            btn.setAttribute("aria-label", "Copy failed");
+            window.setTimeout(() => btn.setAttribute("aria-label", fullLabel), 2000);
+          }
+        } catch {
+          btn.setAttribute("aria-label", "Copy failed");
+          window.setTimeout(() => btn.setAttribute("aria-label", fullLabel), 2000);
+        }
+      });
+    }
+  }
+
+  wireDonateCopyButtons();
+
   if (snapshotUrl) {
     loadSnapshot({ showErrors: true, forNotify: false });
   } else {

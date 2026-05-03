@@ -7,6 +7,8 @@ from pathlib import Path
 
 
 def test_telegram_enabled_false_from_config(tmp_path: Path, monkeypatch) -> None:
+    # Prevent repo-root .env from re-applying TELEGRAM_ENABLED on first settings import.
+    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: None)
     monkeypatch.delenv("TELEGRAM_ENABLED", raising=False)
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({"TELEGRAM_ENABLED": False}), encoding="utf-8")
