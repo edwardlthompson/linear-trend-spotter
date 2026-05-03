@@ -30,6 +30,8 @@
   const LS_UI_SORT_DIR = "qualified_dash_ui_sort_dir";
   const LS_UI_HEALTH_MIN = "qualified_dash_ui_health_min";
   const LS_UI_UNIFORMITY_MIN = "qualified_dash_ui_uniformity_min";
+  /** ``, `pos`, `25`, or `50` — volume acceleration filter. */
+  const LS_UI_VOL_ACCEL = "qualified_dash_ui_vol_accel";
   const LS_UI_SEARCH = "qualified_dash_ui_search";
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
@@ -173,6 +175,7 @@
   const elMainHeading = document.getElementById("mainHeading");
   const elHealthMinSelect = document.getElementById("healthMinSelect");
   const elUniformityMinSelect = document.getElementById("uniformityMinSelect");
+  const elVolAccelFilterSelect = document.getElementById("volAccelFilterSelect");
   const elWatchlistBadge = document.getElementById("watchlistBadge");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
@@ -212,6 +215,8 @@
   let filterHealthMin = null;
   /** @type {number | null} */
   let filterUniformityMin = null;
+  /** @type {"" | "pos" | "25" | "50"} */
+  let filterVolAccel = "";
   let searchQuery = "";
   let searchDebounceTimer = null;
   /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
@@ -282,6 +287,8 @@
       else localStorage.setItem(LS_UI_HEALTH_MIN, String(filterHealthMin));
       if (filterUniformityMin == null) localStorage.removeItem(LS_UI_UNIFORMITY_MIN);
       else localStorage.setItem(LS_UI_UNIFORMITY_MIN, String(filterUniformityMin));
+      if (!filterVolAccel) localStorage.removeItem(LS_UI_VOL_ACCEL);
+      else localStorage.setItem(LS_UI_VOL_ACCEL, filterVolAccel);
       localStorage.setItem(LS_UI_SEARCH, searchQuery);
       if (filterExchangeSet.size === 0) {
         localStorage.removeItem(LS_UI_EXCHANGES_JSON);
@@ -318,6 +325,9 @@
         else if (nu === 60 || nu === 65) filterUniformityMin = nu;
         else filterUniformityMin = null;
       }
+      const vac = localStorage.getItem(LS_UI_VOL_ACCEL);
+      if (vac === "pos" || vac === "25" || vac === "50") filterVolAccel = vac;
+      else filterVolAccel = "";
       const sq = localStorage.getItem(LS_UI_SEARCH);
       if (sq != null) searchQuery = sq;
       filterExchangeSet = new Set();
@@ -359,6 +369,12 @@
     if (!elUniformityMinSelect) return;
     const v = filterUniformityMin == null ? "" : String(filterUniformityMin);
     elUniformityMinSelect.value = v === "60" || v === "65" ? v : "";
+  }
+
+  function syncVolAccelFilterSelect() {
+    if (!elVolAccelFilterSelect) return;
+    const v = filterVolAccel === "pos" || filterVolAccel === "25" || filterVolAccel === "50" ? filterVolAccel : "";
+    elVolAccelFilterSelect.value = v;
   }
 
   function updateWatchlistBadge() {
@@ -440,6 +456,7 @@
   if (elSearch) elSearch.value = searchQuery;
   syncHealthMinSelect();
   syncUniformityMinSelect();
+  syncVolAccelFilterSelect();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
   syncTabVisuals();
@@ -994,6 +1011,16 @@
         return u != null && u >= filterUniformityMin;
       });
     }
+    if (filterVolAccel) {
+      rows = rows.filter((c) => {
+        if (c._watchlist_only) return true;
+        const v = coinVolAccelPct(c);
+        if (v == null) return false;
+        if (filterVolAccel === "pos") return v > 0;
+        const n = Number(filterVolAccel);
+        return Number.isFinite(n) && v >= n;
+      });
+    }
     if (filterExchangeSet.size > 0) {
       rows = rows.filter((c) => {
         if (c._watchlist_only) return true;
@@ -1525,6 +1552,21 @@
     return out;
   }
 
+  /** Approximate 7 points from 7d % gain when no intraday/daily series exists. */
+  function syntheticCloses7dFromGain(c) {
+    const g = c.gains || {};
+    const g7 = typeof g["7d"] === "number" ? g["7d"] : 0;
+    const f7 = 1 + g7 / 100;
+    if (!Number.isFinite(f7) || f7 === 0) return [100, 100];
+    const start = 100 / f7;
+    const end = 100;
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      out.push(start + (end - start) * (i / 6));
+    }
+    return out;
+  }
+
   function effectiveCloses30d(c) {
     const raw = c.closes_30d;
     if (Array.isArray(raw) && raw.length >= 2) {
@@ -1542,6 +1584,23 @@
       if (nums.length >= 2) return nums;
     }
     return effectiveCloses30d(c);
+  }
+
+  const SPARKLINE_7D_MAX_1H_BARS = 7 * 24;
+
+  /** Series for 7d sparkline: last week of 1h bars, else last 7 daily points, else synthetic 7d. */
+  function effectiveSparklineCloses7d(c) {
+    const h1 = c.closes_1h;
+    if (Array.isArray(h1) && h1.length >= 2) {
+      const nums = h1.map((x) => Number(x)).filter((x) => Number.isFinite(x));
+      if (nums.length >= 2) {
+        return nums.length > SPARKLINE_7D_MAX_1H_BARS ? nums.slice(-SPARKLINE_7D_MAX_1H_BARS) : nums.slice();
+      }
+    }
+    const d30 = effectiveCloses30d(c);
+    if (d30.length >= 7) return d30.slice(-7);
+    if (d30.length >= 2) return d30;
+    return syntheticCloses7dFromGain(c);
   }
 
   /** Linearly upsample for smoother sparklines when the snapshot has few points (e.g. synthetic 30d). */
@@ -1576,12 +1635,16 @@
       if (!(max > min)) return pad + ih / 2;
       return pad + ih - ((v - min) / (max - min)) * ih;
     };
+    const lastClose = closes[closes.length - 1];
+    const yRef = normY(lastClose);
+    const x2 = pad + iw;
+    const refLine = `<line class="spark-ref-line" x1="${pad}" y1="${yRef.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${yRef.toFixed(2)}" />`;
     const pts = closes.map((v, i) => {
       const x = pad + (i / (closes.length - 1)) * iw;
       const y = normY(v);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     });
-    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" /></svg><span class="visually-hidden">Recent price trend</span>`;
+    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${refLine}<polyline class="spark-line-main" fill="none" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" /></svg><span class="visually-hidden">Price trend; orange line is last close vs earlier action</span>`;
   }
 
   function fmtSheetCell(v) {
@@ -1725,15 +1788,26 @@
         const g = c.gains || {};
         const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
         const g30pct = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
+        const rawSpark7 = effectiveSparklineCloses7d(c);
+        const closes7 = densifySparklinePoints(rawSpark7, SPARKLINE_TARGET_POINTS);
+        const has1h = Array.isArray(c.closes_1h) && c.closes_1h.length >= 2;
+        const d30series = effectiveCloses30d(c);
+        const has7dFromDaily = Array.isArray(d30series) && d30series.length >= 7;
+        const hasRealDaily = Array.isArray(c.closes_30d) && c.closes_30d.length >= 2;
+        const g7Title = has1h
+          ? "7-day % from snapshot; sparkline uses last 7d of 1h closes (densified for display when needed)"
+          : has7dFromDaily
+            ? "7-day % and price trend from the last week of snapshot daily closes (densified when needed)"
+            : "7-day % from snapshot; short trend estimated from the 7d return then smoothed for display when finer data is absent";
+        const spark7 = sparklineSvg(closes7, 168, 44);
+        const g7Cell = `<div class="g7-cell" title="${escapeAttr(g7Title)}"><span class="g7-pct"><span class="visually-hidden">7-day gain </span>${g7}%</span>${spark7}</div>`;
         const rawSpark = effectiveSparklineCloses(c);
         const closes = densifySparklinePoints(rawSpark, SPARKLINE_TARGET_POINTS);
-        const has1h = Array.isArray(c.closes_1h) && c.closes_1h.length >= 2;
-        const hasRealDaily = Array.isArray(c.closes_30d) && c.closes_30d.length >= 2;
         const g30Title = has1h
-          ? "30-day % from snapshot; sparkline uses recent 1h closes (interpolated for display when needed)"
+          ? "30-day % from snapshot; sparkline uses recent 1h closes (interpolated for display when needed); orange line = last close in window"
           : hasRealDaily
-            ? "30-day % and price trend from snapshot daily closes (interpolated for display when needed)"
-            : "30-day % from snapshot; trend line is estimated from 7d/30d returns then smoothed for display until the scanner adds closes_1h or closes_30d";
+            ? "30-day % and price trend from snapshot daily closes (interpolated for display when needed); orange line = last close in window"
+            : "30-day % from snapshot; trend estimated from 7d/30d returns then smoothed for display; orange line = last close in window";
         const spark = sparklineSvg(closes, 168, 44);
         const g30Cell = `<div class="g30-cell" title="${escapeAttr(g30Title)}"><span class="g30-pct"><span class="visually-hidden">30-day gain </span>${g30pct}%</span>${spark}</div>`;
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
@@ -1762,7 +1836,7 @@
         return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong>${badge}</span></td>
           <td headers="col-name">${nameCell}</td>
-          <td headers="col-g7" class="num"><span class="visually-hidden">7-day gain </span><span title="7-day percentage gain from snapshot">${g7}%</span></td>
+          <td headers="col-g7" class="num">${g7Cell}</td>
           <td headers="col-g30" class="num">${g30Cell}</td>
           <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${u}</span></td>
           <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${h}</span></td>
@@ -2205,6 +2279,19 @@
         filterUniformityMin = null;
       }
       syncUniformityMinSelect();
+      applyTableView();
+      persistUiPreferences();
+      resetTierAPollBaselineIfAlerts();
+      void syncPushNotifyExchangesIfSubscribed();
+    });
+  }
+
+  if (elVolAccelFilterSelect) {
+    elVolAccelFilterSelect.addEventListener("change", () => {
+      const raw = elVolAccelFilterSelect.value;
+      if (raw === "pos" || raw === "25" || raw === "50") filterVolAccel = raw;
+      else filterVolAccel = "";
+      syncVolAccelFilterSelect();
       applyTableView();
       persistUiPreferences();
       resetTierAPollBaselineIfAlerts();

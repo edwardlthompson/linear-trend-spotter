@@ -84,7 +84,7 @@
         id="notifyBtn"
         type="button"
         class="secondary"
-        title="Tier-A: browser notifications when your filtered Qualified table changes (Exchanges, Health, Uniformity, Search). Hidden rows do not trigger alerts. Watchlist in/out uses the full qualified set."
+        title="Tier-A: browser notifications when your filtered Qualified table changes (Exchanges, Health, Uniformity, Vol Δ%, Search). Hidden rows do not trigger alerts. Watchlist in/out uses the full qualified set."
       >
         Enable update alerts
       </button>
@@ -212,8 +212,9 @@
       <div class="table-scroll">
         <table class="qualified-grid">
           <caption class="visually-hidden">
-            Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons. Star a symbol on
-            the Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row.
+            Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons; 7d and 30d
+            columns show gain and a small trend chart (orange line = last close in the window). Star a symbol on the
+            Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row.
           </caption>
           <thead>
             <tr>
@@ -239,15 +240,15 @@
                   Name
                 </button>
               </th>
-              <th scope="col" id="col-g7" title="Seven-day percentage gain from snapshot">
+              <th scope="col" id="col-g7" title="Seven-day gain and short-horizon price trend sparkline">
                 <button
                   type="button"
                   class="sort-btn"
                   data-sort="g7"
                   aria-label="Sort by 7-day gain"
-                  title="Sort by 7-day % gain"
+                  title="Sort by 7-day % gain (sparkline uses last 7d of 1h closes when present, else last week of daily or a smoothed estimate)"
                 >
-                  7d
+                  7d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>
               </th>
               <th scope="col" id="col-g30" title="Thirty-day gain and price trend sparkline">
@@ -307,16 +308,29 @@
                   </select>
                 </div>
               </th>
-              <th scope="col" id="col-volaccel" title="Volume acceleration vs baseline window">
-                <button
-                  type="button"
-                  class="sort-btn"
-                  data-sort="volaccel"
-                  aria-label="Sort by volume acceleration"
-                  title="Sort by volume acceleration %"
-                >
-                  Vol Δ%
-                </button>
+              <th scope="col" id="col-volaccel" title="Volume acceleration vs baseline window and optional filters">
+                <div class="th-split th-split--volaccel">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    data-sort="volaccel"
+                    aria-label="Sort by volume acceleration"
+                    title="Sort by volume acceleration %"
+                  >
+                    Vol Δ%
+                  </button>
+                  <select
+                    id="volAccelFilterSelect"
+                    class="th-filter-select"
+                    title="Filter by volume acceleration: all rows, positive only, or minimum %"
+                    aria-label="Filter by volume acceleration"
+                  >
+                    <option value="">All</option>
+                    <option value="pos">Positive</option>
+                    <option value="25">≥ 25%</option>
+                    <option value="50">≥ 50%</option>
+                  </select>
+                </div>
               </th>
               <th scope="col" id="col-exch" title="Per-exchange 24h volume from snapshot">Volume / exchanges</th>
               <th scope="col" id="col-backtest" title="Chart link and optimizer results when snapshot includes backtest">

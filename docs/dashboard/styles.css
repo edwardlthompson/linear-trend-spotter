@@ -12,6 +12,7 @@ html {
   --color-chip-active-fg: #f8fafc;
   --color-chip-active-bg: #1e293b;
   --color-link: #2563eb;
+  --spark-ref: #ea580c;
   --diff-bg: #e0f2fe;
   --diff-border: #7dd3fc;
   --stale-fg: #78350f;
@@ -37,6 +38,7 @@ html[data-theme="dark"] {
   --color-chip-active-fg: #0f172a;
   --color-chip-active-bg: #e2e8f0;
   --color-link: #38bdf8;
+  --spark-ref: #fb923c;
   --diff-bg: #0c4a6e;
   --diff-border: #0369a1;
   --stale-fg: #fde68a;
@@ -191,6 +193,10 @@ html[data-theme="dark"] .app-tab.is-active {
   background: var(--color-input-bg);
   color: var(--color-text);
   max-width: 4.6rem;
+}
+
+.th-split--volaccel .th-filter-select {
+  max-width: 5.75rem;
 }
 
 tr.coin-row--watchlist-only td {
@@ -885,7 +891,8 @@ a {
   opacity: 0.88;
 }
 
-.g30-cell {
+.g30-cell,
+.g7-cell {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -893,7 +900,8 @@ a {
   min-width: 6.5rem;
 }
 
-.g30-pct {
+.g30-pct,
+.g7-pct {
   font-variant-numeric: tabular-nums;
   font-size: 0.9rem;
 }
@@ -901,6 +909,17 @@ a {
 .spark-svg {
   display: block;
   color: var(--color-link);
+}
+
+.spark-svg .spark-line-main {
+  stroke: currentColor;
+}
+
+.spark-svg .spark-ref-line {
+  stroke: var(--spark-ref);
+  stroke-width: 1.35;
+  stroke-opacity: 0.95;
+  vector-effect: non-scaling-stroke;
 }
 
 .bt-cell {
