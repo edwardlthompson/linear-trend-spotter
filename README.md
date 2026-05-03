@@ -504,8 +504,8 @@ Suggested cadence:
 
 Ideas that fit the existing architecture (scanner → artifacts → Telegram / snapshot / dashboard):
 
-1. **Dual delivery without flipping modes** — Allow `DELIVERY_MODE=telegram` while always writing and relaying the public snapshot (already the default behavior); add a short “operational matrix” doc table for Render env combinations only.
-2. **Snapshot relay health in dashboard** — Surface last ingest time / HTTP status from snapshot JSON or a tiny `GET /health` payload so operators see stale data at a glance.
+1. **Dual delivery without flipping modes** — `DELIVERY_MODE=telegram` already pairs with default snapshot + relay; see **“Render worker: operational matrix”** in [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md).
+2. **Snapshot relay health in dashboard** — Shipped: `snapshot_server` **`GET /relay-health`** + dashboard strip (see [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md)).
 3. **Per-symbol watch from the site** — Tier-A alerts already poll; extend with user-stored “pinned symbols” in `localStorage` and highlight rows when they enter or leave the qualified set.
 4. **Regime filter UX** — `REGIME_FILTER_*` exists but is off by default; add a dashboard strip or Telegram one-liner when the filter blocks passes (BTC 7d/30d gate).
 5. **Scan cost / API budget panel** — `SCAN_COSTS_ENABLED` and metrics exist; expose a read-only “last scan API cost estimate” line on the dashboard health strip.

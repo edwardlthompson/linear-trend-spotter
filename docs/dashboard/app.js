@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * expandable rows; stale banner; theme (Q15); export (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); UI sort/filters in localStorage (refresh-safe). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
@@ -23,6 +23,14 @@
   const LS_THEME = "qualified_dash_theme";
   /** Tier-A poll: previous filtered symbol list under current UI filters (JSON array string). */
   const LS_POLL_FILTERED_SYMS = "qualified_dash_poll_filtered_syms";
+  /** Table sort + filters: survive refresh and PWA relaunch (same origin). */
+  const LS_UI_SORT_KEY = "qualified_dash_ui_sort_key";
+  const LS_UI_SORT_DIR = "qualified_dash_ui_sort_dir";
+  const LS_UI_HEALTH_MIN = "qualified_dash_ui_health_min";
+  const LS_UI_SEARCH = "qualified_dash_ui_search";
+  /** @deprecated use LS_UI_EXCHANGES_JSON */
+  const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
+  const LS_UI_EXCHANGES_JSON = "qualified_dash_ui_exchanges_json";
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
@@ -30,6 +38,11 @@
   const MIN_VALID_SNAPSHOT_MS = Date.UTC(2000, 0, 1, 0, 0, 0, 0);
 
   const ALLOWED_POLL_MS = new Set(POLL_INTERVAL_OPTIONS.map((o) => o.ms));
+  const ALLOWED_SORT_KEYS = new Set(["symbol", "name", "g7", "g30", "uniformity", "health", "volaccel"]);
+  /** Scanner default target exchanges — must match `listed_on` ids in snapshot JSON. */
+  const TARGET_EXCHANGES_LIST = ["coinbase", "kraken", "mexc"];
+  const EXCHANGE_LABELS = { coinbase: "Coinbase", kraken: "Kraken", mexc: "MEXC" };
+  const TARGET_EXCHANGE_IDS = new Set(TARGET_EXCHANGES_LIST);
 
   /** @param {number} t ms since epoch from Date.parse */
   function isValidSnapshotTimeMs(t) {
@@ -137,6 +150,7 @@
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
   const elHealthStrip = document.getElementById("healthStrip");
+  const elRelayHealthStrip = document.getElementById("relayHealthStrip");
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
@@ -146,7 +160,6 @@
   const elExportCsv = document.getElementById("exportCsvBtn");
   const elExportJson = document.getElementById("exportJsonBtn");
   const elPushTierB = document.getElementById("pushTierBBtn");
-  const elExchangeFilter = document.getElementById("exchangeFilter");
   const elBacktestModal = document.getElementById("backtestModal");
   const elBacktestModalTitle = document.getElementById("backtestModalTitle");
   const elBacktestModalBody = document.getElementById("backtestModalBody");
@@ -163,10 +176,103 @@
   let filterHealthMin = null;
   let searchQuery = "";
   let searchDebounceTimer = null;
-  /** @type {string} exchange id or "" for all */
-  let filterExchange = "";
+  /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
+  /** @type {Set<string>} */
+  let filterExchangeSet = new Set();
   /** @type {number | null} */
   let hashHighlightTimer = null;
+
+  function persistUiPreferences() {
+    try {
+      localStorage.setItem(LS_UI_SORT_KEY, sortKey);
+      localStorage.setItem(LS_UI_SORT_DIR, String(sortDir));
+      if (filterHealthMin == null) localStorage.removeItem(LS_UI_HEALTH_MIN);
+      else localStorage.setItem(LS_UI_HEALTH_MIN, String(filterHealthMin));
+      localStorage.setItem(LS_UI_SEARCH, searchQuery);
+      if (filterExchangeSet.size === 0) {
+        localStorage.removeItem(LS_UI_EXCHANGES_JSON);
+        localStorage.removeItem(LS_UI_EXCHANGE);
+      } else {
+        localStorage.setItem(LS_UI_EXCHANGES_JSON, JSON.stringify([...filterExchangeSet].sort()));
+        localStorage.removeItem(LS_UI_EXCHANGE);
+      }
+    } catch (e) {
+      console.warn("persistUiPreferences", e);
+    }
+  }
+
+  function restoreUiPreferences() {
+    try {
+      const sk = localStorage.getItem(LS_UI_SORT_KEY);
+      if (sk && ALLOWED_SORT_KEYS.has(sk)) sortKey = sk;
+      const sd = localStorage.getItem(LS_UI_SORT_DIR);
+      if (sd === "1" || sd === "-1") sortDir = Number(sd);
+      const hm = localStorage.getItem(LS_UI_HEALTH_MIN);
+      if (hm === null || hm === "") filterHealthMin = null;
+      else {
+        const n = Number(hm);
+        if (Number.isNaN(n)) filterHealthMin = null;
+        else if (n === 60 || n === 70) filterHealthMin = n;
+        else filterHealthMin = null;
+      }
+      const sq = localStorage.getItem(LS_UI_SEARCH);
+      if (sq != null) searchQuery = sq;
+      filterExchangeSet = new Set();
+      const exJson = localStorage.getItem(LS_UI_EXCHANGES_JSON);
+      if (exJson) {
+        try {
+          const arr = JSON.parse(exJson);
+          if (Array.isArray(arr)) {
+            for (const x of arr) {
+              const id = String(x || "").trim().toLowerCase();
+              if (TARGET_EXCHANGE_IDS.has(id)) filterExchangeSet.add(id);
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (filterExchangeSet.size === 0) {
+        const exLegacy = localStorage.getItem(LS_UI_EXCHANGE);
+        if (exLegacy && String(exLegacy).trim()) {
+          const id = String(exLegacy).trim().toLowerCase();
+          if (TARGET_EXCHANGE_IDS.has(id)) filterExchangeSet.add(id);
+        }
+      }
+    } catch (e) {
+      console.warn("restoreUiPreferences", e);
+    }
+  }
+
+  function applyHealthChipUi() {
+    document.querySelectorAll(".chip-filter[data-min]").forEach((b) => {
+      b.classList.remove("is-active");
+      const raw = b.getAttribute("data-min");
+      const isAll = raw === "" || raw == null;
+      const matchAll = filterHealthMin == null && isAll;
+      const matchN =
+        !isAll && filterHealthMin != null && String(filterHealthMin) === String(raw);
+      if (matchAll || matchN) b.classList.add("is-active");
+    });
+  }
+
+  function syncExchangeCheckboxesFromSet() {
+    document.querySelectorAll("input[data-exchange-cb]").forEach((inp) => {
+      const id = String(inp.value || "").trim().toLowerCase();
+      inp.checked = filterExchangeSet.has(id);
+    });
+  }
+
+  function updateExchangeFilterSummary() {
+    const el = document.getElementById("exchangeFilterSummary");
+    if (!el) return;
+    if (filterExchangeSet.size === 0) {
+      el.textContent = "All exchanges";
+      return;
+    }
+    const labels = [...filterExchangeSet].sort().map((id) => EXCHANGE_LABELS[id] || id);
+    el.textContent = labels.join(", ");
+  }
 
   updateThemeButtonLabel();
 
@@ -174,6 +280,12 @@
     elInput.value = snapshotUrl;
   }
   populatePollIntervalSelect();
+  restoreUiPreferences();
+  if (elSearch) elSearch.value = searchQuery;
+  applyHealthChipUi();
+  syncExchangeCheckboxesFromSet();
+  updateExchangeFilterSummary();
+  updateSortHeaderClasses();
 
   function getSnapshotUrl() {
     return (elInput && elInput.value.trim()) || snapshotUrl || "";
@@ -409,34 +521,6 @@
     return `<div class="exch-cell">${lines.join("")}</div>`;
   }
 
-  function populateExchangeFilterOptions(coins) {
-    if (!elExchangeFilter) return;
-    const union = new Set();
-    for (const c of coins) {
-      const lo = c.listed_on;
-      if (!Array.isArray(lo)) continue;
-      for (const x of lo) {
-        const id = String(x || "").trim().toLowerCase();
-        if (id) union.add(id);
-      }
-    }
-    const sorted = [...union].sort();
-    const cur = filterExchange;
-    elExchangeFilter.innerHTML = '<option value="">All exchanges</option>';
-    for (const id of sorted) {
-      const opt = document.createElement("option");
-      opt.value = id;
-      opt.textContent = id;
-      elExchangeFilter.appendChild(opt);
-    }
-    if (cur && sorted.includes(cur)) {
-      elExchangeFilter.value = cur;
-    } else if (cur && !sorted.includes(cur)) {
-      filterExchange = "";
-      elExchangeFilter.value = "";
-    }
-  }
-
   function sortCoinsInPlace(rows) {
     const dir = sortDir;
     const mult = dir;
@@ -517,12 +601,17 @@
         return h != null && h >= filterHealthMin;
       });
     }
-    if (filterExchange) {
-      const fx = filterExchange.toLowerCase();
+    if (filterExchangeSet.size > 0) {
       rows = rows.filter((c) => {
         const lo = c.listed_on;
         if (!Array.isArray(lo)) return false;
-        return lo.some((x) => String(x || "").trim().toLowerCase() === fx);
+        const listed = new Set(
+          lo.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
+        );
+        for (const id of filterExchangeSet) {
+          if (listed.has(id)) return true;
+        }
+        return false;
       });
     }
     return rows;
@@ -645,6 +734,95 @@
     if (hasErr) parts.push(`Metric errors: ${Math.round(err)}`);
     elHealthStrip.textContent = parts.join(" · ");
     elHealthStrip.hidden = false;
+  }
+
+  function relayHealthUrlFromSnapshotUrl(snapUrl) {
+    const raw = (snapUrl || "").trim();
+    if (!raw) return "";
+    try {
+      const u = new URL(raw, window.location.href);
+      if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+      u.pathname = u.pathname.replace(/[^/]+$/, "relay-health");
+      u.search = "";
+      u.hash = "";
+      return u.href;
+    } catch {
+      return "";
+    }
+  }
+
+  function formatByteSize(n) {
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0) return "—";
+    if (n < 1024) return `${Math.round(n)} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MiB`;
+  }
+
+  async function refreshRelayHealthStrip() {
+    if (!elRelayHealthStrip) return;
+    const snapUrl = getSnapshotUrl().trim();
+    const override =
+      typeof window.__RELAY_HEALTH_URL__ === "string" ? window.__RELAY_HEALTH_URL__.trim() : "";
+    const relayUrl = override || relayHealthUrlFromSnapshotUrl(snapUrl);
+    elRelayHealthStrip.classList.remove("is-warn");
+    if (!relayUrl) {
+      elRelayHealthStrip.hidden = true;
+      elRelayHealthStrip.textContent = "";
+      return;
+    }
+    const ac = new AbortController();
+    const to = window.setTimeout(() => ac.abort(), 8000);
+    try {
+      const res = await fetch(relayUrl, { credentials: "omit", signal: ac.signal });
+      if (res.status === 404) {
+        elRelayHealthStrip.hidden = true;
+        elRelayHealthStrip.textContent = "";
+        return;
+      }
+      if (!res.ok) {
+        elRelayHealthStrip.hidden = false;
+        elRelayHealthStrip.classList.add("is-warn");
+        elRelayHealthStrip.textContent = `Snapshot relay health: HTTP ${res.status}`;
+        return;
+      }
+      const text = await res.text();
+      let j;
+      try {
+        j = JSON.parse(text);
+      } catch {
+        elRelayHealthStrip.hidden = true;
+        elRelayHealthStrip.textContent = "";
+        return;
+      }
+      const parts = [];
+      parts.push("Snapshot relay");
+      if (j.has_snapshot_file) parts.push("file ready");
+      else parts.push("no file on relay yet");
+      const okAt = j.last_successful_ingest_at;
+      if (okAt) {
+        parts.push(`last ingest ${formatUpdatedHuman(okAt)} (${okAt})`);
+        const st = j.last_ingest_http_status;
+        if (typeof st === "number") parts.push(`HTTP ${st}`);
+        const b = j.last_successful_ingest_bytes;
+        if (typeof b === "number") parts.push(formatByteSize(b));
+      } else if (j.last_ingest_attempt_at) {
+        parts.push(`last attempt ${formatUpdatedHuman(j.last_ingest_attempt_at)}`);
+        const st = j.last_ingest_http_status;
+        if (typeof st === "number") parts.push(`HTTP ${st}`);
+        const err = j.last_error;
+        if (err) parts.push(String(err));
+        elRelayHealthStrip.classList.add("is-warn");
+      }
+      elRelayHealthStrip.textContent = parts.join(" · ");
+      elRelayHealthStrip.hidden = false;
+    } catch {
+      elRelayHealthStrip.hidden = false;
+      elRelayHealthStrip.classList.add("is-warn");
+      elRelayHealthStrip.textContent =
+        "Snapshot relay health: unreachable (timeout, CORS, or offline) — check relay URL";
+    } finally {
+      window.clearTimeout(to);
+    }
   }
 
   function escapeHtml(s) {
@@ -850,7 +1028,7 @@
       elEmptyBanner.hidden = coins.length > 0;
       elEmptyBanner.textContent =
         coins.length === 0
-          ? "Snapshot loaded OK — the JSON has zero qualified coins. GitHub Pages only shows what is committed as docs/qualified_public_snapshot.json. After a scan writes qualified_public_snapshot.json under your DATA_DIR, run python scripts/sync_snapshot_to_docs.py from the repo root, then git add, commit, and push that file."
+          ? "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file."
           : "";
     }
 
@@ -868,8 +1046,8 @@
     updateDiffBanner(data, added, dropped, prevSchema);
     updateStaleBanner(data);
     updateHealthStrip(data);
+    void refreshRelayHealthStrip();
 
-    populateExchangeFilterOptions(coins);
     applyTableView();
     writeSnapshotVisitState(data);
   }
@@ -924,7 +1102,7 @@
     return String(text.length) + ":" + text.slice(0, 2000);
   }
 
-  /** Tier-A alerts: only when the **filtered** coin list (current UI filters) changes vs last poll. */
+  /** Tier-A alerts: only when the **filtered** list (search, health, **exchanges**) changes vs last poll. */
   async function notifySnapshotChangedFiltered(text, data) {
     const coins = Array.isArray(data.coins) ? data.coins : [];
     const filtered = applyFilters(coins);
@@ -953,7 +1131,14 @@
     const curSet = new Set(syms);
     const added = syms.filter((s) => !prevSet.has(s));
     const removed = [...prevSet].filter((s) => !curSet.has(s)).sort();
-    let body = `Filtered view: ${syms.length} coin(s)`;
+    const exchHint =
+      filterExchangeSet.size > 0
+        ? ` · Listings: ${[...filterExchangeSet]
+            .sort()
+            .map((id) => EXCHANGE_LABELS[id] || id)
+            .join(", ")}`
+        : "";
+    let body = `Filtered view: ${syms.length} coin(s)${exchHint}`;
     if (added.length) {
       body += ` · New: ${added.slice(0, 14).join(", ")}${added.length > 14 ? "…" : ""}`;
     }
@@ -1076,6 +1261,7 @@
         sortDir = key === "symbol" || key === "name" ? 1 : -1;
       }
       applyTableView();
+      persistUiPreferences();
     });
   });
 
@@ -1086,6 +1272,7 @@
       document.querySelectorAll(".chip-filter[data-min]").forEach((b) => b.classList.remove("is-active"));
       btn.classList.add("is-active");
       applyTableView();
+      persistUiPreferences();
     });
   });
 
@@ -1095,16 +1282,25 @@
       searchDebounceTimer = window.setTimeout(() => {
         searchQuery = elSearch.value || "";
         applyTableView();
+        persistUiPreferences();
       }, SEARCH_DEBOUNCE_MS);
     });
   }
 
-  if (elExchangeFilter) {
-    elExchangeFilter.addEventListener("change", () => {
-      filterExchange = String(elExchangeFilter.value || "").trim().toLowerCase();
-      applyTableView();
+  function onExchangeCheckboxChange() {
+    filterExchangeSet = new Set();
+    document.querySelectorAll("input[data-exchange-cb]:checked").forEach((inp) => {
+      const id = String(inp.value || "").trim().toLowerCase();
+      if (TARGET_EXCHANGE_IDS.has(id)) filterExchangeSet.add(id);
     });
+    updateExchangeFilterSummary();
+    applyTableView();
+    persistUiPreferences();
   }
+
+  document.querySelectorAll("input[data-exchange-cb]").forEach((inp) => {
+    inp.addEventListener("change", onExchangeCheckboxChange);
+  });
 
   if (elBacktestModalClose && elBacktestModal) {
     elBacktestModalClose.addEventListener("click", () => elBacktestModal.close());

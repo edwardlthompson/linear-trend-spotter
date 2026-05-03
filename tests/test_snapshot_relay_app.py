@@ -29,12 +29,22 @@ def relay_client(monkeypatch, tmp_path):
 def test_ingest_then_get(relay_client):
     payload = {"schema_version": 1, "coins": []}
     raw = json.dumps(payload).encode("utf-8")
+    h0 = relay_client.get("/relay-health")
+    assert h0.status_code == 200
+    j0 = json.loads(h0.get_data(as_text=True))
+    assert j0.get("has_snapshot_file") is False
+    assert j0.get("last_successful_ingest_at") is None
+
     bad = relay_client.post(
         "/internal/ingest-snapshot",
         data=raw,
         headers={"Authorization": "Bearer wrong"},
     )
     assert bad.status_code == 401
+    h401 = relay_client.get("/relay-health")
+    j401 = json.loads(h401.get_data(as_text=True))
+    assert j401.get("last_ingest_http_status") == 401
+    assert j401.get("last_error") == "unauthorized"
 
     ok = relay_client.post(
         "/internal/ingest-snapshot",
@@ -46,3 +56,12 @@ def test_ingest_then_get(relay_client):
     get_r = relay_client.get("/qualified_public_snapshot.json")
     assert get_r.status_code == 200
     assert json.loads(get_r.get_data(as_text=True)) == payload
+
+    h1 = relay_client.get("/relay-health")
+    assert h1.status_code == 200
+    j1 = json.loads(h1.get_data(as_text=True))
+    assert j1.get("has_snapshot_file") is True
+    assert j1.get("last_successful_ingest_at")
+    assert j1.get("last_successful_ingest_bytes") == len(raw)
+    assert j1.get("last_ingest_http_status") == 200
+    assert j1.get("last_error") is None

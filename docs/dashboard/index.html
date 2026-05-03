@@ -43,12 +43,29 @@
         Search
         <input id="searchInput" type="search" placeholder="Symbol or name" autocomplete="off" />
       </label>
-      <label>
-        Exchange
-        <select id="exchangeFilter" title="Show coins listed on this exchange (snapshot field listed_on)">
-          <option value="">All exchanges</option>
-        </select>
-      </label>
+      <div class="exchange-filter-wrap">
+        <span id="exchangeFilterLabel" class="exchange-filter-label">Exchanges</span>
+        <details id="exchangeFilterDetails" class="exchange-filter-details">
+          <summary class="exchange-filter-summary" title="Filter by where the coin is listed (matches scanner target exchanges)">
+            <span id="exchangeFilterSummary">All exchanges</span>
+          </summary>
+          <div
+            class="exchange-filter-panel"
+            role="group"
+            aria-labelledby="exchangeFilterLabel"
+          >
+            <label class="exchange-cb-row"
+              ><input type="checkbox" data-exchange-cb value="coinbase" /> Coinbase</label
+            >
+            <label class="exchange-cb-row"
+              ><input type="checkbox" data-exchange-cb value="kraken" /> Kraken</label
+            >
+            <label class="exchange-cb-row"
+              ><input type="checkbox" data-exchange-cb value="mexc" /> MEXC</label
+            >
+          </div>
+        </details>
+      </div>
       <span class="chip-group">
         <span class="chip-label">Health ≥</span>
         <button type="button" class="chip chip-filter is-active" data-min="">All</button>
@@ -60,6 +77,7 @@
     <p id="meta" class="meta"></p>
     <div id="staleBanner" class="stale-banner" role="status" hidden></div>
     <div id="healthStrip" class="health-strip" role="status" hidden></div>
+    <div id="relayHealthStrip" class="health-strip relay-health-strip" role="status" hidden></div>
     <div id="diffBanner" class="diff-banner" role="status" hidden></div>
     <div id="emptyBanner" class="empty-banner" role="status" hidden></div>
     <div class="table-scroll">

@@ -7,4 +7,9 @@
  * **Optional remote relay:** set to `https://…-snapshot.onrender.com/qualified_public_snapshot.json` if you use
  * `snapshot_server/` + worker POST (see README). Or override with `?api=` on the dashboard URL.
  */
-window.__SNAPSHOT_URL__ = "../qualified_public_snapshot.json";
+window.__SNAPSHOT_URL__ =
+  "https://linear-trend-spotter-snapshot.onrender.com/qualified_public_snapshot.json";
+
+/** Operator-only relay telemetry (same host as snapshot). */
+window.__RELAY_HEALTH_URL__ =
+  "https://linear-trend-spotter-snapshot.onrender.com/relay-health";

@@ -21,6 +21,10 @@ Open `http://localhost:8765/?api=https%3A%2F%2Fyour-snapshot-relay.example%2Fqua
 
 See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md): exchange column + filter, 7d / vol acceleration, Tier-A notifications scoped to **filtered** rows, name-click **modal** for backtest JSON. Snapshot (`field_set` **`full`**) must include `listed_on`, `exchange_volumes`, acceleration fields — implemented in `utils/scan_artifacts.build_public_qualified_snapshot`.
 
+**Sort & filters (refresh-safe):** Column sort, **Health ≥** chips, **Search**, and **Exchanges** (multi-select: Coinbase, Kraken, MEXC — matches scanner `TARGET_EXCHANGES`) are stored in **`localStorage`** (`qualified_dash_ui_*` keys, exchanges as `qualified_dash_ui_exchanges_json`) and restored on load. Theme and **Alert poll** interval were already persisted separately.
+
+**Tier-A notifications** compare the **fully filtered** qualified list (including exchange checkboxes) between polls, so e.g. only **Coinbase**-listed rows can trigger “New / Out” alerts when that filter is active.
+
 ## GitHub Pages (Q6)
 
 1. Build or copy `docs/dashboard/*` to the Pages branch or `/docs` site root.
@@ -31,7 +35,9 @@ See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md): exchange column + filter, 7d
 
 The origin that hosts `index.html` (e.g. `https://YOURNAME.github.io`) must be allowed by **`Access-Control-Allow-Origin`** on the HTTP response that serves `qualified_public_snapshot.json`.
 
-**Recommended:** deploy **`snapshot_server/`** from root [`render.yaml`](render.yaml) (`linear-trend-spotter-snapshot`). It sends **`Access-Control-Allow-Origin`** (default `*`) on **`GET /qualified_public_snapshot.json`** and **`POST /internal/ingest-snapshot`** for the worker. Set **`QUALIFIED_SNAPSHOT_RELAY_URL`** and **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on the worker (same secret as on the relay). Background workers do **not** serve HTTP.
+**Recommended:** deploy **`snapshot_server/`** from root [`render.yaml`](render.yaml) (`linear-trend-spotter-snapshot`). It sends **`Access-Control-Allow-Origin`** (default `*`) on **`GET /qualified_public_snapshot.json`**, **`GET /relay-health`**, and **`POST /internal/ingest-snapshot`** for the worker. Set **`QUALIFIED_SNAPSHOT_RELAY_URL`** and **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on the worker (same secret as on the relay). Background workers do **not** serve HTTP.
+
+**Operator health:** **`GET /relay-health`** returns JSON (`schema_version`, `has_snapshot_file`, `last_successful_ingest_at`, `last_ingest_http_status`, ingest byte size, `last_error`). The dashboard fetches the same origin path as your snapshot URL with the filename replaced by **`relay-health`** (or set **`window.__RELAY_HEALTH_URL__`** in `config.js`), after each successful snapshot load, and shows a short strip so you can spot a stale relay or failed worker POST without opening DevTools.
 
 Alternatively, configure CORS on another HTTPS host (static headers, reverse proxy, object storage). Set **`Cache-Control: public, max-age=`** to slightly under your `SCAN_INTERVAL_SECONDS` so repeat visitors do not refetch every second.
 

@@ -108,6 +108,78 @@ h1 {
   color: var(--color-text);
 }
 
+.exchange-filter-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.exchange-filter-label {
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.exchange-filter-details {
+  position: relative;
+  display: inline-block;
+}
+
+.exchange-filter-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  min-width: 8.5rem;
+}
+
+.exchange-filter-summary::-webkit-details-marker {
+  display: none;
+}
+
+.exchange-filter-summary::after {
+  content: " ▾";
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.exchange-filter-details[open] .exchange-filter-summary::after {
+  content: " ▴";
+}
+
+.exchange-filter-panel {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: calc(100% + 4px);
+  min-width: 11rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: 0 6px 16px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.exchange-cb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--color-text);
+}
+
+.exchange-cb-row input {
+  accent-color: var(--color-link);
+}
+
 input[type="url"],
 input[type="search"] {
   color: var(--color-text);
@@ -252,6 +324,12 @@ th.sort-desc .sort-btn::after {
   border-radius: 8px;
   padding: 0.4rem 0.65rem;
   margin-bottom: 0.75rem;
+}
+
+.relay-health-strip.is-warn {
+  color: var(--stale-fg);
+  background: var(--stale-bg);
+  border-color: var(--stale-border);
 }
 
 .empty-banner {
