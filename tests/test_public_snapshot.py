@@ -127,6 +127,22 @@ def test_full_includes_closes_30d_when_numeric_series() -> None:
     assert payload["coins"][0].get("closes_30d") == [100.0, 101.0, 99.5]
 
 
+def test_full_includes_closes_1h_when_numeric_series() -> None:
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 0.0, "30d": 0.0},
+            "uniformity_score": 1.0,
+            "health_score": 50,
+            "closes_1h": [1.0, 1.01, 1.02, 1.0],
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    assert payload["coins"][0].get("closes_1h") == [1.0, 1.01, 1.02, 1.0]
+
+
 def test_scan_health_fields_optional() -> None:
     rows = [
         {

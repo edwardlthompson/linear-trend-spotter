@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
+from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 from backtesting.data_loader import BacktestDataLoader
@@ -141,3 +144,62 @@ def attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
     coin["volume_acceleration_window_days"] = len(baseline_daily_totals)
     coin["volume_recent_24h"] = current_24h_volume
     coin["volume_baseline_24h"] = baseline_avg
+
+
+def _hourly_closes_from_scanner_db(db_path: Path, symbol: str, *, max_bars: int = 144) -> list[float]:
+    """Last ``max_bars`` 1h closes (oldest→newest), Telegram chart parity (dedupe ts across exchanges)."""
+    sym = str(symbol or "").strip().upper()
+    if not sym or not db_path.is_file():
+        return []
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cur = conn.execute(
+                """
+                SELECT ts, close
+                FROM ohlcv_cache
+                WHERE symbol = ? AND timeframe = '1h'
+                ORDER BY ts ASC
+                """,
+                (sym,),
+            )
+            rows = cur.fetchall()
+    except Exception:
+        return []
+    by_ts: dict[int, list[float]] = defaultdict(list)
+    for ts, close in rows:
+        if close is None:
+            continue
+        try:
+            by_ts[int(ts)].append(float(close))
+        except (TypeError, ValueError):
+            continue
+    ordered_ts = sorted(by_ts.keys())
+    closes = [sum(by_ts[t]) / len(by_ts[t]) for t in ordered_ts]
+    if len(closes) > max_bars:
+        closes = closes[-max_bars:]
+    return closes
+
+
+def attach_hourly_sparkline_closes_for_snapshot(
+    coins: list[dict[str, Any]],
+    scanner_db_path: Path,
+    *,
+    max_bars: int = 144,
+    logger: Any | None = None,
+) -> None:
+    """Attach ``closes_1h`` for dashboard sparklines (same bar count window as Telegram local charts)."""
+    path = Path(scanner_db_path)
+    if not coins or not path.is_file():
+        return
+    for coin in coins:
+        sym = str(coin.get("symbol", "") or "").strip()
+        if not sym:
+            continue
+        try:
+            series = _hourly_closes_from_scanner_db(path, sym, max_bars=max_bars)
+        except Exception as exc:
+            if logger is not None:
+                logger.warning("⚠️ closes_1h skipped for %s: %s", sym, exc)
+            continue
+        if len(series) >= 2:
+            coin["closes_1h"] = series

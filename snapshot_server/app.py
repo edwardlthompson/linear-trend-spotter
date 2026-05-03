@@ -125,9 +125,12 @@ def relay_health() -> Response | tuple[Response, int]:
     with _lock:
         snap = dict(_relay_state)
     has_file = path.is_file()
+    secret_set = bool(os.getenv("QUALIFIED_SNAPSHOT_RELAY_SECRET", "").strip())
     body: dict[str, Any] = {
         "schema_version": 1,
         "has_snapshot_file": has_file,
+        "ingest_auth_configured": secret_set,
+        "store_path": str(path),
         "last_successful_ingest_at": snap.get("last_successful_ingest_at"),
         "last_successful_ingest_bytes": snap.get("last_successful_ingest_bytes"),
         "last_ingest_attempt_at": snap.get("last_attempt_at"),

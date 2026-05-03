@@ -78,6 +78,9 @@ services:
 
   # Public qualified snapshot (Q4): GitHub Pages dashboard GETs JSON here with CORS.
   # Worker POSTs after each scan (QUALIFIED_SNAPSHOT_RELAY_*). Workers do not serve HTTP.
+  # NOTE: Default store is under /tmp — file disappears on redeploy/restart until the worker
+  # POSTs again. For persistence, add a small persistent disk (Starter+) and set
+  # SNAPSHOT_RELAY_STORE to a path on that volume.
   - type: web
     name: linear-trend-spotter-snapshot
     runtime: python

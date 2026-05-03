@@ -33,6 +33,8 @@ def test_ingest_then_get(relay_client):
     assert h0.status_code == 200
     j0 = json.loads(h0.get_data(as_text=True))
     assert j0.get("has_snapshot_file") is False
+    assert j0.get("ingest_auth_configured") is True
+    assert j0.get("store_path")
     assert j0.get("last_successful_ingest_at") is None
 
     bad = relay_client.post(

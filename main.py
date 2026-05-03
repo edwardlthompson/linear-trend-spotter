@@ -51,6 +51,7 @@ from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.active_ranking import build_active_ranking_rows
 from scanner.coin_enrichment import (
+    attach_hourly_sparkline_closes_for_snapshot,
     attach_rank_movement,
     attach_signal_age,
     attach_volume_acceleration,
@@ -815,6 +816,13 @@ def run_scanner():
 
         if settings.public_qualified_snapshot_enabled and (final_results or regime_meta):
             try:
+                if final_results and str(settings.public_qualified_snapshot_field_set).strip().lower() != "minimal":
+                    attach_hourly_sparkline_closes_for_snapshot(
+                        final_results,
+                        settings.db_paths["scanner"],
+                        max_bars=144,
+                        logger=app_logger,
+                    )
                 finished_at = datetime.now(timezone.utc)
                 wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
                 err_map = metrics.get_summary().get("errors") or {}

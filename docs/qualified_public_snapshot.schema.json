@@ -111,6 +111,11 @@
             "type": "array",
             "items": { "type": "number" },
             "description": "Optional daily close series (oldest→newest) for dashboard 30d sparkline when scanner attaches it"
+          },
+          "closes_1h": {
+            "type": "array",
+            "items": { "type": "number" },
+            "description": "Optional 1h close series (oldest→newest), Telegram chart parity for dashboard sparkline when scanner attaches from OHLCV cache"
           }
         }
       }

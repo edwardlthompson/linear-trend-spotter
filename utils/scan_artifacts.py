@@ -139,6 +139,14 @@ def build_public_qualified_snapshot(
                         coin["closes_30d"] = nums
                 except (TypeError, ValueError):
                     pass
+            h1 = row.get("closes_1h")
+            if isinstance(h1, list) and len(h1) >= 2:
+                try:
+                    hnums = [float(x) for x in h1[:200]]
+                    if all(math.isfinite(x) for x in hnums):
+                        coin["closes_1h"] = hnums
+                except (TypeError, ValueError):
+                    pass
         coins_out.append(coin)
     interval = max(60, int(scan_interval_seconds or 3600))
     body: dict[str, Any] = {
