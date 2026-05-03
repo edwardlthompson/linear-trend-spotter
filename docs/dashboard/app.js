@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
- * expandable rows; stale banner; theme (Q15); export (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); pinned-symbol watch (localStorage enter/leave vs full qualified set); UI sort/filters in localStorage (refresh-safe). Snapshot: ?api=… or window.__SNAPSHOT_URL__.
+ * stale banner; theme (Q15); export CSV/JSON (Q16); deep links (Q17); a11y (Q18);
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); star = browser watchlist (Qualified vs Watchlist tabs, enter/leave vs full qualified set); UI sort/filters in localStorage. Snapshot URL under collapsible Data source; ?api=… or window.__SNAPSHOT_URL__.
  */
 (function () {
   /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
@@ -35,6 +35,10 @@
   const LS_PINNED_SYMBOLS_JSON = "qualified_dash_pinned_symbols_json";
   /** Maps symbol → was qualified on last snapshot (boolean). */
   const LS_PINNED_WAS_QUALIFIED_JSON = "qualified_dash_pinned_was_qualified_json";
+  /** ``qualified`` | ``watchlist`` — which main tab is active. */
+  const LS_UI_ACTIVE_VIEW = "qualified_dash_active_view";
+  /** Session: hide scan health / relay / regime / diff strip cluster until tab closes. */
+  const LS_SNAPSHOT_TELEMETRY_DISMISSED = "qualified_dash_snapshot_telemetry_dismissed";
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
@@ -149,26 +153,33 @@
 
   const elError = document.getElementById("error");
   const elMeta = document.getElementById("meta");
+  const elApiBudgetPanel = document.getElementById("apiBudgetPanel");
+  const elExchangeFilterDetails = document.getElementById("exchangeFilterDetails");
+  const elExchangeFilterApply = document.getElementById("exchangeFilterApply");
   const elTbody = document.getElementById("tbody");
   const elDiffBanner = document.getElementById("diffBanner");
   const elWatchLeaveBanner = document.getElementById("watchLeaveBanner");
   const elWatchLeaveBannerText = document.getElementById("watchLeaveBannerText");
   const elWatchLeaveBannerDismiss = document.getElementById("watchLeaveBannerDismiss");
-  const elWatchSymbolInput = document.getElementById("watchSymbolInput");
-  const elWatchAddBtn = document.getElementById("watchAddBtn");
+  const elMainHeading = document.getElementById("mainHeading");
+  const elHealthMinSelect = document.getElementById("healthMinSelect");
+  const elWatchlistBadge = document.getElementById("watchlistBadge");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
   const elHealthStrip = document.getElementById("healthStrip");
   const elRelayHealthStrip = document.getElementById("relayHealthStrip");
   const elRegimeStrip = document.getElementById("regimeStrip");
+  const elSnapshotTelemetryPanel = document.getElementById("snapshotTelemetryPanel");
+  const elTelemetryDismissRow = document.getElementById("telemetryDismissRow");
+  const elTelemetryStripDismiss = document.getElementById("telemetryStripDismiss");
   const elInput = document.getElementById("apiInput");
   const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
   const elPollInterval = document.getElementById("pollIntervalSelect");
   const elSearch = document.getElementById("searchInput");
   const elThemeCycle = document.getElementById("themeCycleBtn");
-  const elExportCsv = document.getElementById("exportCsvBtn");
-  const elExportJson = document.getElementById("exportJsonBtn");
+  const elExportBtn = document.getElementById("exportBtn");
+  const elExportFormatSelect = document.getElementById("exportFormatSelect");
   const elPushTierB = document.getElementById("pushTierBBtn");
   const elBacktestModal = document.getElementById("backtestModal");
   const elBacktestModalTitle = document.getElementById("backtestModalTitle");
@@ -198,6 +209,8 @@
   let pinEnterClearTimer = 0;
   let prevPollWatchLeaveSig = "__init__";
   let suppressedWatchLeaveSig = "";
+  /** @type {"qualified" | "watchlist"} */
+  let activeView = "qualified";
 
   /** Reset Tier-A poll diff baseline so filter changes do not fire bogus in/out alerts. */
   function resetTierAPollBaselineIfAlerts() {
@@ -223,6 +236,7 @@
         localStorage.setItem(LS_UI_EXCHANGES_JSON, JSON.stringify([...filterExchangeSet].sort()));
         localStorage.removeItem(LS_UI_EXCHANGE);
       }
+      localStorage.setItem(LS_UI_ACTIVE_VIEW, activeView);
     } catch (e) {
       console.warn("persistUiPreferences", e);
     }
@@ -266,21 +280,47 @@
           if (TARGET_EXCHANGE_IDS.has(id)) filterExchangeSet.add(id);
         }
       }
+      const av = localStorage.getItem(LS_UI_ACTIVE_VIEW);
+      if (av === "watchlist" || av === "qualified") activeView = av;
     } catch (e) {
       console.warn("restoreUiPreferences", e);
     }
   }
 
-  function applyHealthChipUi() {
-    document.querySelectorAll(".chip-filter[data-min]").forEach((b) => {
-      b.classList.remove("is-active");
-      const raw = b.getAttribute("data-min");
-      const isAll = raw === "" || raw == null;
-      const matchAll = filterHealthMin == null && isAll;
-      const matchN =
-        !isAll && filterHealthMin != null && String(filterHealthMin) === String(raw);
-      if (matchAll || matchN) b.classList.add("is-active");
-    });
+  function syncHealthMinSelect() {
+    if (!elHealthMinSelect) return;
+    const v = filterHealthMin == null ? "" : String(filterHealthMin);
+    elHealthMinSelect.value = v === "60" || v === "70" ? v : "";
+  }
+
+  function updateWatchlistBadge() {
+    if (!elWatchlistBadge) return;
+    const n = getPinnedSet().size;
+    elWatchlistBadge.textContent = n ? String(n) : "";
+    elWatchlistBadge.hidden = n === 0;
+  }
+
+  function syncTabVisuals() {
+    const onQ = activeView === "qualified";
+    const tq = document.getElementById("tabQualified");
+    const tw = document.getElementById("tabWatchlist");
+    const panel = document.getElementById("mainPanel");
+    if (tq && tw) {
+      tq.classList.toggle("is-active", onQ);
+      tw.classList.toggle("is-active", !onQ);
+      tq.setAttribute("aria-selected", onQ ? "true" : "false");
+      tw.setAttribute("aria-selected", onQ ? "false" : "true");
+    }
+    if (panel) panel.setAttribute("aria-labelledby", onQ ? "tabQualified" : "tabWatchlist");
+    if (elMainHeading) elMainHeading.textContent = onQ ? "Qualified list" : "Watchlist";
+    updateWatchlistBadge();
+  }
+
+  function setActiveView(view) {
+    activeView = view === "watchlist" ? "watchlist" : "qualified";
+    syncTabVisuals();
+    persistUiPreferences();
+    applyTableView();
   }
 
   function syncExchangeCheckboxesFromSet() {
@@ -309,9 +349,10 @@
   populatePollIntervalSelect();
   restoreUiPreferences();
   if (elSearch) elSearch.value = searchQuery;
-  applyHealthChipUi();
+  syncHealthMinSelect();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
+  syncTabVisuals();
   updateSortHeaderClasses();
 
   function getSnapshotUrl() {
@@ -447,6 +488,35 @@
     }
   }
 
+  function snapshotTelemetryDismissed() {
+    try {
+      return sessionStorage.getItem(LS_SNAPSHOT_TELEMETRY_DISMISSED) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function setSnapshotTelemetryDismissed() {
+    try {
+      sessionStorage.setItem(LS_SNAPSHOT_TELEMETRY_DISMISSED, "1");
+    } catch (e) {
+      console.warn("persist snapshot telemetry dismiss", e);
+    }
+  }
+
+  function syncSnapshotTelemetryPanel() {
+    if (!elSnapshotTelemetryPanel) return;
+    if (snapshotTelemetryDismissed()) {
+      elSnapshotTelemetryPanel.hidden = true;
+      if (elTelemetryDismissRow) elTelemetryDismissRow.hidden = true;
+      return;
+    }
+    const strips = [elHealthStrip, elRelayHealthStrip, elRegimeStrip, elDiffBanner].filter(Boolean);
+    const anyVisible = strips.some((el) => !el.hidden);
+    elSnapshotTelemetryPanel.hidden = !anyVisible;
+    if (elTelemetryDismissRow) elTelemetryDismissRow.hidden = !anyVisible;
+  }
+
   function showError(msg) {
     elError.textContent = msg;
     elError.hidden = false;
@@ -463,6 +533,11 @@
       elHealthStrip.hidden = true;
       elHealthStrip.textContent = "";
     }
+    if (elRelayHealthStrip) {
+      elRelayHealthStrip.hidden = true;
+      elRelayHealthStrip.textContent = "";
+      elRelayHealthStrip.classList.remove("is-warn");
+    }
     if (elRegimeStrip) {
       elRegimeStrip.hidden = true;
       elRegimeStrip.textContent = "";
@@ -476,6 +551,11 @@
       elWatchLeaveBanner.hidden = true;
       if (elWatchLeaveBannerText) elWatchLeaveBannerText.textContent = "";
     }
+    if (elApiBudgetPanel) {
+      elApiBudgetPanel.hidden = true;
+      elApiBudgetPanel.innerHTML = "";
+    }
+    syncSnapshotTelemetryPanel();
   }
 
   function clearError() {
@@ -600,7 +680,10 @@
       bootstrapPinStateForSymbol(s);
     }
     persistPinnedSet(set);
-    if (lastPayload) applyTableView();
+    if (lastPayload) {
+      applyTableView();
+      updateWatchlistBadge();
+    }
   }
 
   function watchLeaveSig(arr) {
@@ -628,19 +711,6 @@
     }
     elWatchLeaveBanner.hidden = false;
     elWatchLeaveBannerText.textContent = `Watched symbols left the qualified list: ${left.join(", ")}`;
-  }
-
-  function addWatchFromInput() {
-    if (!elWatchSymbolInput) return;
-    const s = normalizeWatchSymbol(elWatchSymbolInput.value);
-    elWatchSymbolInput.value = "";
-    if (!s) return;
-    const set = getPinnedSet();
-    if (set.has(s)) return;
-    set.add(s);
-    persistPinnedSet(set);
-    bootstrapPinStateForSymbol(s);
-    if (lastPayload) render(lastPayload);
   }
 
   function updateDiffBanner(data, added, dropped, prevSchema) {
@@ -802,12 +872,14 @@
     }
     if (filterHealthMin != null) {
       rows = rows.filter((c) => {
+        if (c._watchlist_only) return true;
         const h = coinHealth(c);
         return h != null && h >= filterHealthMin;
       });
     }
     if (filterExchangeSet.size > 0) {
       rows = rows.filter((c) => {
+        if (c._watchlist_only) return true;
         const lo = c.listed_on;
         if (!Array.isArray(lo)) return false;
         const listed = new Set(
@@ -822,10 +894,36 @@
     return rows;
   }
 
-  function getFilteredSortedCoins() {
+  function getWatchlistCoinRows() {
     if (!lastPayload) return [];
     const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
-    const filtered = applyFilters(coins);
+    const bySym = new Map();
+    for (const c of coins) {
+      bySym.set(String(c.symbol || "").toUpperCase(), c);
+    }
+    const pinned = [...getPinnedSet()].sort((a, b) => a.localeCompare(b));
+    return pinned.map((sym) => {
+      const hit = bySym.get(sym);
+      if (hit) return hit;
+      return {
+        symbol: sym,
+        name: "",
+        gains: {},
+        listed_on: [],
+        _watchlist_only: true,
+      };
+    });
+  }
+
+  function getFilteredSortedCoins() {
+    if (!lastPayload) return [];
+    const base =
+      activeView === "watchlist"
+        ? getWatchlistCoinRows()
+        : Array.isArray(lastPayload.coins)
+          ? lastPayload.coins
+          : [];
+    const filtered = applyFilters(base);
     const copy = filtered.slice();
     sortCoinsInPlace(copy);
     return copy;
@@ -944,6 +1042,70 @@
     return lines;
   }
 
+  function updateApiBudgetPanel(data) {
+    if (!elApiBudgetPanel) return;
+    const panel = data.api_cost_panel;
+    const intervalSec =
+      typeof data.scan_interval_seconds === "number" && Number.isFinite(data.scan_interval_seconds)
+        ? Math.max(60, data.scan_interval_seconds)
+        : NOMINAL_SCAN_FALLBACK_SEC;
+    if (!panel || !Array.isArray(panel.sources)) {
+      elApiBudgetPanel.hidden = true;
+      elApiBudgetPanel.innerHTML = "";
+      return;
+    }
+    const secMonth = 30 * 86400;
+    const scansPerMonth = secMonth / intervalSec;
+    const intervalMin = Math.max(1, Math.round(intervalSec / 60));
+    const items = [];
+    for (const s of panel.sources) {
+      const scanHttp = Number(s.this_scan_http);
+      const n = Number.isFinite(scanHttp) ? Math.round(scanHttp) : 0;
+      const capRaw = s.monthly_budget_http;
+      const cap = capRaw != null ? Number(capRaw) : 0;
+      const name = escapeHtml(s.name != null ? String(s.name) : String(s.id || "API"));
+      const pricing = String(s.pricing_url || "").trim();
+      const sub =
+        Array.isArray(s.breakdown) && s.breakdown.length
+          ? s.breakdown
+              .map((b) => `${escapeHtml(String(b.suffix || "?"))}: ${Math.round(Number(b.count) || 0)}`)
+              .join(", ")
+          : "";
+      let riskClass = "budget-meter--neutral";
+      let riskText;
+      if (cap > 0 && Number.isFinite(cap)) {
+        const perScanPct = (n / cap) * 100;
+        const projectedPct = ((n * scansPerMonth) / cap) * 100;
+        if (projectedPct >= 100) riskClass = "budget-meter--danger";
+        else if (projectedPct >= 70) riskClass = "budget-meter--warn";
+        else riskClass = "budget-meter--ok";
+        riskText = `Projected ~${projectedPct.toFixed(1)}% of monthly cap if every scan matches this load (~${scansPerMonth.toFixed(0)} scans/mo at ${intervalMin}m interval). This scan alone: ${perScanPct.toFixed(3)}% of cap.`;
+      } else {
+        riskText =
+          "Configure monthly HTTP caps in the scanner (SCAN_COSTS + per-vendor cap settings) to see a green/yellow/red traffic-light vs overage risk.";
+      }
+      let li = `<li><strong>${name}</strong>: ${n} HTTP this scan`;
+      if (sub) li += `<br/><span class="api-budget-sub">${sub}</span>`;
+      li += `<br/><span class="${riskClass}">${escapeHtml(riskText)}</span>`;
+      if (pricing) {
+        li += `<br/><a href="${escapeAttr(pricing)}" class="api-budget-link" rel="noopener noreferrer" target="_blank">Vendor pricing</a>`;
+      }
+      li += `</li>`;
+      items.push(li);
+    }
+    if (!items.length) {
+      elApiBudgetPanel.hidden = true;
+      elApiBudgetPanel.innerHTML = "";
+      return;
+    }
+    const note =
+      panel.note != null && String(panel.note).trim()
+        ? `<p class="api-budget-note">${escapeHtml(String(panel.note))}</p>`
+        : "";
+    elApiBudgetPanel.hidden = false;
+    elApiBudgetPanel.innerHTML = `<h2 class="api-budget-heading">API usage &amp; budget</h2>${note}<ul class="api-budget-list">${items.join("")}</ul>`;
+  }
+
   function updateHealthStrip(data) {
     if (!elHealthStrip) return;
     const dur = data.scan_duration_s;
@@ -1003,6 +1165,7 @@
     if (!relayUrl) {
       elRelayHealthStrip.hidden = true;
       elRelayHealthStrip.textContent = "";
+      syncSnapshotTelemetryPanel();
       return;
     }
     const ac = new AbortController();
@@ -1057,6 +1220,7 @@
         "Snapshot relay health: unreachable (timeout, CORS, or offline) — check relay URL";
     } finally {
       window.clearTimeout(to);
+      syncSnapshotTelemetryPanel();
     }
   }
 
@@ -1140,6 +1304,16 @@
     return syntheticClosesFromGains(c);
   }
 
+  /** Prefer 1h closes (Telegram chart parity); else daily snapshot series; else synthetic from gains. */
+  function effectiveSparklineCloses(c) {
+    const h1 = c.closes_1h;
+    if (Array.isArray(h1) && h1.length >= 2) {
+      const nums = h1.map((x) => Number(x)).filter((x) => Number.isFinite(x));
+      if (nums.length >= 2) return nums;
+    }
+    return effectiveCloses30d(c);
+  }
+
   function sparklineSvg(closes, w, h) {
     if (!closes || closes.length < 2) return '<span class="cell-muted">—</span>';
     const min = Math.min(...closes);
@@ -1147,6 +1321,7 @@
     const pad = 2;
     const iw = w - pad * 2;
     const ih = h - pad * 2;
+    const strokeW = closes.length > 48 ? 1.2 : 1.75;
     const normY = (v) => {
       if (!(max > min)) return pad + ih / 2;
       return pad + ih - ((v - min) / (max - min)) * ih;
@@ -1156,7 +1331,7 @@
       const y = normY(v);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     });
-    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="1.75" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" /></svg><span class="visually-hidden">30-day price trend</span>`;
+    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="currentColor" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" /></svg><span class="visually-hidden">Recent price trend</span>`;
   }
 
   function fmtSheetCell(v) {
@@ -1168,6 +1343,25 @@
     if (typeof v === "object") return JSON.stringify(v);
     const s = String(v);
     return s.length > 64 ? `${s.slice(0, 63)}…` : s;
+  }
+
+  /** Top strategies plus buy & hold (if present), sorted by net_pct for side-by-side comparison. */
+  function backtestModalStrategyRows(c) {
+    const strategies = Array.isArray(c.backtest_top_strategies)
+      ? c.backtest_top_strategies.filter((r) => r && typeof r === "object")
+      : [];
+    const out = strategies.map((r) => ({ ...r }));
+    const bh = c.backtest_buy_hold != null && typeof c.backtest_buy_hold === "object" ? c.backtest_buy_hold : null;
+    const hasBh = out.some((r) => String(r.indicator || "").trim() === "B&H");
+    if (bh && !hasBh) out.push({ ...bh });
+    out.sort((a, b) => {
+      const na = Number(a.net_pct);
+      const nb = Number(b.net_pct);
+      const fa = Number.isFinite(na) ? na : Number.NEGATIVE_INFINITY;
+      const fb = Number.isFinite(nb) ? nb : Number.NEGATIVE_INFINITY;
+      return fb - fa;
+    });
+    return out;
   }
 
   function backtestStrategiesTableHtml(rows) {
@@ -1191,18 +1385,6 @@
     return `<table class="sheet-table"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`;
   }
 
-  function keyValueSheetHtml(obj) {
-    const keys = Object.keys(obj).sort();
-    if (!keys.length) return '<p class="detail-muted">—</p>';
-    const rows = keys
-      .map(
-        (k) =>
-          `<tr><th scope="row">${escapeHtml(k)}</th><td>${escapeHtml(fmtSheetCell(obj[k]))}</td></tr>`,
-      )
-      .join("");
-    return `<table class="sheet-table kv-sheet"><tbody>${rows}</tbody></table>`;
-  }
-
   function backtestModalHtml(c) {
     const parts = [];
     const chartRaw = c.chart_image_url;
@@ -1216,12 +1398,8 @@
         `<p class="bt-modal-thumb"><img class="chart-thumb-modal" src="${escapeAttr(u)}" alt="${symLabel} backtest chart" loading="lazy" width="480" /></p>`,
       );
     }
-    parts.push('<h3 class="sheet-heading">Top strategies</h3>');
-    parts.push(backtestStrategiesTableHtml(Array.isArray(c.backtest_top_strategies) ? c.backtest_top_strategies : []));
-    if (c.backtest_buy_hold != null && typeof c.backtest_buy_hold === "object") {
-      parts.push('<h3 class="sheet-heading">Buy &amp; hold</h3>');
-      parts.push(keyValueSheetHtml(c.backtest_buy_hold));
-    }
+    parts.push('<h3 class="sheet-heading">Strategy comparison</h3>');
+    parts.push(backtestStrategiesTableHtml(backtestModalStrategyRows(c)));
     return parts.join("");
   }
 
@@ -1252,11 +1430,38 @@
 
   function renderRowsHtml(coins, pinnedSet, pinEnterSet) {
     if (!coins.length) {
-      return `<tr><td colspan="${COL_COUNT}" class="empty">No qualified coins match the current filters.</td></tr>`;
+      let msg;
+      if (activeView === "watchlist") {
+        msg =
+          getPinnedSet().size === 0
+            ? "Your watchlist is empty. On the Qualified tab, click the star next to a symbol to add it here."
+            : "No watchlist rows match the current filters.";
+      } else {
+        msg = "No qualified coins match the current filters.";
+      }
+      return `<tr><td colspan="${COL_COUNT}" class="empty">${escapeHtml(msg)}</td></tr>`;
     }
     return coins
       .map((c) => {
         const rawSym = String(c.symbol || "").toUpperCase();
+        const watchOnly = c._watchlist_only === true;
+        if (watchOnly) {
+          const sym = escapeHtml(String(c.symbol || ""));
+          const pinLabel = `Remove ${rawSym} from watchlist`;
+          const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="Remove from watchlist">\u2605</button>`;
+          const dash = '<span class="cell-muted">\u2014</span>';
+          return `<tr class="coin-row coin-row--watchlist-only" data-symbol="${escapeAttr(rawSym)}">
+          <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong></span></td>
+          <td headers="col-name"><span class="cell-muted" title="Symbol not in the current qualified snapshot">Not in snapshot</span></td>
+          <td headers="col-g7" class="num">${dash}</td>
+          <td headers="col-g30" class="num">${dash}</td>
+          <td headers="col-uniformity" class="num">${dash}</td>
+          <td headers="col-health" class="num">${dash}</td>
+          <td headers="col-volaccel" class="num">${dash}</td>
+          <td headers="col-exch" class="exch-col">${dash}</td>
+          <td headers="col-backtest">${dash}</td>
+        </tr>`;
+        }
         const isPinned = pinnedSet.has(rawSym);
         const isPinEnter = pinEnterSet.has(rawSym);
         const rowClasses = ["coin-row"];
@@ -1268,12 +1473,15 @@
         const g = c.gains || {};
         const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
         const g30pct = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
-        const closes = effectiveCloses30d(c);
-        const hasRealCloses = Array.isArray(c.closes_30d) && c.closes_30d.length >= 2;
-        const g30Title = hasRealCloses
-          ? "30-day % and price trend from snapshot daily closes"
-          : "30-day % and approximate trend from 7d/30d returns (scanner can add closes_30d for exact sparklines)";
-        const spark = sparklineSvg(closes, 128, 40);
+        const closes = effectiveSparklineCloses(c);
+        const has1h = Array.isArray(c.closes_1h) && c.closes_1h.length >= 2;
+        const hasRealDaily = Array.isArray(c.closes_30d) && c.closes_30d.length >= 2;
+        const g30Title = has1h
+          ? "30-day % from snapshot; sparkline uses recent 1h closes (same resolution family as Telegram charts)"
+          : hasRealDaily
+            ? "30-day % and price trend from snapshot daily closes"
+            : "30-day % and approximate trend from 7d/30d returns (scanner adds closes_1h or closes_30d when available)";
+        const spark = sparklineSvg(closes, 168, 44);
         const g30Cell = `<div class="g30-cell" title="${escapeAttr(g30Title)}"><span class="g30-pct"><span class="visually-hidden">30-day gain </span>${g30pct}%</span>${spark}</div>`;
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
         const h =
@@ -1293,9 +1501,9 @@
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
-        const pinLabel = isPinned ? `Stop watching ${rawSym}` : `Watch ${rawSym} (qualified in/out)`;
+        const pinLabel = isPinned ? `Remove ${rawSym} from watchlist` : `Add ${rawSym} to watchlist`;
         const pinChar = isPinned ? "\u2605" : "\u2606";
-        const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="Watch list (this browser)">${pinChar}</button>`;
+        const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="Watchlist (this browser)">${pinChar}</button>`;
         const exchHtml = exchangeVolumeCellHtml(c);
         const btHtml = backtestCellHtml(c);
         return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}">
@@ -1415,6 +1623,8 @@
     const watchHint = nWatch ? ` · ${nWatch} watched` : "";
     elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${watchHint}${nextHint}${alertSuffix}`;
 
+    updateApiBudgetPanel(data);
+
     if (elEmptyBanner) {
       const rg = data.regime_gate;
       const regimeBlocked = rg && rg.enabled === true && rg.blocked === true;
@@ -1449,7 +1659,10 @@
     updateRegimeStrip(data.regime_gate);
     void refreshRelayHealthStrip();
 
+    syncSnapshotTelemetryPanel();
+
     applyTableView();
+    updateWatchlistBadge();
     writeSnapshotVisitState(data);
   }
 
@@ -1467,8 +1680,8 @@
         ev.preventDefault();
         ev.stopPropagation();
         const sym = sheetBtn.getAttribute("data-symbol") || "";
-        const coins = getFilteredSortedCoins();
-        const coin = coins.find((x) => String(x.symbol || "").toUpperCase() === sym.toUpperCase());
+        const pool = Array.isArray(lastPayload?.coins) ? lastPayload.coins : [];
+        const coin = pool.find((x) => String(x.symbol || "").toUpperCase() === sym.toUpperCase());
         if (coin && elBacktestModal && elBacktestModalTitle && elBacktestModalBody) {
           elBacktestModalTitle.textContent = `${String(coin.symbol || "")} · ${String(coin.name || "")}`;
           elBacktestModalBody.innerHTML = backtestModalHtml(coin);
@@ -1702,18 +1915,26 @@
     });
   });
 
-  document.querySelectorAll(".chip-filter[data-min]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const raw = btn.getAttribute("data-min");
-      filterHealthMin = raw === "" || raw == null ? null : Number(raw);
-      document.querySelectorAll(".chip-filter[data-min]").forEach((b) => b.classList.remove("is-active"));
-      btn.classList.add("is-active");
+  if (elHealthMinSelect) {
+    elHealthMinSelect.addEventListener("change", () => {
+      const raw = elHealthMinSelect.value;
+      filterHealthMin = raw === "" ? null : Number(raw);
+      if (filterHealthMin != null && !Number.isFinite(filterHealthMin)) filterHealthMin = null;
       applyTableView();
       persistUiPreferences();
       resetTierAPollBaselineIfAlerts();
       void syncPushNotifyExchangesIfSubscribed();
     });
-  });
+  }
+
+  const tabQ = document.getElementById("tabQualified");
+  const tabW = document.getElementById("tabWatchlist");
+  if (tabQ) {
+    tabQ.addEventListener("click", () => setActiveView("qualified"));
+  }
+  if (tabW) {
+    tabW.addEventListener("click", () => setActiveView("watchlist"));
+  }
 
   if (elSearch) {
     elSearch.addEventListener("input", () => {
@@ -1745,6 +1966,12 @@
     inp.addEventListener("change", onExchangeCheckboxChange);
   });
 
+  if (elExchangeFilterApply && elExchangeFilterDetails) {
+    elExchangeFilterApply.addEventListener("click", () => {
+      elExchangeFilterDetails.open = false;
+    });
+  }
+
   if (elBacktestModalClose && elBacktestModal) {
     elBacktestModalClose.addEventListener("click", () => elBacktestModal.close());
   }
@@ -1762,17 +1989,12 @@
     elThemeCycle.addEventListener("click", () => cycleThemeMode());
   }
 
-  if (elExportCsv) {
-    elExportCsv.addEventListener("click", () => {
+  if (elExportBtn) {
+    elExportBtn.addEventListener("click", () => {
       if (!lastPayload) return;
-      exportViewCsv();
-    });
-  }
-
-  if (elExportJson) {
-    elExportJson.addEventListener("click", () => {
-      if (!lastPayload) return;
-      exportViewJson();
+      const fmt = elExportFormatSelect && elExportFormatSelect.value === "json" ? "json" : "csv";
+      if (fmt === "json") exportViewJson();
+      else exportViewCsv();
     });
   }
 
@@ -1911,23 +2133,21 @@
 
   wireDonateCopyButtons();
 
-  if (elWatchAddBtn) {
-    elWatchAddBtn.addEventListener("click", () => addWatchFromInput());
-  }
-  if (elWatchSymbolInput) {
-    elWatchSymbolInput.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") {
-        ev.preventDefault();
-        addWatchFromInput();
-      }
-    });
-  }
   if (elWatchLeaveBannerDismiss) {
     elWatchLeaveBannerDismiss.addEventListener("click", () => {
       if (elWatchLeaveBanner) elWatchLeaveBanner.hidden = true;
       suppressedWatchLeaveSig = watchLeaveSig(lastPinWatchDelta.left);
     });
   }
+
+  if (elTelemetryStripDismiss) {
+    elTelemetryStripDismiss.addEventListener("click", () => {
+      setSnapshotTelemetryDismissed();
+      syncSnapshotTelemetryPanel();
+    });
+  }
+
+  syncSnapshotTelemetryPanel();
 
   if (snapshotUrl) {
     loadSnapshot({ showErrors: true, forNotify: false });

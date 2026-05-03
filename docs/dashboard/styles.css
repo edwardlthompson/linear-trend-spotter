@@ -77,6 +77,128 @@ body {
 
 h1 {
   font-size: 1.25rem;
+  margin: 0 0 0.35rem;
+}
+
+.app-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.35rem;
+}
+
+.app-tab {
+  font: inherit;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.app-tab:hover {
+  color: var(--color-text);
+}
+
+.app-tab.is-active {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-bottom-color: var(--color-bg);
+  margin-bottom: -1px;
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .app-tab.is-active {
+  border-bottom-color: var(--color-bg);
+}
+
+.tab-badge {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 999px;
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.toolbar-advanced {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  background: var(--color-surface);
+}
+
+.toolbar-advanced-summary {
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--color-muted);
+  list-style: none;
+}
+
+.toolbar-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.toolbar-advanced-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.toolbar-advanced-body input[type="url"] {
+  min-width: 12rem;
+}
+
+.export-toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.toolbar-select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+.th-split {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.th-filter-select {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.2rem 0.3rem;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  max-width: 4.6rem;
+}
+
+tr.coin-row--watchlist-only td {
+  background: color-mix(in srgb, var(--color-surface) 85%, var(--color-muted) 15%);
+}
+
+html[data-theme="dark"] tr.coin-row--watchlist-only td {
+  background: color-mix(in srgb, var(--color-surface) 90%, var(--color-muted) 10%);
 }
 
 .visually-hidden {
@@ -101,23 +223,6 @@ h1 {
 
 .toolbar label.poll-toolbar select {
   margin-left: 0.25rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-input-bg);
-  color: var(--color-text);
-}
-
-.watch-toolbar-wrap {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.watch-toolbar-wrap input {
-  margin-left: 0.25rem;
-  max-width: 7rem;
   padding: 0.35rem 0.5rem;
   border-radius: 6px;
   border: 1px solid var(--color-border);
@@ -197,6 +302,94 @@ h1 {
   accent-color: var(--color-link);
 }
 
+.exchange-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.api-budget-panel {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--color-text);
+  background: var(--diff-bg);
+  border: 1px solid var(--diff-border);
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+  margin-bottom: 0.75rem;
+  max-width: 56rem;
+}
+
+.api-budget-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.api-budget-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+}
+
+.api-budget-list {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.api-budget-list li {
+  margin-bottom: 0.5rem;
+}
+
+.api-budget-list li:last-child {
+  margin-bottom: 0;
+}
+
+.api-budget-sub {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  margin-top: 0.2rem;
+}
+
+.api-budget-link {
+  font-size: 0.8rem;
+}
+
+.budget-meter--ok {
+  color: #15803d;
+  font-weight: 600;
+}
+
+.budget-meter--warn {
+  color: #a16207;
+  font-weight: 600;
+}
+
+.budget-meter--danger {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.budget-meter--neutral {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .budget-meter--ok {
+  color: #4ade80;
+}
+
+html[data-theme="dark"] .budget-meter--warn {
+  color: #facc15;
+}
+
+html[data-theme="dark"] .budget-meter--danger {
+  color: #f87171;
+}
+
 input[type="url"],
 input[type="search"] {
   color: var(--color-text);
@@ -246,33 +439,6 @@ button.secondary {
   border-radius: 6px;
 }
 
-.chip-group {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem;
-  margin-left: 0.5rem;
-}
-
-.chip-label {
-  font-size: 0.8rem;
-  color: var(--color-muted);
-}
-
-button.chip {
-  padding: 0.25rem 0.55rem;
-  font-size: 0.8rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-muted);
-  background: var(--color-btn-bg);
-}
-
-button.chip.is-active {
-  background: var(--color-chip-active-bg);
-  color: var(--color-chip-active-fg);
-  border-color: var(--color-chip-active-bg);
-}
-
 .sort-btn {
   font: inherit;
   font-weight: 600;
@@ -311,6 +477,27 @@ th.sort-desc .sort-btn::after {
   font-size: 0.85rem;
   color: var(--color-muted);
   margin-bottom: 0.75rem;
+}
+
+.snapshot-telemetry-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.snapshot-telemetry-panel .health-strip,
+.snapshot-telemetry-panel .relay-health-strip,
+.snapshot-telemetry-panel .regime-strip,
+.snapshot-telemetry-panel .diff-banner {
+  margin-bottom: 0;
+}
+
+.telemetry-dismiss-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
 }
 
 .diff-banner {
@@ -774,9 +961,13 @@ a {
   font-size: 0.9rem;
 }
 
+/* Near full-bleed modal: responsive side gutters (16–32px range per common design systems). */
 .bt-modal {
-  max-width: calc(100vw - 2rem);
-  width: min(52rem, 100%);
+  box-sizing: border-box;
+  --bt-modal-gutter: clamp(1rem, 3vw, 2rem);
+  width: calc(100vw - 2 * var(--bt-modal-gutter));
+  max-width: calc(100vw - 2 * var(--bt-modal-gutter));
+  margin: auto;
   border: 1px solid var(--color-border);
   border-radius: 10px;
   padding: 0;
@@ -792,7 +983,7 @@ a {
 .bt-modal-box {
   display: flex;
   flex-direction: column;
-  max-height: min(85vh, 640px);
+  max-height: min(90vh, 56rem);
 }
 
 .bt-modal-head {
