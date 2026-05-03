@@ -1232,15 +1232,6 @@ a {
   flex: 1;
 }
 
-@media (max-width: 720px) {
-  #col-exch,
-  .exch-col,
-  #col-volaccel,
-  td[headers="col-volaccel"] {
-    display: none;
-  }
-}
-
 .site-footer {
   margin-top: 2rem;
   padding-top: 1rem;
