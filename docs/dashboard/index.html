@@ -62,12 +62,41 @@
           aria-selected="false"
           aria-controls="settingsPanel"
           data-view="settings"
-          title="Theme, export, search, and Tier-A / Tier-B notification options"
+          title="Theme, export, and Tier-A / Tier-B notification options"
         >
           Settings
         </button>
       </nav>
-      <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
+      <div class="app-tab-bar-end">
+        <label class="topbar-search" title="Filter rows by symbol or name (case-insensitive substring)">
+          <span class="visually-hidden">Search table</span>
+          <svg
+            class="topbar-search-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="m21 21-4.3-4.3"></path>
+          </svg>
+          <input
+            id="searchInput"
+            type="search"
+            class="topbar-search-input"
+            placeholder=""
+            autocomplete="off"
+            title="Filter by symbol or name; combines with column filters"
+          />
+        </label>
+        <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
         <button
           type="button"
           id="coinAlertsBell"
@@ -105,6 +134,7 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
 
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
@@ -116,7 +146,7 @@
             Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons; 7d and 30d
             columns show gain and a small trend chart (orange line = last close in the window). Star a symbol on the
             Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row. Use the
-            Settings tab for export and search.
+            top bar to search and Settings to export.
           </caption>
           <thead>
             <tr>
@@ -387,9 +417,9 @@
         </p>
       </section>
       <section class="settings-section" aria-labelledby="settingsExportHeading">
-        <h3 id="settingsExportHeading" class="settings-section-title">Export &amp; search</h3>
-        <p class="settings-section-hint">Export uses the current tab and filters. Search applies to the Qualified and Watchlist tables.</p>
-        <div class="settings-export-search-row">
+        <h3 id="settingsExportHeading" class="settings-section-title">Export</h3>
+        <p class="settings-section-hint">Export uses the current tab and filters. Use the search field in the top bar to filter the Qualified and Watchlist tables.</p>
+        <p class="settings-actions">
           <span class="export-toolbar settings-export-toolbar" title="Download the current tab’s filtered rows">
             <label class="visually-hidden" for="exportFormatSelect">Export format</label>
             <select
@@ -405,17 +435,7 @@
               Export
             </button>
           </span>
-          <label class="settings-search-field" title="Filter rows by symbol or name (case-insensitive substring)">
-            <span class="settings-label">Search</span>
-            <input
-              id="searchInput"
-              type="search"
-              placeholder="Symbol or name"
-              autocomplete="off"
-              title="Filter by symbol or name; combines with column filters"
-            />
-          </label>
-        </div>
+        </p>
       </section>
     </div>
 

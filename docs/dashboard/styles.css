@@ -85,8 +85,7 @@ h1 {
 .app-tab-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
   gap: 0.5rem 0.75rem;
   margin-bottom: 0.85rem;
   border-bottom: 1px solid var(--color-border);
@@ -100,6 +99,57 @@ h1 {
   margin: 0;
   border-bottom: none;
   padding-bottom: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-tab-bar-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.topbar-search {
+  position: relative;
+  display: block;
+  margin: 0;
+}
+
+.topbar-search-icon {
+  position: absolute;
+  left: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--color-muted);
+}
+
+.topbar-search-input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-width: 10.5rem;
+  max-width: 16rem;
+  margin: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.38rem 0.55rem 0.38rem 2.15rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+}
+
+.topbar-search-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--color-link) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.topbar-search-input::-webkit-search-cancel-button {
+  margin-left: 0.25rem;
 }
 
 .coin-alerts-dropdown-root {
@@ -190,36 +240,11 @@ h1 {
   margin: 0.35rem 0 0;
 }
 
-.settings-export-search-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 0.75rem 1rem;
-}
-
 .settings-export-toolbar {
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
-}
-
-.settings-search-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex: 1;
-  min-width: 12rem;
-}
-
-.settings-search-field input[type="search"] {
-  font: inherit;
-  padding: 0.35rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-input-bg);
-  color: var(--color-text);
-  min-width: 12rem;
 }
 
 .notify-tier-a-btn--on {

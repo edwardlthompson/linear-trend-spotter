@@ -159,10 +159,6 @@
   }
   applyDomTheme();
 
-  const params = new URLSearchParams(window.location.search);
-  const fromQuery = params.get("api");
-  const snapshotUrl = fromQuery || window.__SNAPSHOT_URL__ || "";
-
   const elError = document.getElementById("error");
   const elMeta = document.getElementById("meta");
   const elApiBudgetPanel = document.getElementById("apiBudgetPanel");
@@ -207,6 +203,8 @@
   let pollTimer = null;
   let notifyAlertsEnabled = false;
   let lastPayload = null;
+  /** Appended to meta line once after loading `../qualified_public_snapshot.json` when the relay returns 503. */
+  let snapshotMetaSuffix = "";
   /** @type {Set<string>} */
   let lastAddedSet = new Set();
   let sortKey = "health";
@@ -517,7 +515,23 @@
   updateSortHeaderClasses();
 
   function getSnapshotUrl() {
-    return snapshotUrl || "";
+    const params = new URLSearchParams(window.location.search);
+    const rawQ = params.get("api");
+    const fromQuery = typeof rawQ === "string" && rawQ.trim() !== "" ? rawQ.trim() : "";
+    const configured =
+      typeof window.__SNAPSHOT_URL__ === "string" && window.__SNAPSHOT_URL__.trim() !== ""
+        ? window.__SNAPSHOT_URL__.trim()
+        : "";
+    return fromQuery || configured || "";
+  }
+
+  /** Same-origin committed snapshot (one level up from `docs/dashboard/`). Used when the live relay has no file yet (503). */
+  function getCommittedSnapshotFallbackUrl() {
+    try {
+      return new URL("../qualified_public_snapshot.json", window.location.href).href;
+    } catch {
+      return "";
+    }
   }
 
   function pushApiBase() {
@@ -2009,7 +2023,9 @@
     }
     const nWatch = getPinnedSet().size;
     const watchHint = nWatch ? ` · ${nWatch} watched` : "";
-    elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${watchHint}${nextHint}${alertSuffix}`;
+    const snapExtra = snapshotMetaSuffix;
+    snapshotMetaSuffix = "";
+    elMeta.textContent = `Updated ${updatedHuman} (${updatedDisplay}) · field_set=${fieldSet} · ${coins.length} coin(s)${watchHint}${nextHint}${alertSuffix}${snapExtra}`;
 
     updateApiBudgetPanel(data);
 
@@ -2221,8 +2237,20 @@
       return;
     }
     try {
-      const res = await fetch(url.trim(), { credentials: "omit" });
-      const text = await res.text();
+      const primary = url.trim();
+      const fallback = getCommittedSnapshotFallbackUrl();
+      let res = await fetch(primary, { credentials: "omit" });
+      let text = await res.text();
+      let usedRelay503Fallback = false;
+      if (!res.ok && res.status === 503 && fallback && fallback !== primary) {
+        const resFb = await fetch(fallback, { credentials: "omit" });
+        const textFb = await resFb.text();
+        if (resFb.ok) {
+          res = resFb;
+          text = textFb;
+          usedRelay503Fallback = true;
+        }
+      }
       if (!res.ok) {
         if (showErrors) {
           let msg = `HTTP ${res.status} loading snapshot`;
@@ -2246,6 +2274,12 @@
       } catch (parseErr) {
         if (showErrors) showError("Invalid JSON in snapshot response");
         return;
+      }
+      if (usedRelay503Fallback) {
+        snapshotMetaSuffix =
+          " · Showing committed docs/qualified_public_snapshot.json (live relay has no file yet; HTTP 503).";
+      } else {
+        snapshotMetaSuffix = "";
       }
       render(data);
       if (forNotify && notifyAlertsEnabled) {
@@ -2628,7 +2662,7 @@
 
   syncSnapshotTelemetryPanel();
 
-  if (snapshotUrl) {
+  if (getSnapshotUrl().trim()) {
     loadSnapshot({ showErrors: true, forNotify: false });
   } else {
     showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in docs/dashboard/config.js.");
