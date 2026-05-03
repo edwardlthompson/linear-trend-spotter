@@ -204,12 +204,12 @@ h1 {
 .topbar-search--toolbar {
   flex: 1 1 0;
   min-width: 0;
-  max-width: none;
+  max-width: min(36rem, 100%);
 }
 
 .site-header-actions .topbar-search-input {
   min-width: 0;
-  max-width: none;
+  max-width: 100%;
 }
 
 .topbar-search-icon {
@@ -226,7 +226,7 @@ h1 {
   display: block;
   width: 100%;
   min-width: 10.5rem;
-  max-width: 16rem;
+  max-width: 100%;
   margin: 0;
   font: inherit;
   font-size: 0.9rem;
@@ -592,6 +592,10 @@ html[data-theme="dark"] tr.coin-row--watchlist-only td {
   padding: 0.55rem 0.65rem;
   margin-bottom: 0.75rem;
   max-width: 56rem;
+}
+
+.api-budget-panel--settings {
+  max-width: 100%;
 }
 
 .api-budget-heading {
@@ -1050,6 +1054,54 @@ table.qualified-grid td {
   vertical-align: middle;
 }
 
+table.qualified-grid tbody td {
+  white-space: nowrap;
+}
+
+.name-col {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.name-venue {
+  font-weight: 500;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.venue-cell {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.spark-cell {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex-wrap: nowrap;
+}
+
+.spark-cell-chart {
+  flex: 0 0 auto;
+}
+
+.spark-from-high {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+  min-width: 2.75rem;
+  text-align: right;
+}
+
+.spark-td {
+  min-width: 13.5rem;
+}
+
 table.qualified-grid thead th {
   position: sticky;
   top: 0;
@@ -1127,8 +1179,8 @@ a {
 }
 
 .exch-col {
-  vertical-align: top;
-  max-width: 13rem;
+  vertical-align: middle;
+  max-width: 10rem;
 }
 
 .exch-sheet {
@@ -1167,19 +1219,8 @@ a {
   opacity: 0.88;
 }
 
-.g30-cell,
-.g7-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.2rem;
-  min-width: 6.5rem;
-}
-
-.g30-pct,
-.g7-pct {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.9rem;
+.th-split--vol24h {
+  min-width: 7.5rem;
 }
 
 .spark-svg {

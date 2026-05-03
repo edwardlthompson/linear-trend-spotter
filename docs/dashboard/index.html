@@ -147,10 +147,10 @@
       <div class="table-scroll">
         <table class="qualified-grid">
           <caption class="visually-hidden">
-            Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons; 7d and 30d
-            columns show gain and hourly-close trend charts—7d uses up to a week of 1h bars, 30d up to a month (white lines = high and low in the window; orange = last close). Star a symbol on the
-            Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row. Use the
-            header row (search beside the bell) to filter and Settings to export.
+            Qualified or watchlist snapshot rows: one table row per coin per exchange venue when listings exist. Sort
+            column headers; 7d and 30d split into percent columns and sparkline columns (distance from window high as %
+            beside each chart). Star a symbol on Qualified to watch it. Use #symbol=BTC to highlight rows for that
+            symbol. Search and column filters refine the grid; Settings exports the current filtered view.
           </caption>
           <thead>
             <tr>
@@ -165,37 +165,59 @@
                   Symbol
                 </button>
               </th>
-              <th scope="col" id="col-name" title="Asset name and listing link when available">
+              <th scope="col" id="col-name" title="Asset name (venue in parentheses) and listing link when available">
                 <button
                   type="button"
                   class="sort-btn"
                   data-sort="name"
                   aria-label="Sort by name"
-                  title="Sort by coin name"
+                  title="Sort by coin name and venue label"
                 >
                   Name
                 </button>
               </th>
-              <th scope="col" id="col-g7" title="Seven-day gain and 1h-close sparkline (last week on file)">
+              <th scope="col" id="col-g7pct" title="Seven-day percent gain from snapshot">
                 <button
                   type="button"
                   class="sort-btn"
-                  data-sort="g7"
-                  aria-label="Sort by 7-day gain"
-                  title="Sort by 7-day % gain (sparkline: last up to 168 hourly closes from closes_1h; no synthetic curve)"
+                  data-sort="g7pct"
+                  aria-label="Sort by 7-day gain percent"
+                  title="Sort by 7-day % gain from snapshot"
                 >
-                  7d <span class="th-sub" aria-hidden="true">· trend</span>
+                  7d %
                 </button>
               </th>
-              <th scope="col" id="col-g30" title="Thirty-day gain and 1h-close sparkline (last month on file)">
+              <th scope="col" id="col-g7chart" title="Seven-day 1h-close sparkline; sort by distance of last close from window high (%)">
                 <button
                   type="button"
                   class="sort-btn"
-                  data-sort="g30"
-                  aria-label="Sort by 30-day gain"
-                  title="Sort by 30-day % gain (sparkline: last up to 720 hourly closes from closes_1h; no synthetic curve)"
+                  data-sort="g7hi"
+                  aria-label="Sort by 7-day chart distance from high"
+                  title="Sort by % distance of last close below the window high (up to 168 hourly closes from closes_1h)"
                 >
-                  30d <span class="th-sub" aria-hidden="true">· trend</span>
+                  7d <span class="th-sub" aria-hidden="true">chart</span>
+                </button>
+              </th>
+              <th scope="col" id="col-g30pct" title="Thirty-day percent gain from snapshot">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="g30pct"
+                  aria-label="Sort by 30-day gain percent"
+                  title="Sort by 30-day % gain from snapshot"
+                >
+                  30d %
+                </button>
+              </th>
+              <th scope="col" id="col-g30chart" title="Thirty-day 1h-close sparkline; sort by distance from window high (%)">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="g30hi"
+                  aria-label="Sort by 30-day chart distance from high"
+                  title="Sort by % distance of last close below the window high (up to 720 hourly closes from closes_1h)"
+                >
+                  30d <span class="th-sub" aria-hidden="true">chart</span>
                 </button>
               </th>
               <th scope="col" id="col-uniformity" title="OHLCV uniformity score and optional minimum filter">
@@ -240,6 +262,7 @@
                   >
                     <option value="">All</option>
                     <option value="60">≥ 60</option>
+                    <option value="65">≥ 65</option>
                     <option value="70">≥ 70</option>
                   </select>
                 </div>
@@ -268,15 +291,15 @@
                   </select>
                 </div>
               </th>
-              <th scope="col" id="col-exch" title="Per-exchange 24h volume and venue filter">
+              <th scope="col" id="col-venue" title="Venue for this row; filter which exchange rows are shown">
                 <div class="th-split th-split--exch">
-                  <span class="exch-col-heading" title="Volume breakdown by exchange">Volume / exchanges</span>
+                  <span class="exch-col-heading" title="Listing venue for this row">Exchange</span>
                   <div class="exchange-filter-wrap exchange-filter-wrap--th">
                     <span id="exchangeFilterLabel" class="exchange-filter-label visually-hidden">Exchanges</span>
                     <details id="exchangeFilterDetails" class="exchange-filter-details">
                       <summary
                         class="exchange-filter-summary"
-                        title="Open venue checklist. No boxes checked = all venues. One or more checked = coin must list on at least one of them."
+                        title="Open venue checklist. No boxes checked = all venues. One or more checked = show only rows for those venues."
                       >
                         <span id="exchangeFilterSummary">All</span>
                       </summary>
@@ -311,6 +334,31 @@
                       </div>
                     </details>
                   </div>
+                </div>
+              </th>
+              <th scope="col" id="col-vol24h" title="Approximate 24h USD volume on this row’s venue">
+                <div class="th-split th-split--vol24h">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    data-sort="vol24h"
+                    aria-label="Sort by 24h volume"
+                    title="Sort by 24h volume on this row’s exchange"
+                  >
+                    24h vol
+                  </button>
+                  <select
+                    id="volumeMinSelect"
+                    class="th-filter-select"
+                    title="Minimum 24h volume on this row’s venue"
+                    aria-label="Filter by minimum 24h volume"
+                  >
+                    <option value="">All</option>
+                    <option value="100000">≥ $100k</option>
+                    <option value="500000">≥ $500k</option>
+                    <option value="1000000">≥ $1M</option>
+                    <option value="10000000">≥ $10M</option>
+                  </select>
                 </div>
               </th>
               <th scope="col" id="col-backtest" title="Chart link and optimizer results when snapshot includes backtest">
@@ -365,6 +413,20 @@
 
     <div id="settingsPanel" role="tabpanel" aria-labelledby="tabSettings" class="settings-panel" hidden>
       <h2 class="settings-panel-title">Settings</h2>
+      <section class="settings-section" aria-labelledby="settingsApiBudgetHeading">
+        <h3 id="settingsApiBudgetHeading" class="settings-section-title">API usage &amp; budget</h3>
+        <p class="settings-section-hint">
+          Per-vendor HTTP counts and projected monthly caps when the snapshot includes <code>api_cost_panel</code>
+          (scanner <code>SCAN_COSTS_ENABLED</code>). The same panel appears on the Logs tab.
+        </p>
+        <div
+          id="apiBudgetPanelSettings"
+          class="api-budget-panel api-budget-panel--settings"
+          role="region"
+          aria-label="API usage and monthly budget estimate"
+          hidden
+        ></div>
+      </section>
       <section class="settings-section" aria-labelledby="settingsAlertsHeading">
         <h3 id="settingsAlertsHeading" class="settings-section-title">Tier-A update alerts</h3>
         <p class="settings-section-hint">
@@ -423,7 +485,10 @@
       </section>
       <section class="settings-section" aria-labelledby="settingsExportHeading">
         <h3 id="settingsExportHeading" class="settings-section-title">Export</h3>
-        <p class="settings-section-hint">Export uses the current tab and filters. Use the search field in the header (beside the bell) to filter the Qualified and Watchlist tables.</p>
+        <p class="settings-section-hint">
+          Export uses the current tab and filters (including per-venue rows). CSV/JSON include <code>row_exchange</code> and
+          <code>row_vol_24h_usd</code> (or <code>dashboard_*</code> fields in JSON) plus chart distance-from-high columns. Use the header search to filter symbols, names, or venue labels.
+        </p>
         <p class="settings-actions">
           <span class="export-toolbar settings-export-toolbar" title="Download the current tab’s filtered rows">
             <label class="visually-hidden" for="exportFormatSelect">Export format</label>

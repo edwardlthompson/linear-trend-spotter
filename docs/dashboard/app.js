@@ -22,7 +22,10 @@
   const LS_PREV_SCHEMA = "qualified_dash_prev_schema_version";
   const LS_THEME = "qualified_dash_theme";
   /** Tier-A poll: previous filtered symbol list under current UI filters (JSON array string). */
-  const LS_POLL_FILTERED_SYMS = "qualified_dash_poll_filtered_syms";
+  /** Tier-A: JSON array of `SYMBOL|exchangeId` row keys for filtered table diff (v2). */
+  const LS_POLL_FILTERED_ROWS = "qualified_dash_poll_filtered_rows_v2";
+  /** @deprecated cleared on upgrade; replaced by LS_POLL_FILTERED_ROWS */
+  const LS_POLL_FILTERED_SYMS_LEGACY = "qualified_dash_poll_filtered_syms";
   /** Tier-A poll: last snapshot body digest after a poll (avoids duplicate “refresh” vs filtered-change notify). */
   const LS_LAST_POLL_SNAPSHOT_DIGEST = "qualified_dash_last_poll_snapshot_digest";
   /** Rolling ops log (24h retention); survives refresh in this browser (localStorage). */
@@ -34,6 +37,8 @@
   const LS_UI_UNIFORMITY_MIN = "qualified_dash_ui_uniformity_min";
   /** ``, `pos`, `25`, or `50` — volume acceleration filter. */
   const LS_UI_VOL_ACCEL = "qualified_dash_ui_vol_accel";
+  /** Minimum 24h volume (USD) on the row’s venue; empty = no floor. */
+  const LS_UI_VOL_MIN_USD = "qualified_dash_ui_vol_min_usd";
   const LS_UI_SEARCH = "qualified_dash_ui_search";
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
@@ -59,7 +64,25 @@
   const MIN_VALID_SNAPSHOT_MS = Date.UTC(2000, 0, 1, 0, 0, 0, 0);
 
   const ALLOWED_POLL_MS = new Set(POLL_INTERVAL_OPTIONS.map((o) => o.ms));
-  const ALLOWED_SORT_KEYS = new Set(["symbol", "name", "g7", "g30", "uniformity", "health", "volaccel"]);
+  const ALLOWED_SORT_KEYS = new Set([
+    "symbol",
+    "name",
+    "g7pct",
+    "g7hi",
+    "g30pct",
+    "g30hi",
+    "uniformity",
+    "health",
+    "volaccel",
+    "venue",
+    "vol24h",
+  ]);
+  const VOL_MIN_FILTER_OPTIONS = [
+    { v: 100000, label: "$100k" },
+    { v: 500000, label: "$500k" },
+    { v: 1000000, label: "$1M" },
+    { v: 10000000, label: "$10M" },
+  ];
   /** Scanner default target exchanges — must match `listed_on` ids in snapshot JSON. */
   const TARGET_EXCHANGES_LIST = ["coinbase", "kraken", "mexc"];
   const EXCHANGE_LABELS = { coinbase: "Coinbase", kraken: "Kraken", mexc: "MEXC" };
@@ -164,6 +187,7 @@
   const elError = document.getElementById("error");
   const elMeta = document.getElementById("meta");
   const elApiBudgetPanel = document.getElementById("apiBudgetPanel");
+  const elApiBudgetPanelSettings = document.getElementById("apiBudgetPanelSettings");
   const elExchangeFilterDetails = document.getElementById("exchangeFilterDetails");
   const elExchangeFilterApply = document.getElementById("exchangeFilterApply");
   const elExchangeFilterSelectAll = document.getElementById("exchangeFilterSelectAll");
@@ -176,6 +200,7 @@
   const elHealthMinSelect = document.getElementById("healthMinSelect");
   const elUniformityMinSelect = document.getElementById("uniformityMinSelect");
   const elVolAccelFilterSelect = document.getElementById("volAccelFilterSelect");
+  const elVolumeMinSelect = document.getElementById("volumeMinSelect");
   const elWatchlistBadge = document.getElementById("watchlistBadge");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
@@ -217,6 +242,8 @@
   let filterUniformityMin = null;
   /** @type {"" | "pos" | "25" | "50"} */
   let filterVolAccel = "";
+  /** @type {number | null} minimum 24h volume USD on the row’s venue */
+  let filterVolMinUsd = null;
   let searchQuery = "";
   let searchDebounceTimer = null;
   /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
@@ -275,7 +302,8 @@
   function resetTierAPollBaselineIfAlerts() {
     if (!notifyAlertsEnabled) return;
     try {
-      localStorage.removeItem(LS_POLL_FILTERED_SYMS);
+      localStorage.removeItem(LS_POLL_FILTERED_ROWS);
+      localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
     } catch (e) {
       console.warn("reset poll baseline", e);
     }
@@ -291,6 +319,8 @@
       else localStorage.setItem(LS_UI_UNIFORMITY_MIN, String(filterUniformityMin));
       if (!filterVolAccel) localStorage.removeItem(LS_UI_VOL_ACCEL);
       else localStorage.setItem(LS_UI_VOL_ACCEL, filterVolAccel);
+      if (filterVolMinUsd == null) localStorage.removeItem(LS_UI_VOL_MIN_USD);
+      else localStorage.setItem(LS_UI_VOL_MIN_USD, String(filterVolMinUsd));
       localStorage.setItem(LS_UI_SEARCH, searchQuery);
       if (filterExchangeSet.size === 0) {
         localStorage.removeItem(LS_UI_EXCHANGES_JSON);
@@ -308,7 +338,9 @@
   function restoreUiPreferences() {
     try {
       const sk = localStorage.getItem(LS_UI_SORT_KEY);
-      if (sk && ALLOWED_SORT_KEYS.has(sk)) sortKey = sk;
+      if (sk === "g7") sortKey = "g7pct";
+      else if (sk === "g30") sortKey = "g30pct";
+      else if (sk && ALLOWED_SORT_KEYS.has(sk)) sortKey = sk;
       const sd = localStorage.getItem(LS_UI_SORT_DIR);
       if (sd === "1" || sd === "-1") sortDir = Number(sd);
       const hm = localStorage.getItem(LS_UI_HEALTH_MIN);
@@ -316,7 +348,7 @@
       else {
         const n = Number(hm);
         if (Number.isNaN(n)) filterHealthMin = null;
-        else if (n === 60 || n === 70) filterHealthMin = n;
+        else if (n === 60 || n === 65 || n === 70) filterHealthMin = n;
         else filterHealthMin = null;
       }
       const um = localStorage.getItem(LS_UI_UNIFORMITY_MIN);
@@ -330,6 +362,12 @@
       const vac = localStorage.getItem(LS_UI_VOL_ACCEL);
       if (vac === "pos" || vac === "25" || vac === "50") filterVolAccel = vac;
       else filterVolAccel = "";
+      const vmin = localStorage.getItem(LS_UI_VOL_MIN_USD);
+      filterVolMinUsd = null;
+      if (vmin != null && vmin !== "") {
+        const vn = Number(vmin);
+        if (Number.isFinite(vn) && VOL_MIN_FILTER_OPTIONS.some((o) => o.v === vn)) filterVolMinUsd = vn;
+      }
       const sq = localStorage.getItem(LS_UI_SEARCH);
       if (sq != null) searchQuery = sq;
       filterExchangeSet = new Set();
@@ -365,7 +403,14 @@
   function syncHealthMinSelect() {
     if (!elHealthMinSelect) return;
     const v = filterHealthMin == null ? "" : String(filterHealthMin);
-    elHealthMinSelect.value = v === "60" || v === "70" ? v : "";
+    elHealthMinSelect.value = v === "60" || v === "65" || v === "70" ? v : "";
+  }
+
+  function syncVolumeMinSelect() {
+    if (!elVolumeMinSelect) return;
+    const v = filterVolMinUsd == null ? "" : String(filterVolMinUsd);
+    const ok = VOL_MIN_FILTER_OPTIONS.some((o) => String(o.v) === v);
+    elVolumeMinSelect.value = ok ? v : "";
   }
 
   function syncUniformityMinSelect() {
@@ -496,6 +541,7 @@
   syncHealthMinSelect();
   syncUniformityMinSelect();
   syncVolAccelFilterSelect();
+  syncVolumeMinSelect();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
   try {
@@ -741,9 +787,11 @@
       elWatchLeaveBanner.hidden = true;
       if (elWatchLeaveBannerText) elWatchLeaveBannerText.textContent = "";
     }
-    if (elApiBudgetPanel) {
-      elApiBudgetPanel.hidden = true;
-      elApiBudgetPanel.innerHTML = "";
+    for (const el of [elApiBudgetPanel, elApiBudgetPanelSettings]) {
+      if (el) {
+        el.hidden = true;
+        el.innerHTML = "";
+      }
     }
     syncSnapshotTelemetryPanel();
     syncCoinBellBadge();
@@ -973,77 +1021,196 @@
     return String(val);
   }
 
-  function exchangeVolumeCellHtml(c) {
-    const listed = Array.isArray(c.listed_on) ? c.listed_on : [];
-    const ev = c.exchange_volumes && typeof c.exchange_volumes === "object" ? c.exchange_volumes : {};
-    const keys = listed.length ? listed : Object.keys(ev);
-    if (!keys.length) {
-      return '<span class="cell-muted">—</span>';
-    }
-    const slice = keys.slice(0, 8);
-    const rows = slice
-      .map((ex) => {
-        const raw = ev[ex];
-        return `<tr><td>${escapeHtml(String(ex))}</td><td class="num">${escapeHtml(formatUsdVolDisplay(raw))}</td></tr>`;
-      })
-      .join("");
-    const more =
-      keys.length > 8
-        ? `<tr><td colspan="2" class="cell-muted">+${keys.length - 8} more</td></tr>`
-        : "";
-    return `<table class="exch-sheet"><thead><tr><th scope="col" title="Exchange venue">Exch</th><th scope="col" title="Approximate 24h volume on that venue from snapshot">Vol</th></tr></thead><tbody>${rows}${more}</tbody></table>`;
+  function parseVolUsd(raw) {
+    if (raw == null || raw === "" || raw === "N/A") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
   }
 
-  function sortCoinsInPlace(rows) {
-    const dir = sortDir;
-    const mult = dir;
-    rows.sort((a, b) => {
-      let va;
-      let vb;
-      switch (sortKey) {
-        case "symbol":
-          va = String(a.symbol || "").toUpperCase();
-          vb = String(b.symbol || "").toUpperCase();
-          return mult * va.localeCompare(vb);
-        case "name":
-          va = String(a.name || "").toLowerCase();
-          vb = String(b.name || "").toLowerCase();
-          return mult * va.localeCompare(vb);
-        case "g30": {
-          const na = coinG30(a);
-          const nb = coinG30(b);
-          const fa = na != null ? na : -1e9;
-          const fb = nb != null ? nb : -1e9;
-          return mult * (fa - fb);
+  /**
+   * @param {object[]} coins
+   * @returns {{ coin: object, exchangeId: string | null, volUsd: number | null }[]}
+   */
+  function explodeCoinRowsForTable(coins) {
+    const out = [];
+    for (const c of coins) {
+      if (!c) continue;
+      if (c._watchlist_only) {
+        out.push({ coin: c, exchangeId: null, volUsd: null });
+        continue;
+      }
+      const ev = c.exchange_volumes && typeof c.exchange_volumes === "object" ? c.exchange_volumes : {};
+      const listedRaw = Array.isArray(c.listed_on) ? c.listed_on : [];
+      const listed = listedRaw.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean);
+      const fromVol = Object.keys(ev)
+        .map((k) => String(k || "").trim().toLowerCase())
+        .filter(Boolean);
+      const keysSource = listed.length ? listed : fromVol;
+      const uniq = [...new Set(keysSource.filter((k) => TARGET_EXCHANGE_IDS.has(k)))].sort();
+      if (!uniq.length) {
+        out.push({ coin: c, exchangeId: null, volUsd: null });
+      } else {
+        for (const ex of uniq) {
+          out.push({ coin: c, exchangeId: ex, volUsd: parseVolUsd(ev[ex]) });
         }
-        case "g7": {
-          const na = coinG7(a);
-          const nb = coinG7(b);
-          const fa = na != null ? na : -1e9;
-          const fb = nb != null ? nb : -1e9;
-          return mult * (fa - fb);
+      }
+    }
+    return out;
+  }
+
+  function rowSearchHaystack(r) {
+    const c = r.coin;
+    const sym = String(c.symbol || "").toLowerCase();
+    const nm = String(c.name || "").toLowerCase();
+    const exLabel = r.exchangeId ? String(EXCHANGE_LABELS[r.exchangeId] || r.exchangeId).toLowerCase() : "";
+    return `${sym} ${nm} ${exLabel}`;
+  }
+
+  function applyFiltersToViewRows(viewRows) {
+    let rows = viewRows.slice();
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((r) => rowSearchHaystack(r).includes(q));
+    }
+    if (filterHealthMin != null) {
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
+        const h = coinHealth(r.coin);
+        return h != null && h >= filterHealthMin;
+      });
+    }
+    if (filterUniformityMin != null) {
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
+        const u = coinUniformity(r.coin);
+        return u != null && u >= filterUniformityMin;
+      });
+    }
+    if (filterVolAccel) {
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
+        const v = coinVolAccelPct(r.coin);
+        if (v == null) return false;
+        if (filterVolAccel === "pos") return v > 0;
+        const n = Number(filterVolAccel);
+        return Number.isFinite(n) && v >= n;
+      });
+    }
+    if (filterVolMinUsd != null) {
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
+        return r.volUsd != null && Number.isFinite(r.volUsd) && r.volUsd >= filterVolMinUsd;
+      });
+    }
+    if (filterExchangeSet.size > 0) {
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
+        if (!r.exchangeId) return false;
+        return filterExchangeSet.has(r.exchangeId);
+      });
+    }
+    return rows;
+  }
+
+  function closesPctFromHigh(closes) {
+    if (!closes || closes.length < 2) return null;
+    const max = Math.max(...closes);
+    const last = closes[closes.length - 1];
+    if (!(max > 0)) return null;
+    return ((max - last) / max) * 100;
+  }
+
+  function rowG7Hi(r) {
+    return closesPctFromHigh(effectiveSparklineCloses7d(r.coin));
+  }
+
+  function rowG30Hi(r) {
+    return closesPctFromHigh(effectiveSparklineCloses(r.coin));
+  }
+
+  function cmpTieBreakRows(a, b) {
+    const sa = String(a.coin.symbol || "").toUpperCase();
+    const sb = String(b.coin.symbol || "").toUpperCase();
+    const c1 = sa.localeCompare(sb);
+    if (c1 !== 0) return c1;
+    return String(a.exchangeId || "").localeCompare(String(b.exchangeId || ""));
+  }
+
+  function sortViewRowsInPlace(rows) {
+    const mult = sortDir;
+    rows.sort((a, b) => {
+      const ca = a.coin;
+      const cb = b.coin;
+      let cmp = 0;
+      switch (sortKey) {
+        case "symbol": {
+          cmp = String(ca.symbol || "")
+            .toUpperCase()
+            .localeCompare(String(cb.symbol || "").toUpperCase());
+          break;
+        }
+        case "name": {
+          const va = `${String(ca.name || "").toLowerCase()}|${String(a.exchangeId || "")}`;
+          const vb = `${String(cb.name || "").toLowerCase()}|${String(b.exchangeId || "")}`;
+          cmp = va.localeCompare(vb);
+          break;
+        }
+        case "g7pct": {
+          const na = coinG7(ca);
+          const nb = coinG7(cb);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
+        }
+        case "g30pct": {
+          const na = coinG30(ca);
+          const nb = coinG30(cb);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
+        }
+        case "g7hi": {
+          const fa = rowG7Hi(a);
+          const fb = rowG7Hi(b);
+          cmp = (fa != null ? fa : -1e9) - (fb != null ? fb : -1e9);
+          break;
+        }
+        case "g30hi": {
+          const fa = rowG30Hi(a);
+          const fb = rowG30Hi(b);
+          cmp = (fa != null ? fa : -1e9) - (fb != null ? fb : -1e9);
+          break;
         }
         case "volaccel": {
-          const na = coinVolAccelPct(a);
-          const nb = coinVolAccelPct(b);
-          const fa = na != null ? na : -1e9;
-          const fb = nb != null ? nb : -1e9;
-          return mult * (fa - fb);
+          const na = coinVolAccelPct(ca);
+          const nb = coinVolAccelPct(cb);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
         }
         case "uniformity": {
-          const ua = typeof a.uniformity_score === "number" ? a.uniformity_score : -1e9;
-          const ub = typeof b.uniformity_score === "number" ? b.uniformity_score : -1e9;
-          return mult * (ua - ub);
+          cmp =
+            (typeof ca.uniformity_score === "number" ? ca.uniformity_score : -1e9) -
+            (typeof cb.uniformity_score === "number" ? cb.uniformity_score : -1e9);
+          break;
+        }
+        case "venue": {
+          cmp = String(a.exchangeId || "").localeCompare(String(b.exchangeId || ""));
+          break;
+        }
+        case "vol24h": {
+          cmp =
+            (a.volUsd != null && Number.isFinite(a.volUsd) ? a.volUsd : -1) -
+            (b.volUsd != null && Number.isFinite(b.volUsd) ? b.volUsd : -1);
+          break;
         }
         case "health":
         default: {
-          const ha = coinHealth(a);
-          const hb = coinHealth(b);
-          const fa = ha != null ? ha : -1e9;
-          const fb = hb != null ? hb : -1e9;
-          return mult * (fa - fb);
+          const ha = coinHealth(ca);
+          const hb = coinHealth(cb);
+          cmp = (ha != null ? ha : -1e9) - (hb != null ? hb : -1e9);
+          break;
         }
       }
+      if (cmp !== 0) return mult * cmp;
+      return cmpTieBreakRows(a, b);
     });
   }
 
@@ -1056,57 +1223,6 @@
         th.setAttribute("aria-sort", sortDir > 0 ? "ascending" : "descending");
       }
     });
-  }
-
-  function applyFilters(coins) {
-    let rows = coins.slice();
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter((c) => {
-        const sym = String(c.symbol || "").toLowerCase();
-        const nm = String(c.name || "").toLowerCase();
-        return sym.includes(q) || nm.includes(q);
-      });
-    }
-    if (filterHealthMin != null) {
-      rows = rows.filter((c) => {
-        if (c._watchlist_only) return true;
-        const h = coinHealth(c);
-        return h != null && h >= filterHealthMin;
-      });
-    }
-    if (filterUniformityMin != null) {
-      rows = rows.filter((c) => {
-        if (c._watchlist_only) return true;
-        const u = coinUniformity(c);
-        return u != null && u >= filterUniformityMin;
-      });
-    }
-    if (filterVolAccel) {
-      rows = rows.filter((c) => {
-        if (c._watchlist_only) return true;
-        const v = coinVolAccelPct(c);
-        if (v == null) return false;
-        if (filterVolAccel === "pos") return v > 0;
-        const n = Number(filterVolAccel);
-        return Number.isFinite(n) && v >= n;
-      });
-    }
-    if (filterExchangeSet.size > 0) {
-      rows = rows.filter((c) => {
-        if (c._watchlist_only) return true;
-        const lo = c.listed_on;
-        if (!Array.isArray(lo)) return false;
-        const listed = new Set(
-          lo.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
-        );
-        for (const id of filterExchangeSet) {
-          if (listed.has(id)) return true;
-        }
-        return false;
-      });
-    }
-    return rows;
   }
 
   function getWatchlistCoinRows() {
@@ -1130,7 +1246,7 @@
     });
   }
 
-  function getFilteredSortedCoins() {
+  function getFilteredSortedViewRows() {
     if (!lastPayload) return [];
     const base =
       activeView === "watchlist"
@@ -1138,9 +1254,10 @@
         : Array.isArray(lastPayload.coins)
           ? lastPayload.coins
           : [];
-    const filtered = applyFilters(base);
+    const exploded = explodeCoinRowsForTable(base);
+    const filtered = applyFiltersToViewRows(exploded);
     const copy = filtered.slice();
-    sortCoinsInPlace(copy);
+    sortViewRowsInPlace(copy);
     return copy;
   }
 
@@ -1164,15 +1281,17 @@
     if (!elTbody) return;
     const want = getSymbolFromUrl();
     if (!want) return;
-    let row = null;
+    const matches = [];
     elTbody.querySelectorAll("tr.coin-row").forEach((r) => {
-      if ((r.getAttribute("data-symbol") || "").toUpperCase() === want) row = r;
+      if ((r.getAttribute("data-symbol") || "").toUpperCase() === want) {
+        r.classList.add("row-highlight");
+        matches.push(r);
+      }
     });
-    if (!row) return;
-    row.classList.add("row-highlight");
-    row.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    if (!matches.length) return;
+    matches[0].scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
     hashHighlightTimer = window.setTimeout(() => {
-      row.classList.remove("row-highlight");
+      matches.forEach((r) => r.classList.remove("row-highlight"));
     }, 4000);
   }
 
@@ -1265,15 +1384,21 @@
   }
 
   function updateApiBudgetPanel(data) {
-    if (!elApiBudgetPanel) return;
+    const budgetTargets = [elApiBudgetPanel, elApiBudgetPanelSettings].filter(Boolean);
+    if (!budgetTargets.length) return;
+    const setBudgetPanels = (hidden, html) => {
+      for (const el of budgetTargets) {
+        el.hidden = hidden;
+        el.innerHTML = html;
+      }
+    };
     const panel = data.api_cost_panel;
     const intervalSec =
       typeof data.scan_interval_seconds === "number" && Number.isFinite(data.scan_interval_seconds)
         ? Math.max(60, data.scan_interval_seconds)
         : NOMINAL_SCAN_FALLBACK_SEC;
     if (!panel || !Array.isArray(panel.sources)) {
-      elApiBudgetPanel.hidden = true;
-      elApiBudgetPanel.innerHTML = "";
+      setBudgetPanels(true, "");
       return;
     }
     const secMonth = 30 * 86400;
@@ -1317,16 +1442,15 @@
       items.push(li);
     }
     if (!items.length) {
-      elApiBudgetPanel.hidden = true;
-      elApiBudgetPanel.innerHTML = "";
+      setBudgetPanels(true, "");
       return;
     }
     const note =
       panel.note != null && String(panel.note).trim()
         ? `<p class="api-budget-note">${escapeHtml(String(panel.note))}</p>`
         : "";
-    elApiBudgetPanel.hidden = false;
-    elApiBudgetPanel.innerHTML = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
+    const inner = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
+    setBudgetPanels(false, inner);
   }
 
   function updateHealthStrip(data) {
@@ -1585,8 +1709,14 @@
     if (elRegimeStrip && !elRegimeStrip.hidden) bits.push((elRegimeStrip.textContent || "").trim());
     if (elStaleBanner && !elStaleBanner.hidden) bits.push((elStaleBanner.textContent || "").trim());
     if (elEmptyBanner && !elEmptyBanner.hidden) bits.push((elEmptyBanner.textContent || "").trim());
-    if (elApiBudgetPanel && !elApiBudgetPanel.hidden) {
-      const t = (elApiBudgetPanel.textContent || "").trim().slice(0, 1200);
+    const apiBudgetEl =
+      elApiBudgetPanel && !elApiBudgetPanel.hidden
+        ? elApiBudgetPanel
+        : elApiBudgetPanelSettings && !elApiBudgetPanelSettings.hidden
+          ? elApiBudgetPanelSettings
+          : null;
+    if (apiBudgetEl) {
+      const t = (apiBudgetEl.textContent || "").trim().slice(0, 1200);
       if (t) bits.push(`API / budget: ${t}`);
     }
     return bits.join("\n\n");
@@ -1686,8 +1816,10 @@
     return nums.length > SPARKLINE_1H_BARS_30D ? nums.slice(-SPARKLINE_1H_BARS_30D) : nums.slice();
   }
 
-  function sparklineSvg(closes, w, h) {
-    if (!closes || closes.length < 2) return '<span class="cell-muted">—</span>';
+  /** @returns {{ svgHtml: string, pctFromHigh: number | null } | null} */
+  function sparklineMarkup(closes, w, h) {
+    if (!closes || closes.length < 2) return null;
+    const pctFromHigh = closesPctFromHigh(closes);
     const min = Math.min(...closes);
     const max = Math.max(...closes);
     const pad = 2;
@@ -1716,7 +1848,19 @@
       const y = normY(v);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     });
-    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${hiloLow}${hiloHigh}<polyline class="spark-line-main" fill="none" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" />${refLine}</svg><span class="visually-hidden">Price trend; white lines are window low and high; orange is last close</span>`;
+    const svgHtml = `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${hiloLow}${hiloHigh}<polyline class="spark-line-main" fill="none" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" />${refLine}</svg><span class="visually-hidden">Price trend; white lines are window low and high; orange is last close</span>`;
+    return { svgHtml, pctFromHigh };
+  }
+
+  function sparklineChartCellHtml(closes, w, h) {
+    const m = sparklineMarkup(closes, w, h);
+    if (!m) return '<span class="cell-muted">—</span>';
+    const pctStr =
+      m.pctFromHigh != null && Number.isFinite(m.pctFromHigh) ? `${m.pctFromHigh.toFixed(1)}%` : "—";
+    const t = escapeAttr(
+      "% distance of last close below the window high (closes_1h). Lower = closer to the high.",
+    );
+    return `<div class="spark-cell" title="${t}"><div class="spark-cell-chart">${m.svgHtml}</div><span class="spark-from-high" title="${t}">${pctStr}</span></div>`;
   }
 
   function fmtSheetCell(v) {
@@ -1813,10 +1957,10 @@
     return `<div class="bt-cell">${parts.join("")}</div>`;
   }
 
-  const COL_COUNT = 9;
+  const COL_COUNT = 12;
 
-  function renderRowsHtml(coins, pinnedSet, pinEnterSet) {
-    if (!coins.length) {
+  function renderRowsHtml(viewRows, pinnedSet, pinEnterSet) {
+    if (!viewRows.length) {
       let msg;
       if (activeView === "watchlist") {
         msg =
@@ -1828,8 +1972,9 @@
       }
       return `<tr><td colspan="${COL_COUNT}" class="empty">${escapeHtml(msg)}</td></tr>`;
     }
-    return coins
-      .map((c) => {
+    return viewRows
+      .map((r) => {
+        const c = r.coin;
         const rawSym = String(c.symbol || "").toUpperCase();
         const watchOnly = c._watchlist_only === true;
         if (watchOnly) {
@@ -1840,12 +1985,15 @@
           return `<tr class="coin-row coin-row--watchlist-only" data-symbol="${escapeAttr(rawSym)}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong></span></td>
           <td headers="col-name"><span class="cell-muted" title="Symbol not in the current qualified snapshot">Not in snapshot</span></td>
-          <td headers="col-g7" class="num">${dash}</td>
-          <td headers="col-g30" class="num">${dash}</td>
+          <td headers="col-g7pct" class="num">${dash}</td>
+          <td headers="col-g7chart" class="num">${dash}</td>
+          <td headers="col-g30pct" class="num">${dash}</td>
+          <td headers="col-g30chart" class="num">${dash}</td>
           <td headers="col-uniformity" class="num">${dash}</td>
           <td headers="col-health" class="num">${dash}</td>
           <td headers="col-volaccel" class="num">${dash}</td>
-          <td headers="col-exch" class="exch-col">${dash}</td>
+          <td headers="col-venue" class="exch-col">${dash}</td>
+          <td headers="col-vol24h" class="num">${dash}</td>
           <td headers="col-backtest">${dash}</td>
         </tr>`;
         }
@@ -1869,15 +2017,13 @@
           : nHour < SPARKLINE_1H_BARS_7D
             ? `7-day % from snapshot; sparkline plots ${rawSpark7.length} hourly closes on file (full week = ${SPARKLINE_1H_BARS_7D} bars); orange line = last close in window`
             : `7-day % from snapshot; sparkline plots last ${SPARKLINE_1H_BARS_7D} hourly closes (1h bars); orange line = last close in window`;
-        const spark7 = sparklineSvg(rawSpark7, 168, 44);
-        const g7Cell = `<div class="g7-cell" title="${escapeAttr(g7Title)}"><span class="g7-pct"><span class="visually-hidden">7-day gain </span>${g7}%</span>${spark7}</div>`;
         const g30Title = !hSeries
           ? "30-day % from snapshot; no hourly closes_1h series in this snapshot for a chart"
           : nHour < SPARKLINE_1H_BARS_30D
             ? `30-day % from snapshot; sparkline plots ${rawSpark30.length} hourly closes on file (full month = ${SPARKLINE_1H_BARS_30D} bars); orange line = last close in window`
             : `30-day % from snapshot; sparkline plots last ${SPARKLINE_1H_BARS_30D} hourly closes (1h bars); orange line = last close in window`;
-        const spark = sparklineSvg(rawSpark30, 168, 44);
-        const g30Cell = `<div class="g30-cell" title="${escapeAttr(g30Title)}"><span class="g30-pct"><span class="visually-hidden">30-day gain </span>${g30pct}%</span>${spark}</div>`;
+        const spark7Cell = sparklineChartCellHtml(rawSpark7, 168, 44);
+        const spark30Cell = sparklineChartCellHtml(rawSpark30, 168, 44);
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
         const h =
           c.health_score != null && c.health_score !== ""
@@ -1890,26 +2036,40 @@
             ? `${vac >= 0 ? "+" : ""}${vac.toFixed(0)}%${typeof vwd === "number" ? ` / ${vwd}d` : ""}`
             : "—";
         const listing = coinListingUrl(c);
-        const nameCell = listing
+        const exchTitle = r.exchangeId ? EXCHANGE_LABELS[r.exchangeId] || r.exchangeId : "";
+        const venueParen =
+          r.exchangeId && exchTitle
+            ? ` <span class="name-venue" title="Venue for this row">(${escapeHtml(exchTitle)})</span>`
+            : "";
+        const nameCore = listing
           ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}" title="Open listing or reference page in a new tab">${name}</a>`
           : `<span title="Name from snapshot (no listing URL)">${name}</span>`;
+        const nameCell = `<span class="name-col-wrap">${nameCore}${venueParen}</span>`;
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
         const pinLabel = isPinned ? `Remove ${rawSym} from watchlist` : `Add ${rawSym} to watchlist`;
         const pinChar = isPinned ? "\u2605" : "\u2606";
         const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">${pinChar}</button>`;
-        const exchHtml = exchangeVolumeCellHtml(c);
+        const venueCell =
+          r.exchangeId && exchTitle
+            ? `<span class="venue-cell" title="${escapeAttr(`24h volume row for ${exchTitle}`)}">${escapeHtml(exchTitle)}</span>`
+            : '<span class="cell-muted">—</span>';
+        const volCell = `<span title="Approximate 24h USD volume on this venue from snapshot">${escapeHtml(formatUsdVolDisplay(r.volUsd))}</span>`;
         const btHtml = backtestCellHtml(c);
-        return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}">
+        const exAttr = r.exchangeId ? escapeAttr(r.exchangeId) : "";
+        return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}" data-exchange="${exAttr}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong>${badge}</span></td>
-          <td headers="col-name">${nameCell}</td>
-          <td headers="col-g7" class="num">${g7Cell}</td>
-          <td headers="col-g30" class="num">${g30Cell}</td>
+          <td headers="col-name" class="name-col">${nameCell}</td>
+          <td headers="col-g7pct" class="num"><span class="visually-hidden">7-day gain </span><span title="${escapeAttr(g7Title)}">${g7}%</span></td>
+          <td headers="col-g7chart" class="num spark-td" title="${escapeAttr(g7Title)}">${spark7Cell}</td>
+          <td headers="col-g30pct" class="num"><span class="visually-hidden">30-day gain </span><span title="${escapeAttr(g30Title)}">${g30pct}%</span></td>
+          <td headers="col-g30chart" class="num spark-td" title="${escapeAttr(g30Title)}">${spark30Cell}</td>
           <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${u}</span></td>
           <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${h}</span></td>
           <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span><span title="Volume vs baseline window from snapshot">${volStr}</span></td>
-          <td headers="col-exch" class="exch-col">${exchHtml}</td>
+          <td headers="col-venue" class="exch-col">${venueCell}</td>
+          <td headers="col-vol24h" class="num">${volCell}</td>
           <td headers="col-backtest">${btHtml}</td>
         </tr>`;
       })
@@ -1918,7 +2078,7 @@
 
   function applyTableView() {
     if (!lastPayload) return;
-    const filtered = getFilteredSortedCoins();
+    const filtered = getFilteredSortedViewRows();
     const pinned = getPinnedSet();
     elTbody.innerHTML = renderRowsHtml(filtered, pinned, pinEnterFlashSet);
     updateSortHeaderClasses();
@@ -1948,12 +2108,16 @@
   }
 
   function exportViewCsv() {
-    const rows = getFilteredSortedCoins();
+    const viewRows = getFilteredSortedViewRows();
     const header = [
       "symbol",
       "name",
+      "row_exchange",
+      "row_vol_24h_usd",
       "gain_7d_pct",
       "gain_30d_pct",
+      "chart_7d_pct_below_high",
+      "chart_30d_pct_below_high",
       "uniformity",
       "health",
       "volume_acceleration_pct",
@@ -1962,18 +2126,40 @@
       "source_url",
     ];
     const lines = [header.join(",")];
-    for (const c of rows) {
+    for (const r of viewRows) {
+      const c = r.coin;
       const g = c.gains || {};
       const g7 = typeof g["7d"] === "number" ? g["7d"] : "";
       const g30 = typeof g["30d"] === "number" ? g["30d"] : "";
+      const hi7 = rowG7Hi(r);
+      const hi30 = rowG30Hi(r);
       const u = typeof c.uniformity_score === "number" ? c.uniformity_score : "";
       const h = c.health_score != null && c.health_score !== "" ? c.health_score : "";
       const vac = c.volume_acceleration_pct;
       const vwd = c.volume_acceleration_window_days;
       const lo = Array.isArray(c.listed_on) ? c.listed_on.join("|") : "";
       const url = c.source_url ? String(c.source_url) : "";
+      const ex = r.exchangeId != null ? String(r.exchangeId) : "";
+      const vol = r.volUsd != null && Number.isFinite(r.volUsd) ? r.volUsd : "";
       lines.push(
-        [c.symbol, c.name, g7, g30, u, h, vac, vwd, lo, url].map(escapeCsvCell).join(","),
+        [
+          c.symbol,
+          c.name,
+          ex,
+          vol,
+          g7,
+          g30,
+          hi7 != null ? Number(hi7.toFixed(4)) : "",
+          hi30 != null ? Number(hi30.toFixed(4)) : "",
+          u,
+          h,
+          vac,
+          vwd,
+          lo,
+          url,
+        ]
+          .map(escapeCsvCell)
+          .join(","),
       );
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -1981,12 +2167,25 @@
   }
 
   function exportViewJson() {
-    const rows = getFilteredSortedCoins();
+    const viewRows = getFilteredSortedViewRows();
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const coins = viewRows.map((r) => {
+      const c = r.coin;
+      if (c._watchlist_only) return { ...c };
+      const hi7 = rowG7Hi(r);
+      const hi30 = rowG30Hi(r);
+      return {
+        ...c,
+        dashboard_row_exchange: r.exchangeId,
+        dashboard_row_vol_24h_usd: r.volUsd,
+        dashboard_chart_7d_pct_below_high: hi7 != null ? Number(hi7.toFixed(4)) : null,
+        dashboard_chart_30d_pct_below_high: hi30 != null ? Number(hi30.toFixed(4)) : null,
+      };
+    });
     downloadBlob(
       `qualified_export_${stamp}.json`,
       "application/json;charset=utf-8",
-      JSON.stringify({ exported_at: new Date().toISOString(), count: rows.length, coins: rows }, null, 2),
+      JSON.stringify({ exported_at: new Date().toISOString(), count: coins.length, coins }, null, 2),
     );
   }
 
@@ -2168,30 +2367,42 @@
    */
   async function notifySnapshotChangedFiltered(data, nextDigest) {
     const coins = Array.isArray(data.coins) ? data.coins : [];
-    const filtered = applyFilters(coins);
-    const syms = [
-      ...new Set(filtered.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean)),
-    ].sort();
-    const key = JSON.stringify(syms);
-    const prevFilteredRaw = localStorage.getItem(LS_POLL_FILTERED_SYMS);
+    const exploded = explodeCoinRowsForTable(coins);
+    const filtered = applyFiltersToViewRows(exploded);
+    const keys = filtered
+      .map((row) => {
+        const sym = String(row.coin.symbol || "").toUpperCase();
+        if (!sym) return null;
+        const ex = row.exchangeId || "";
+        return `${sym}|${ex}`;
+      })
+      .filter(Boolean)
+      .sort();
+    const key = JSON.stringify(keys);
+    try {
+      localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
+    } catch {
+      /* ignore */
+    }
+    const prevFilteredRaw = localStorage.getItem(LS_POLL_FILTERED_ROWS);
     localStorage.setItem(LS_DIGEST, nextDigest);
     if (prevFilteredRaw === null || prevFilteredRaw === "") {
-      localStorage.setItem(LS_POLL_FILTERED_SYMS, key);
+      localStorage.setItem(LS_POLL_FILTERED_ROWS, key);
       return false;
     }
     if (prevFilteredRaw === key) {
       return false;
     }
-    localStorage.setItem(LS_POLL_FILTERED_SYMS, key);
+    localStorage.setItem(LS_POLL_FILTERED_ROWS, key);
     let prevArr = [];
     try {
       prevArr = JSON.parse(prevFilteredRaw);
     } catch {
       prevArr = [];
     }
-    const prevSet = new Set(Array.isArray(prevArr) ? prevArr.map((s) => String(s).toUpperCase()) : []);
-    const curSet = new Set(syms);
-    const added = syms.filter((s) => !prevSet.has(s));
+    const prevSet = new Set(Array.isArray(prevArr) ? prevArr.map((s) => String(s)) : []);
+    const curSet = new Set(keys);
+    const added = keys.filter((s) => !prevSet.has(s));
     const removed = [...prevSet].filter((s) => !curSet.has(s)).sort();
     const exchHint =
       filterExchangeSet.size > 0
@@ -2200,12 +2411,19 @@
             .map((id) => EXCHANGE_LABELS[id] || id)
             .join(", ")}`
         : "";
-    let body = `Filtered view: ${syms.length} coin(s)${exchHint}`;
+    const rowKeyLabel = (k) => {
+      const parts = String(k).split("|");
+      if (parts.length < 2) return String(k);
+      const sym = parts[0];
+      const ex = parts[1] ? EXCHANGE_LABELS[parts[1]] || parts[1] : "";
+      return ex ? `${sym} (${ex})` : sym;
+    };
+    let body = `Filtered view: ${keys.length} row(s)${exchHint}`;
     if (added.length) {
-      body += ` · New: ${added.slice(0, 14).join(", ")}${added.length > 14 ? "…" : ""}`;
+      body += ` · New: ${added.slice(0, 10).map(rowKeyLabel).join(", ")}${added.length > 10 ? "…" : ""}`;
     }
     if (removed.length) {
-      body += ` · Out: ${removed.slice(0, 10).join(", ")}${removed.length > 10 ? "…" : ""}`;
+      body += ` · Out: ${removed.slice(0, 8).map(rowKeyLabel).join(", ")}${removed.length > 8 ? "…" : ""}`;
     }
     await showDashboardNotification({
       title: "Qualified list updated",
@@ -2219,9 +2437,10 @@
   async function notifyPinnedWatch(entered, left) {
     if (!notifyAlertsEnabled || (!entered.length && !left.length)) return;
     const coins = Array.isArray(lastPayload?.coins) ? lastPayload.coins : [];
-    const filtered = applyFilters(coins);
+    const exploded = explodeCoinRowsForTable(coins);
+    const filtered = applyFiltersToViewRows(exploded);
     const filteredSet = new Set(
-      filtered.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
+      filtered.map((r) => String(r.coin.symbol || "").toUpperCase()).filter(Boolean),
     );
     const enteredFiltered = entered
       .map((s) => String(s || "").toUpperCase())
@@ -2391,7 +2610,7 @@
         sortDir = -sortDir;
       } else {
         sortKey = key;
-        sortDir = key === "symbol" || key === "name" ? 1 : -1;
+        sortDir = key === "symbol" || key === "name" || key === "venue" ? 1 : -1;
       }
       applyTableView();
       persistUiPreferences();
@@ -2403,7 +2622,7 @@
       const raw = elHealthMinSelect.value;
       filterHealthMin = raw === "" ? null : Number(raw);
       if (filterHealthMin != null && !Number.isFinite(filterHealthMin)) filterHealthMin = null;
-      if (filterHealthMin != null && filterHealthMin !== 60 && filterHealthMin !== 70) {
+      if (filterHealthMin != null && filterHealthMin !== 60 && filterHealthMin !== 65 && filterHealthMin !== 70) {
         filterHealthMin = null;
       }
       syncHealthMinSelect();
@@ -2436,6 +2655,22 @@
       if (raw === "pos" || raw === "25" || raw === "50") filterVolAccel = raw;
       else filterVolAccel = "";
       syncVolAccelFilterSelect();
+      applyTableView();
+      persistUiPreferences();
+      resetTierAPollBaselineIfAlerts();
+      void syncPushNotifyExchangesIfSubscribed();
+    });
+  }
+
+  if (elVolumeMinSelect) {
+    elVolumeMinSelect.addEventListener("change", () => {
+      const raw = elVolumeMinSelect.value;
+      if (raw === "") filterVolMinUsd = null;
+      else {
+        const n = Number(raw);
+        filterVolMinUsd = Number.isFinite(n) && VOL_MIN_FILTER_OPTIONS.some((o) => o.v === n) ? n : null;
+      }
+      syncVolumeMinSelect();
       applyTableView();
       persistUiPreferences();
       resetTierAPollBaselineIfAlerts();
@@ -2591,7 +2826,8 @@
         /* ignore */
       }
       persistPollIntervalFromUi();
-      localStorage.removeItem(LS_POLL_FILTERED_SYMS);
+      localStorage.removeItem(LS_POLL_FILTERED_ROWS);
+      localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
       try {
         localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
       } catch {
