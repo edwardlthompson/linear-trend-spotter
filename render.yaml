@@ -11,9 +11,9 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: TELEGRAM_ENABLED
-        value: "false"
+        value: "true"
       - key: DELIVERY_MODE
-        value: "web"
+        value: "telegram"
       - key: DATA_DIR
         value: /var/data
       - key: SCAN_INTERVAL_SECONDS

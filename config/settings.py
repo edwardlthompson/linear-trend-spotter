@@ -140,8 +140,8 @@ class Settings:
             'SCAN_INTERVAL_SECONDS': 3600,
             'SCAN_COSTS_ENABLED': False,
             'SCAN_COSTS_FILE': 'scan_costs.json',
-            'DELIVERY_MODE': 'web',
-            'TELEGRAM_ENABLED': False,
+            'DELIVERY_MODE': 'telegram',
+            'TELEGRAM_ENABLED': True,
             'TELEGRAM_BOT_MODE': 'polling',
             'TELEGRAM_WEBHOOK_PORT': 8080,
             'TELEGRAM_WEBHOOK_PATH': '/telegram/webhook',
@@ -412,7 +412,7 @@ class Settings:
         else:
             normalized['TELEGRAM_WEBHOOK_PATH'] = webhook_path
 
-        delivery_mode = str(normalized.get('DELIVERY_MODE', 'web')).strip().lower()
+        delivery_mode = str(normalized.get('DELIVERY_MODE', 'telegram')).strip().lower()
         if delivery_mode not in {'telegram', 'web'}:
             errors.append('DELIVERY_MODE must be one of: telegram, web')
         else:
@@ -550,8 +550,8 @@ class Settings:
         env_m = os.getenv('DELIVERY_MODE', '').strip().lower()
         if env_m in ('web', 'telegram'):
             return env_m
-        raw = str(self._config.get('DELIVERY_MODE', 'web')).strip().lower()
-        return raw if raw in ('web', 'telegram') else 'web'
+        raw = str(self._config.get('DELIVERY_MODE', 'telegram')).strip().lower()
+        return raw if raw in ('web', 'telegram') else 'telegram'
 
     @property
     def telegram_enabled(self) -> bool:
@@ -567,7 +567,7 @@ class Settings:
             return False
         if env_raw in ('1', 'true', 'yes', 'on'):
             return True
-        return bool(self._config.get('TELEGRAM_ENABLED', False))
+        return bool(self._config.get('TELEGRAM_ENABLED', True))
 
     @property
     def telegram(self) -> Optional[Dict[str, str]]:

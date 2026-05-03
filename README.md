@@ -32,7 +32,7 @@ If that URL returns **404**, GitHub Pages is not publishing from **`/docs`** yet
 
 | Goal | What to do |
 |------|------------|
-| **Alerts and summaries in Telegram only** | Set **`DELIVERY_MODE`** to **`telegram`** and **`TELEGRAM_ENABLED`** to **`true`** in `config.json` (plus bot token and chat id in `.env`). Leave the public website out of it — see [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
+| **Alerts and summaries in Telegram only** | Defaults are Telegram-first (`config.json.example`, **`render.yaml`** worker, **`config/settings.py`**). Set **`TELEGRAM_BOT_TOKEN`** and **`TELEGRAM_CHAT_ID`** on Render (or `.env` locally). Override with **`DELIVERY_MODE=web`** if you want dashboard-only delivery — [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md). |
 | **Table-style dashboard on this PC only** | After a scan writes `qualified_public_snapshot.json` under your **`DATA_DIR`**, run **`python scripts/local_dashboard.py`** — opens a browser at `http://127.0.0.1:8765/dashboard/` using your local JSON (no git push, no Render relay). |
 | **Public website on github.io** | Use **Option A** below (`sync_snapshot_to_docs.py` + push). |
 

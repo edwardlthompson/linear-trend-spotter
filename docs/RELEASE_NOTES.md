@@ -2,6 +2,15 @@
 
 Short summaries of operator-facing changes. Engineering milestones remain in [`EXECUTION_PLAN.md`](EXECUTION_PLAN.md).
 
+## 2026-05-02 — Telegram-first delivery defaults again
+
+**Blueprint and settings defaults** prefer Telegram alerts:
+
+- **`config/settings.py`** baked-in defaults: **`DELIVERY_MODE`** = **`telegram`**, **`TELEGRAM_ENABLED`** = **`true`**.
+- **`config.json.example`** and **`render.yaml`** worker env match (**`DELIVERY_MODE=telegram`**, **`TELEGRAM_ENABLED=true`**). **`scripts/run_render_worker.sh`** starts **`telegram_bot.py`** when secrets are present.
+
+Use **`DELIVERY_MODE=web`** on the host or in **`config.json`** when you want dashboard-only delivery (see [`DELIVERY_MODE.md`](DELIVERY_MODE.md)).
+
 ## 2026-05-01 — Web-first delivery (trial)
 
 **Delivery defaults are now web/dashboard–centric** rather than Telegram-first:

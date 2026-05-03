@@ -2,7 +2,7 @@
 
 This project can deliver qualified-coin **alerts and scan summaries** through **Telegram**, through the **read-only web dashboard** (and optional **Web Push**), or both. Use this page as the single reference for how that choice is configured.
 
-**Repository defaults (as of 2026-05):** **`DELIVERY_MODE`** = **`web`**, **`TELEGRAM_ENABLED`** = **`false`** — see [`RELEASE_NOTES.md`](RELEASE_NOTES.md).
+**Blueprint defaults (`config.json.example` + `render.yaml` worker, as of 2026-05):** **`DELIVERY_MODE`** = **`telegram`**, **`TELEGRAM_ENABLED`** = **`true`**. For web/dashboard-only delivery, set **`DELIVERY_MODE=web`** (and optionally **`TELEGRAM_ENABLED=false`**) in Render and/or `config.json`.
 
 ## Modes
 
@@ -30,7 +30,7 @@ This project can deliver qualified-coin **alerts and scan summaries** through **
 - `DELIVERY_MODE` is **not** `web`, and  
 - `TELEGRAM_ENABLED` is **not** `false` / `0`.
 
-Set **`DELIVERY_MODE=web`** (and optionally **`TELEGRAM_ENABLED=false`**) in the worker service environment. The blueprint in `render.yaml` includes **`DELIVERY_MODE`** / **`TELEGRAM_ENABLED`** defaults you can override in the dashboard.
+The blueprint includes **`DELIVERY_MODE`** / **`TELEGRAM_ENABLED`** (telegram defaults). Override in the Render dashboard if you want **`DELIVERY_MODE=web`** (and optionally **`TELEGRAM_ENABLED=false`**).
 
 ## Web-only checklist
 
