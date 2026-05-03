@@ -4,6 +4,9 @@
   "description": "Read-only dashboard for the scanner qualified-coin JSON snapshot.",
   "start_url": "./index.html",
   "scope": "./",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
   "display": "standalone",
   "background_color": "#0f1219",
   "theme_color": "#1a1f2e",

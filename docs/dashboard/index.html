@@ -12,7 +12,7 @@
     <title>Qualified coins</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
+  <body class="dashboard-body">
     <header class="site-header-bar" title="Page title, table search, and list notifications">
       <h1 id="mainHeading" title="Current view">Qualified list</h1>
       <div class="site-header-actions">
@@ -139,6 +139,7 @@
       </nav>
     </div>
 
+    <div class="dashboard-main-stack">
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
       <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
       <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
@@ -146,7 +147,7 @@
         <table class="qualified-grid">
           <caption class="visually-hidden">
             Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons; 7d and 30d
-            columns show gain and hourly-close trend charts—7d uses up to a week of 1h bars, 30d up to a month (orange line = last close in each window). Star a symbol on the
+            columns show gain and hourly-close trend charts—7d uses up to a week of 1h bars, 30d up to a month (white lines = high and low in the window; orange = last close). Star a symbol on the
             Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row. Use the
             header row (search beside the bell) to filter and Settings to export.
           </caption>
@@ -324,7 +325,8 @@
     <div id="opsPanel" role="tabpanel" aria-labelledby="tabLogs" class="ops-panel" hidden>
       <p class="ops-panel-lead" title="Scanner and relay messages are summarized here and in the log list">
         Operational messages from the scanner run, relay, regime gate, snapshot age, and API usage. List changes (new
-        or dropped symbols) use the bell next to the tabs. Log entries older than 24 hours are removed automatically.
+        or dropped symbols) use the bell next to the tabs. Log history is kept in this browser (local storage), survives
+        refresh, and entries older than 24 hours are removed automatically.
       </p>
       <p class="ops-panel-actions">
         <button type="button" id="opsMarkReadBtn" class="secondary" title="Clear the Logs tab badge (counts entries since you last marked read)">
@@ -439,6 +441,7 @@
           </span>
         </p>
       </section>
+    </div>
     </div>
 
     <dialog id="backtestModal" class="bt-modal">

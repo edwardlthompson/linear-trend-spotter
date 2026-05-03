@@ -64,11 +64,73 @@ html[data-theme="dark"] {
 
 body {
   margin: 0;
-  padding: 1rem;
-  max-width: 1280px;
-  margin-inline: auto;
   color: var(--color-text);
   background: var(--color-bg);
+}
+
+body.dashboard-body {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  width: 100%;
+  max-width: min(1920px, 100vw);
+  margin-inline: auto;
+  padding: clamp(0.5rem, 1.25vw, 1.25rem);
+}
+
+.dashboard-body > .site-header-bar,
+.dashboard-body > .app-tab-bar {
+  flex-shrink: 0;
+}
+
+.dashboard-body > dialog {
+  flex-shrink: 0;
+}
+
+.dashboard-body > .site-footer {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.dashboard-main-stack {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#mainDataPanel:not([hidden]),
+#opsPanel:not([hidden]),
+#settingsPanel:not([hidden]) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#opsPanel:not([hidden]),
+#settingsPanel:not([hidden]) {
+  overflow-y: auto;
+}
+
+#mainDataPanel:not([hidden]) .error,
+#mainDataPanel:not([hidden]) .meta {
+  flex-shrink: 0;
+}
+
+#mainDataPanel:not([hidden]) .table-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-scroll {
@@ -221,7 +283,7 @@ h1 {
 }
 
 .settings-panel {
-  max-width: 40rem;
+  max-width: min(40rem, 100%);
 }
 
 .settings-panel-title {
@@ -988,6 +1050,14 @@ table.qualified-grid td {
   vertical-align: middle;
 }
 
+table.qualified-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--color-th);
+  box-shadow: 0 1px 0 var(--color-border);
+}
+
 table.qualified-grid tbody tr:nth-child(even) td {
   background: color-mix(in srgb, var(--color-surface) 92%, var(--color-th) 8%);
 }
@@ -1126,6 +1196,17 @@ a {
   stroke-width: 1.35;
   stroke-opacity: 0.95;
   vector-effect: non-scaling-stroke;
+}
+
+.spark-svg .spark-hilo-line {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 1;
+  stroke-opacity: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+html[data-theme="light"] .spark-svg .spark-hilo-line {
+  stroke: rgba(15, 23, 42, 0.45);
 }
 
 .bt-cell {
@@ -1375,7 +1456,7 @@ html[data-theme="dark"] .tab-badge--alert {
 }
 
 .ops-panel {
-  max-width: 56rem;
+  max-width: none;
 }
 
 .ops-panel-lead {

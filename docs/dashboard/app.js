@@ -23,6 +23,10 @@
   const LS_THEME = "qualified_dash_theme";
   /** Tier-A poll: previous filtered symbol list under current UI filters (JSON array string). */
   const LS_POLL_FILTERED_SYMS = "qualified_dash_poll_filtered_syms";
+  /** Tier-A poll: last snapshot body digest after a poll (avoids duplicate “refresh” vs filtered-change notify). */
+  const LS_LAST_POLL_SNAPSHOT_DIGEST = "qualified_dash_last_poll_snapshot_digest";
+  /** Rolling ops log (24h retention); survives refresh in this browser (localStorage). */
+  const LS_OPS_FEED_STORE = "qualified_dash_ops_feed_store_v1";
   /** Table sort + filters: survive refresh and PWA relaunch (same origin). */
   const LS_UI_SORT_KEY = "qualified_dash_ui_sort_key";
   const LS_UI_SORT_DIR = "qualified_dash_ui_sort_dir";
@@ -230,9 +234,10 @@
   /** @type {"qualified" | "watchlist" | "logs" | "settings"} */
   let activeView = "qualified";
   const OPS_LOG_RETENTION_MS = 24 * 60 * 60 * 1000;
-  /** @type {{ t: number, iso: string, html: string }[]} */
+  /** @type {{ t: number, iso: string, html: string, k?: string }[]} */
   let opsFeedItems = [];
   const opsFeedDedupe = new Set();
+  let opsFeedPersistTimer = 0;
   let opsSummaryDebounceTimer = 0;
   let lastStaleBannerShown = false;
 
@@ -1477,7 +1482,61 @@
 
   function pruneOpsFeedToRetention() {
     const cutoff = Date.now() - OPS_LOG_RETENTION_MS;
+    const before = opsFeedItems.length;
     opsFeedItems = opsFeedItems.filter((it) => it.t >= cutoff);
+    if (opsFeedItems.length !== before) schedulePersistOpsFeed();
+  }
+
+  function schedulePersistOpsFeed() {
+    if (opsFeedPersistTimer) window.clearTimeout(opsFeedPersistTimer);
+    opsFeedPersistTimer = window.setTimeout(() => {
+      opsFeedPersistTimer = 0;
+      try {
+        pruneOpsFeedToRetention();
+        const serial = opsFeedItems.map((it) => ({
+          t: it.t,
+          iso: it.iso,
+          html: it.html,
+          k: typeof it.k === "string" ? it.k : "",
+        }));
+        localStorage.setItem(LS_OPS_FEED_STORE, JSON.stringify(serial));
+      } catch (e) {
+        console.warn("persist ops feed", e);
+      }
+    }, 400);
+  }
+
+  function loadOpsFeedFromStorage() {
+    try {
+      const raw = localStorage.getItem(LS_OPS_FEED_STORE);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const now = Date.now();
+      const cutoff = now - OPS_LOG_RETENTION_MS;
+      const next = [];
+      for (const row of parsed) {
+        if (!row || typeof row !== "object") continue;
+        const t = Number(row.t);
+        const iso = row.iso != null ? String(row.iso) : "—";
+        const html = row.html != null ? String(row.html) : "";
+        const k = row.k != null ? String(row.k) : "";
+        if (!Number.isFinite(t) || t < cutoff) continue;
+        if (!html.trim()) continue;
+        next.push({ t, iso, html, k: k || undefined });
+        if (k) opsFeedDedupe.add(k);
+      }
+      next.sort((a, b) => b.t - a.t);
+      opsFeedItems = next.slice(0, 200);
+      opsFeedDedupe.clear();
+      for (const it of opsFeedItems) {
+        if (it.k) opsFeedDedupe.add(it.k);
+      }
+      renderOpsFeedList();
+      syncOpsTabBadge();
+    } catch (e) {
+      console.warn("load ops feed", e);
+    }
   }
 
   function renderOpsFeedList() {
@@ -1506,10 +1565,11 @@
       opsFeedDedupe.add(key);
     }
     const html = escapeHtml(String(plainText).trim()).replace(/\n/g, "<br/>");
-    opsFeedItems.unshift({ t: Date.now(), iso: iso || "—", html: html });
+    opsFeedItems.unshift({ t: Date.now(), iso: iso || "—", html: html, k: key });
     pruneOpsFeedToRetention();
     opsFeedItems = opsFeedItems.slice(0, 200);
     renderOpsFeedList();
+    schedulePersistOpsFeed();
     if (activeView === "logs") setOpsLastAckToNow();
     syncOpsTabBadge();
   }
@@ -1641,13 +1701,22 @@
     const lastClose = closes[closes.length - 1];
     const yRef = normY(lastClose);
     const x2 = pad + iw;
+    const yLow = normY(min);
+    const yHigh = normY(max);
+    const rangeFlat = !(max > min);
+    const hiloLow = rangeFlat
+      ? ""
+      : `<line class="spark-hilo-line spark-hilo-low" x1="${pad}" y1="${yLow.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${yLow.toFixed(2)}" />`;
+    const hiloHigh = rangeFlat
+      ? ""
+      : `<line class="spark-hilo-line spark-hilo-high" x1="${pad}" y1="${yHigh.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${yHigh.toFixed(2)}" />`;
     const refLine = `<line class="spark-ref-line" x1="${pad}" y1="${yRef.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${yRef.toFixed(2)}" />`;
     const pts = closes.map((v, i) => {
       const x = pad + (i / (closes.length - 1)) * iw;
       const y = normY(v);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     });
-    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${refLine}<polyline class="spark-line-main" fill="none" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" /></svg><span class="visually-hidden">Price trend; orange line is last close vs earlier action</span>`;
+    return `<svg class="spark-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${hiloLow}${hiloHigh}<polyline class="spark-line-main" fill="none" stroke-width="${strokeW}" vector-effect="non-scaling-stroke" points="${pts.join(" ")}" />${refLine}</svg><span class="visually-hidden">Price trend; white lines are window low and high; orange is last close</span>`;
   }
 
   function fmtSheetCell(v) {
@@ -2053,23 +2122,65 @@
     return String(text.length) + ":" + text.slice(0, 2000);
   }
 
-  /** Tier-A alerts: only when the **filtered** list (search, health, **exchanges**) changes vs last poll — same membership rule as the table (e.g. Kraken-only hides MEXC-only coins). */
-  async function notifySnapshotChangedFiltered(text, data) {
+  function notificationAssetUrl(relPath) {
+    try {
+      return new URL(relPath, window.location.href).href;
+    } catch {
+      return relPath;
+    }
+  }
+
+  /** System-level (service worker) notifications with absolute icon URLs for Android and desktop. */
+  async function showDashboardNotification(opts) {
+    const title = String(opts.title || "Qualified dashboard");
+    const body = String(opts.body || "");
+    const tag = opts.tag != null ? String(opts.tag) : "qualified-dash";
+    const icon = notificationAssetUrl("./icons/icon-192.png");
+    const badge = notificationAssetUrl("./icons/icon-192.png");
+    const options = {
+      body,
+      tag,
+      renotify: true,
+      icon,
+      badge,
+      vibrate: [180, 80, 180],
+    };
+    try {
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.ready;
+        if (reg && typeof reg.showNotification === "function") {
+          await reg.showNotification(title, options);
+          return;
+        }
+      }
+      if (typeof Notification === "function" && Notification.permission === "granted") {
+        new Notification(title, { body, tag, icon });
+      }
+    } catch (e) {
+      console.warn("showNotification", e);
+    }
+  }
+
+  /**
+   * Tier-A alerts: only when the **filtered** list (search, health, **exchanges**) changes vs last poll — same
+   * membership rule as the table (e.g. Kraken-only hides MEXC-only coins).
+   * @returns {Promise<boolean>} true if a list-change notification was shown
+   */
+  async function notifySnapshotChangedFiltered(data, nextDigest) {
     const coins = Array.isArray(data.coins) ? data.coins : [];
     const filtered = applyFilters(coins);
     const syms = [
       ...new Set(filtered.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean)),
     ].sort();
     const key = JSON.stringify(syms);
-    const nextDigest = await digestHex(text);
     const prevFilteredRaw = localStorage.getItem(LS_POLL_FILTERED_SYMS);
     localStorage.setItem(LS_DIGEST, nextDigest);
     if (prevFilteredRaw === null || prevFilteredRaw === "") {
       localStorage.setItem(LS_POLL_FILTERED_SYMS, key);
-      return;
+      return false;
     }
     if (prevFilteredRaw === key) {
-      return;
+      return false;
     }
     localStorage.setItem(LS_POLL_FILTERED_SYMS, key);
     let prevArr = [];
@@ -2096,20 +2207,12 @@
     if (removed.length) {
       body += ` · Out: ${removed.slice(0, 10).join(", ")}${removed.length > 10 ? "…" : ""}`;
     }
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      if (reg && typeof reg.showNotification === "function") {
-        await reg.showNotification("Qualified list updated", {
-          body,
-          tag: "qualified-snapshot-filtered",
-          renotify: true,
-        });
-      } else if (typeof Notification === "function") {
-        new Notification("Qualified list updated", { body });
-      }
-    } catch (e) {
-      console.warn("showNotification failed", e);
-    }
+    await showDashboardNotification({
+      title: "Qualified list updated",
+      body,
+      tag: "qualified-snapshot-filtered",
+    });
+    return true;
   }
 
   /** Tier-A: notify when a watched symbol enters or leaves the full qualified set (independent of table filters). */
@@ -2134,20 +2237,11 @@
     }
     if (!parts.length) return;
     const body = `Watch · ${parts.join(" · ")}`;
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      if (reg && typeof reg.showNotification === "function") {
-        await reg.showNotification("Watched symbols (qualified set)", {
-          body,
-          tag: "qualified-pinned-watch",
-          renotify: true,
-        });
-      } else if (typeof Notification === "function") {
-        new Notification("Watched symbols (qualified set)", { body });
-      }
-    } catch (e) {
-      console.warn("pinned watch notification failed", e);
-    }
+    await showDashboardNotification({
+      title: "Watched symbols (qualified set)",
+      body,
+      tag: "qualified-pinned-watch",
+    });
   }
 
   async function loadSnapshot(options) {
@@ -2206,11 +2300,42 @@
         snapshotMetaSuffix = "";
       }
       render(data);
+      const snapDigest = await digestHex(text);
       if (forNotify && notifyAlertsEnabled) {
-        await notifySnapshotChangedFiltered(text, data);
+        const prevPollDigest = (() => {
+          try {
+            return localStorage.getItem(LS_LAST_POLL_SNAPSHOT_DIGEST) || "";
+          } catch {
+            return "";
+          }
+        })();
+        const snapshotBodyChanged = Boolean(prevPollDigest && prevPollDigest !== snapDigest);
+        const listNotified = await notifySnapshotChangedFiltered(data, snapDigest);
         await notifyPinnedWatch(lastPinWatchDelta.entered, lastPinWatchDelta.left);
+        if (!listNotified && snapshotBodyChanged) {
+          const iso = data && data.updated_at ? String(data.updated_at) : "";
+          await showDashboardNotification({
+            title: "Qualified snapshot updated",
+            body: iso
+              ? `Snapshot refreshed (${iso}). Your filtered table is unchanged.`
+              : "Snapshot JSON refreshed. Your filtered table is unchanged.",
+            tag: "qualified-snapshot-refresh",
+          });
+        }
+        try {
+          localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
+        } catch {
+          /* ignore */
+        }
       } else {
-        localStorage.setItem(LS_DIGEST, await digestHex(text));
+        localStorage.setItem(LS_DIGEST, snapDigest);
+        if (notifyAlertsEnabled) {
+          try {
+            localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
+          } catch {
+            /* ignore */
+          }
+        }
       }
     } catch (e) {
       if (!showErrors) return;
@@ -2439,6 +2564,7 @@
         notifyAlertsEnabled = false;
         try {
           localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
+          localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
         } catch {
           /* ignore */
         }
@@ -2466,6 +2592,11 @@
       }
       persistPollIntervalFromUi();
       localStorage.removeItem(LS_POLL_FILTERED_SYMS);
+      try {
+        localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
+      } catch {
+        /* ignore */
+      }
       clearError();
       await loadSnapshot({ showErrors: true, forNotify: false });
       startPoll();
@@ -2585,6 +2716,7 @@
   }
 
   syncSnapshotTelemetryPanel();
+  loadOpsFeedFromStorage();
 
   if (getSnapshotUrl().trim()) {
     loadSnapshot({ showErrors: true, forNotify: false });
