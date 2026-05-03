@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * stale banner; theme (Q15); export CSV/JSON (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); star = browser watchlist (Qualified vs Watchlist vs Alerts tabs; ops feed + coin bell drawer); UI sort/filters in localStorage. Snapshot URL under collapsible Data source; ?api=… or window.__SNAPSHOT_URL__.
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); Qualified / Watchlist / Logs / Settings tabs; coin bell popover; rolling 24h ops log. Snapshot URL from ?api=… or window.__SNAPSHOT_URL__ in config.js (no URL field in UI).
  */
 (function () {
   /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
@@ -40,11 +40,13 @@
   const LS_PINNED_SYMBOLS_JSON = "qualified_dash_pinned_symbols_json";
   /** Maps symbol → was qualified on last snapshot (boolean). */
   const LS_PINNED_WAS_QUALIFIED_JSON = "qualified_dash_pinned_was_qualified_json";
-  /** ``qualified`` | ``watchlist`` — which main tab is active. */
+  /** ``qualified`` | ``watchlist`` | ``logs`` | ``settings`` — which main tab is active. */
   const LS_UI_ACTIVE_VIEW = "qualified_dash_active_view";
+  /** Persist Tier-A browser poll alerts on/off (requires Notification permission). */
+  const LS_TIER_A_ALERTS_ENABLED = "qualified_dash_tier_a_alerts_enabled";
   /** Session: hide scan health / relay / regime strip cluster until tab closes. */
   const LS_SNAPSHOT_TELEMETRY_DISMISSED = "qualified_dash_snapshot_telemetry_dismissed";
-  /** Milliseconds: operational feed items at or before this time count as read (Alerts tab badge). */
+  /** Milliseconds: operational feed items at or before this time count as read (Logs tab badge). */
   const LS_OPS_LAST_ACK_MS = "qualified_dash_ops_last_ack_ms";
   /** Digest of coin-only banners last acknowledged with the bell drawer (localStorage). */
   const LS_COIN_ALERTS_ACK_DIGEST = "qualified_dash_coin_alerts_ack_digest";
@@ -186,12 +188,10 @@
   const elTelemetryStripDismiss = document.getElementById("telemetryStripDismiss");
   const elOpsMarkReadBtn = document.getElementById("opsMarkReadBtn");
   const elCoinAlertsBell = document.getElementById("coinAlertsBell");
-  const elCoinAlertsDrawer = document.getElementById("coinAlertsDrawer");
+  const elCoinAlertsPopover = document.getElementById("coinAlertsPopover");
+  const elCoinAlertsDropdownRoot = document.getElementById("coinAlertsDropdownRoot");
   const elCoinAlertsBadge = document.getElementById("coinAlertsBadge");
-  const elCoinAlertsToolbarSlot = document.getElementById("coinAlertsToolbarSlot");
   const elOpsTabBadge = document.getElementById("opsTabBadge");
-  const elInput = document.getElementById("apiInput");
-  const elLoad = document.getElementById("loadBtn");
   const elNotify = document.getElementById("notifyBtn");
   const elPollInterval = document.getElementById("pollIntervalSelect");
   const elSearch = document.getElementById("searchInput");
@@ -231,8 +231,9 @@
   let pinEnterClearTimer = 0;
   let prevPollWatchLeaveSig = "__init__";
   let suppressedWatchLeaveSig = "";
-  /** @type {"qualified" | "watchlist" | "alerts"} */
+  /** @type {"qualified" | "watchlist" | "logs" | "settings"} */
   let activeView = "qualified";
+  const OPS_LOG_RETENTION_MS = 24 * 60 * 60 * 1000;
   /** @type {{ t: number, iso: string, html: string }[]} */
   let opsFeedItems = [];
   const opsFeedDedupe = new Set();
@@ -353,7 +354,8 @@
         }
       }
       const av = localStorage.getItem(LS_UI_ACTIVE_VIEW);
-      if (av === "watchlist" || av === "qualified" || av === "alerts") activeView = av;
+      if (av === "watchlist" || av === "qualified" || av === "logs" || av === "settings") activeView = av;
+      else if (av === "alerts") activeView = "logs";
     } catch (e) {
       console.warn("restoreUiPreferences", e);
     }
@@ -384,48 +386,87 @@
     elWatchlistBadge.hidden = n === 0;
   }
 
-  function syncTabVisuals() {
-    const onQ = activeView === "qualified";
-    const onW = activeView === "watchlist";
-    const onA = activeView === "alerts";
-    const tq = document.getElementById("tabQualified");
-    const tw = document.getElementById("tabWatchlist");
-    const ta = document.getElementById("tabOps");
-    const mainP = document.getElementById("mainDataPanel");
-    const opsP = document.getElementById("opsPanel");
-    if (tq && tw && ta) {
-      tq.classList.toggle("is-active", onQ);
-      tw.classList.toggle("is-active", onW);
-      ta.classList.toggle("is-active", onA);
-      tq.setAttribute("aria-selected", onQ ? "true" : "false");
-      tw.setAttribute("aria-selected", onW ? "true" : "false");
-      ta.setAttribute("aria-selected", onA ? "true" : "false");
+  function syncNotifyTierAButton() {
+    if (!elNotify) return;
+    const perm = "Notification" in window ? Notification.permission : "denied";
+    if (notifyAlertsEnabled && perm !== "granted") {
+      notifyAlertsEnabled = false;
+      try {
+        localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
+      } catch {
+        /* ignore */
+      }
     }
-    if (mainP) {
-      mainP.hidden = onA;
-      mainP.setAttribute("aria-labelledby", onW ? "tabWatchlist" : "tabQualified");
-    }
-    if (opsP) opsP.hidden = !onA;
-    if (elMainHeading) {
-      elMainHeading.textContent = onA ? "Alerts" : onW ? "Watchlist" : "Qualified list";
-    }
-    if (elCoinAlertsToolbarSlot) elCoinAlertsToolbarSlot.hidden = onA;
-    if (onA && elCoinAlertsDrawer) {
-      elCoinAlertsDrawer.hidden = true;
-      if (elCoinAlertsBell) elCoinAlertsBell.setAttribute("aria-expanded", "false");
-    }
-    updateWatchlistBadge();
-    syncOpsTabBadge();
+    const on = notifyAlertsEnabled && perm === "granted";
+    elNotify.classList.toggle("notify-tier-a-btn--on", on);
+    elNotify.textContent = on ? "Update alerts on" : "Enable update alerts";
+  }
+
+  function closeCoinAlertsPopover() {
+    if (elCoinAlertsPopover) elCoinAlertsPopover.hidden = true;
+    if (elCoinAlertsBell) elCoinAlertsBell.setAttribute("aria-expanded", "false");
+  }
+
+  function toggleCoinAlertsPopover() {
+    if (!elCoinAlertsPopover || !elCoinAlertsBell) return;
+    const willOpen = elCoinAlertsPopover.hidden;
+    elCoinAlertsPopover.hidden = !willOpen;
+    elCoinAlertsBell.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    if (willOpen) writeCoinAlertsAckDigest(coinSignalsDigest());
     syncCoinBellBadge();
   }
 
+  function syncTabVisuals() {
+    const onQ = activeView === "qualified";
+    const onW = activeView === "watchlist";
+    const onLogs = activeView === "logs";
+    const onSettings = activeView === "settings";
+    const tq = document.getElementById("tabQualified");
+    const tw = document.getElementById("tabWatchlist");
+    const tLogs = document.getElementById("tabLogs");
+    const tSettings = document.getElementById("tabSettings");
+    const mainP = document.getElementById("mainDataPanel");
+    const opsP = document.getElementById("opsPanel");
+    const settingsP = document.getElementById("settingsPanel");
+    if (tq && tw && tLogs && tSettings) {
+      tq.classList.toggle("is-active", onQ);
+      tw.classList.toggle("is-active", onW);
+      tLogs.classList.toggle("is-active", onLogs);
+      tSettings.classList.toggle("is-active", onSettings);
+      tq.setAttribute("aria-selected", onQ ? "true" : "false");
+      tw.setAttribute("aria-selected", onW ? "true" : "false");
+      tLogs.setAttribute("aria-selected", onLogs ? "true" : "false");
+      tSettings.setAttribute("aria-selected", onSettings ? "true" : "false");
+    }
+    if (mainP) {
+      mainP.hidden = onLogs || onSettings;
+      if (onW) mainP.setAttribute("aria-labelledby", "tabWatchlist");
+      else if (onQ) mainP.setAttribute("aria-labelledby", "tabQualified");
+      else mainP.setAttribute("aria-labelledby", "tabQualified");
+    }
+    if (opsP) opsP.hidden = !onLogs;
+    if (settingsP) settingsP.hidden = !onSettings;
+    if (elMainHeading) {
+      if (onLogs) elMainHeading.textContent = "Logs";
+      else if (onSettings) elMainHeading.textContent = "Settings";
+      else if (onW) elMainHeading.textContent = "Watchlist";
+      else elMainHeading.textContent = "Qualified list";
+    }
+    if (onLogs || onSettings) closeCoinAlertsPopover();
+    updateWatchlistBadge();
+    syncOpsTabBadge();
+    syncCoinBellBadge();
+    syncNotifyTierAButton();
+  }
+
   function setActiveView(view) {
-    if (view === "alerts") activeView = "alerts";
+    if (view === "logs" || view === "alerts") activeView = "logs";
+    else if (view === "settings") activeView = "settings";
     else activeView = view === "watchlist" ? "watchlist" : "qualified";
-    if (activeView === "alerts") ackOpsNotificationsFromUi();
+    if (activeView === "logs") ackOpsNotificationsFromUi();
     syncTabVisuals();
     persistUiPreferences();
-    if (activeView !== "alerts") applyTableView();
+    if (activeView !== "logs" && activeView !== "settings") applyTableView();
   }
 
   function syncExchangeCheckboxesFromSet() {
@@ -439,7 +480,7 @@
     const el = document.getElementById("exchangeFilterSummary");
     if (!el) return;
     if (filterExchangeSet.size === 0) {
-      el.textContent = "All exchanges";
+      el.textContent = "All";
       return;
     }
     const labels = [...filterExchangeSet].sort().map((id) => EXCHANGE_LABELS[id] || id);
@@ -448,9 +489,6 @@
 
   updateThemeButtonLabel();
 
-  if (elInput) {
-    elInput.value = snapshotUrl;
-  }
   populatePollIntervalSelect();
   restoreUiPreferences();
   if (elSearch) elSearch.value = searchQuery;
@@ -459,11 +497,27 @@
   syncVolAccelFilterSelect();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
+  try {
+    if (
+      localStorage.getItem(LS_TIER_A_ALERTS_ENABLED) === "1" &&
+      typeof Notification !== "undefined" &&
+      Notification.permission === "granted"
+    ) {
+      notifyAlertsEnabled = true;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (notifyAlertsEnabled) {
+    void registerServiceWorker().then(() => {
+      startPoll();
+    });
+  }
   syncTabVisuals();
   updateSortHeaderClasses();
 
   function getSnapshotUrl() {
-    return (elInput && elInput.value.trim()) || snapshotUrl || "";
+    return snapshotUrl || "";
   }
 
   function pushApiBase() {
@@ -611,7 +665,7 @@
     }
   }
 
-  /** Session: hide scan / relay / regime strips in the Alerts tab only. */
+  /** Session: hide scan / relay / regime strips in the Logs tab only. */
   function dismissOpsScanStripsForSession() {
     setSnapshotTelemetryDismissed();
     syncSnapshotTelemetryPanel();
@@ -1409,7 +1463,13 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
+  function pruneOpsFeedToRetention() {
+    const cutoff = Date.now() - OPS_LOG_RETENTION_MS;
+    opsFeedItems = opsFeedItems.filter((it) => it.t >= cutoff);
+  }
+
   function renderOpsFeedList() {
+    pruneOpsFeedToRetention();
     const ul = document.getElementById("opsFeedList");
     const empty = document.getElementById("opsFeedEmpty");
     if (!ul) return;
@@ -1435,9 +1495,10 @@
     }
     const html = escapeHtml(String(plainText).trim()).replace(/\n/g, "<br/>");
     opsFeedItems.unshift({ t: Date.now(), iso: iso || "—", html: html });
-    opsFeedItems = opsFeedItems.slice(0, 50);
+    pruneOpsFeedToRetention();
+    opsFeedItems = opsFeedItems.slice(0, 200);
     renderOpsFeedList();
-    if (activeView === "alerts") setOpsLastAckToNow();
+    if (activeView === "logs") setOpsLastAckToNow();
     syncOpsTabBadge();
   }
 
@@ -1507,7 +1568,7 @@
     if (!elCoinAlertsBadge) return;
     const dig = coinSignalsDigest();
     const ack = readCoinAlertsAckDigest();
-    const drawerOpen = elCoinAlertsDrawer && !elCoinAlertsDrawer.hidden;
+    const drawerOpen = elCoinAlertsPopover && !elCoinAlertsPopover.hidden;
     const show = Boolean(dig) && dig !== ack && !drawerOpen;
     elCoinAlertsBadge.hidden = !show;
     elCoinAlertsBadge.textContent = show ? "!" : "0";
@@ -1961,7 +2022,7 @@
       } else {
         elEmptyBanner.hidden = false;
         elEmptyBanner.textContent = regimeBlocked
-          ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see the Regime strip on the Alerts tab). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
+          ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see the Regime strip on the Logs tab). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
           : "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file.";
       }
     }
@@ -2155,7 +2216,7 @@
     const url = getSnapshotUrl();
     if (!url || !url.trim()) {
       if (showErrors) {
-        showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in config.js.");
+        showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in docs/dashboard/config.js.");
       }
       return;
     }
@@ -2307,24 +2368,30 @@
   if (tabW) {
     tabW.addEventListener("click", () => setActiveView("watchlist"));
   }
-  const tabA = document.getElementById("tabOps");
-  if (tabA) {
-    tabA.addEventListener("click", () => setActiveView("alerts"));
+  const tabLogsEl = document.getElementById("tabLogs");
+  if (tabLogsEl) {
+    tabLogsEl.addEventListener("click", () => setActiveView("logs"));
+  }
+  const tabSettingsEl = document.getElementById("tabSettings");
+  if (tabSettingsEl) {
+    tabSettingsEl.addEventListener("click", () => setActiveView("settings"));
   }
 
   if (elOpsMarkReadBtn) {
     elOpsMarkReadBtn.addEventListener("click", () => ackOpsNotificationsFromUi());
   }
 
-  if (elCoinAlertsBell && elCoinAlertsDrawer) {
-    elCoinAlertsBell.addEventListener("click", () => {
-      const open = elCoinAlertsDrawer.hidden;
-      elCoinAlertsDrawer.hidden = !open;
-      elCoinAlertsBell.setAttribute("aria-expanded", open ? "true" : "false");
-      if (open) writeCoinAlertsAckDigest(coinSignalsDigest());
-      syncCoinBellBadge();
+  if (elCoinAlertsBell) {
+    elCoinAlertsBell.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      toggleCoinAlertsPopover();
     });
   }
+
+  document.addEventListener("click", (ev) => {
+    if (!elCoinAlertsDropdownRoot || !elCoinAlertsPopover || elCoinAlertsPopover.hidden) return;
+    if (!elCoinAlertsDropdownRoot.contains(ev.target)) closeCoinAlertsPopover();
+  });
 
   if (elSearch) {
     elSearch.addEventListener("input", () => {
@@ -2380,10 +2447,6 @@
     });
   }
 
-  if (elLoad) {
-    elLoad.addEventListener("click", () => loadSnapshot({ showErrors: true, forNotify: false }));
-  }
-
   if (elThemeCycle) {
     elThemeCycle.addEventListener("click", () => cycleThemeMode());
   }
@@ -2413,6 +2476,18 @@
         showError("Browser notifications are not supported here.");
         return;
       }
+      if (notifyAlertsEnabled) {
+        stopPoll();
+        notifyAlertsEnabled = false;
+        try {
+          localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
+        } catch {
+          /* ignore */
+        }
+        syncNotifyTierAButton();
+        if (lastPayload) render(lastPayload);
+        return;
+      }
       let perm = Notification.permission;
       if (perm === "default") {
         perm = await Notification.requestPermission();
@@ -2421,10 +2496,16 @@
         showError(
           "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
         );
+        syncNotifyTierAButton();
         return;
       }
       await registerServiceWorker();
       notifyAlertsEnabled = true;
+      try {
+        localStorage.setItem(LS_TIER_A_ALERTS_ENABLED, "1");
+      } catch {
+        /* ignore */
+      }
       persistPollIntervalFromUi();
       localStorage.removeItem(LS_POLL_FILTERED_SYMS);
       clearError();
@@ -2432,6 +2513,7 @@
       startPoll();
       syncPushTierBVisibility();
       void refreshPushTierBLabel();
+      syncNotifyTierAButton();
     });
   }
 
@@ -2475,12 +2557,16 @@
       await registerServiceWorker();
       syncPushTierBVisibility();
       await refreshPushTierBLabel();
+      syncNotifyTierAButton();
     })();
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && notifyAlertsEnabled) {
-      loadSnapshot({ showErrors: false, forNotify: true });
+    if (document.visibilityState === "visible") {
+      syncNotifyTierAButton();
+      if (notifyAlertsEnabled) {
+        loadSnapshot({ showErrors: false, forNotify: true });
+      }
     }
   });
 
@@ -2545,6 +2631,6 @@
   if (snapshotUrl) {
     loadSnapshot({ showErrors: true, forNotify: false });
   } else {
-    showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in config.js.");
+    showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in docs/dashboard/config.js.");
   }
 })();

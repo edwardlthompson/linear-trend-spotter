@@ -13,200 +13,101 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <h1 id="mainHeading" title="Current view: Qualified list, Watchlist, or Alerts (scanner feed)">Qualified list</h1>
-    <nav class="app-tabs" role="tablist" aria-label="Main views" title="Qualified table, watchlist, or operational alerts feed">
-      <button
-        type="button"
-        class="app-tab is-active"
-        role="tab"
-        id="tabQualified"
-        aria-selected="true"
-        aria-controls="mainDataPanel"
-        data-view="qualified"
-        title="Scanner-qualified coins from the latest snapshot (filters apply)"
-      >
-        Qualified
-      </button>
-      <button
-        type="button"
-        class="app-tab"
-        role="tab"
-        id="tabWatchlist"
-        aria-selected="false"
-        aria-controls="mainDataPanel"
-        data-view="watchlist"
-        title="Symbols you starred; includes rows not in this snapshot so you can remove stars"
-      >
-        Watchlist
-        <span id="watchlistBadge" class="tab-badge" hidden title="Number of starred symbols"></span>
-      </button>
-      <button
-        type="button"
-        class="app-tab"
-        role="tab"
-        id="tabOps"
-        aria-selected="false"
-        aria-controls="opsPanel"
-        data-view="alerts"
-        title="Scanner health, relay, regime, stale snapshot, API budget, and history"
-      >
-        Alerts
-        <span id="opsTabBadge" class="tab-badge tab-badge--alert" hidden title="Operational alerts since you last opened this tab">0</span>
-      </button>
-    </nav>
-
-    <p class="toolbar toolbar-primary" title="Toolbar: data reload, alerts, theme, export">
-      <details class="toolbar-advanced">
-        <summary class="toolbar-advanced-summary" title="Show or hide snapshot JSON URL and reload">Data source</summary>
-        <span class="toolbar-advanced-body">
-          <label title="HTTPS URL to qualified_public_snapshot.json (relay or static file)">
-            Snapshot JSON URL
-            <input
-              id="apiInput"
-              type="url"
-              placeholder="https://…/qualified_public_snapshot.json"
-              title="HTTPS URL to qualified_public_snapshot.json. Override with ?api= in the page URL."
-            />
-          </label>
-          <button id="loadBtn" type="button" title="Fetch the snapshot again from the URL above">
-            Reload
-          </button>
-        </span>
-      </details>
-      <label class="poll-toolbar" title="How often to re-fetch when Tier-A update alerts are enabled">
-        Alert poll
-        <select
-          id="pollIntervalSelect"
-          title="Tier-A: how often to re-fetch the snapshot and compare (1h–1D, TradingView-style)"
-        ></select>
-      </label>
-      <button
-        id="notifyBtn"
-        type="button"
-        class="secondary"
-        title="Tier-A: browser notifications when your filtered Qualified table changes (Exchanges, Health, Uniformity, Vol Δ%, Search). Hidden rows do not trigger alerts. Watchlist in/out uses the full qualified set."
-      >
-        Enable update alerts
-      </button>
-      <button
-        id="pushTierBBtn"
-        type="button"
-        class="secondary"
-        hidden
-        title="Tier-B off-device push when the scanner active list gains or loses a coin that matches your Exchanges checkboxes (none checked = all venues). Preferences update when you change filters while subscribed."
-      >
-        List change push…
-      </button>
-      <button
-        id="themeCycleBtn"
-        type="button"
-        class="secondary"
-        title="Cycle theme: system → light → dark (saved in this browser)"
-      >
-        Theme: system
-      </button>
-      <span class="export-toolbar" title="Download the current tab’s filtered rows in the chosen format">
-        <label class="visually-hidden" for="exportFormatSelect">Export format</label>
-        <select
-          id="exportFormatSelect"
-          class="toolbar-select"
-          aria-label="Export format"
-          title="Comma-separated values or JSON array of coin objects"
+    <h1 id="mainHeading" title="Current view">Qualified list</h1>
+    <div class="app-tab-bar">
+      <nav class="app-tabs" role="tablist" aria-label="Main views" title="Qualified table, watchlist, logs, or settings">
+        <button
+          type="button"
+          class="app-tab is-active"
+          role="tab"
+          id="tabQualified"
+          aria-selected="true"
+          aria-controls="mainDataPanel"
+          data-view="qualified"
+          title="Scanner-qualified coins from the latest snapshot (column filters apply)"
         >
-          <option value="csv">CSV</option>
-          <option value="json">JSON</option>
-        </select>
-        <button id="exportBtn" type="button" class="secondary" title="Download export file for the current tab and filters">
-          Export
+          Qualified
         </button>
-      </span>
-      <span class="toolbar-coin-alerts-slot" id="coinAlertsToolbarSlot" title="Qualified-list changes (not scanner ops)">
+        <button
+          type="button"
+          class="app-tab"
+          role="tab"
+          id="tabWatchlist"
+          aria-selected="false"
+          aria-controls="mainDataPanel"
+          data-view="watchlist"
+          title="Symbols you starred; includes rows not in this snapshot so you can remove stars"
+        >
+          Watchlist
+          <span id="watchlistBadge" class="tab-badge" hidden title="Number of starred symbols"></span>
+        </button>
+        <button
+          type="button"
+          class="app-tab"
+          role="tab"
+          id="tabLogs"
+          aria-selected="false"
+          aria-controls="opsPanel"
+          data-view="logs"
+          title="Scanner health, relay, regime, stale snapshot, API budget, and rolling log history"
+        >
+          Logs
+          <span id="opsTabBadge" class="tab-badge tab-badge--alert" hidden title="New log entries since you last opened Logs or marked read">0</span>
+        </button>
+        <button
+          type="button"
+          class="app-tab"
+          role="tab"
+          id="tabSettings"
+          aria-selected="false"
+          aria-controls="settingsPanel"
+          data-view="settings"
+          title="Theme, export, search, and Tier-A / Tier-B notification options"
+        >
+          Settings
+        </button>
+      </nav>
+      <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
         <button
           type="button"
           id="coinAlertsBell"
           class="coin-alerts-bell secondary"
           aria-expanded="false"
-          aria-controls="coinAlertsDrawer"
-          aria-label="Coin list notifications"
-          title="Show or hide messages about symbols added or removed from the qualified list, or watchlist symbols that left the list"
+          aria-haspopup="true"
+          aria-controls="coinAlertsPopover"
+          aria-label="List notifications"
+          title="Open or close messages about symbols added or removed from the qualified list, or watchlist symbols that left the list"
         >
           <svg class="coin-bell-svg" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
             <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
             <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
           </svg>
-          <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread coin-list messages">0</span>
+          <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread list messages">0</span>
         </button>
-      </span>
-    </p>
-    <div id="coinAlertsDrawer" class="coin-alerts-drawer" role="region" aria-label="Coin list notifications" hidden>
-      <div id="diffBanner" class="diff-banner diff-banner--coin" role="status" hidden></div>
-      <div id="watchLeaveBanner" class="watch-banner watch-banner--coin" role="status" hidden>
-        <span id="watchLeaveBannerText"></span>
-        <button
-          type="button"
-          id="watchLeaveBannerDismiss"
-          class="secondary"
-          title="Dismiss this watchlist notice until the set of symbols that left the list changes"
+        <div
+          id="coinAlertsPopover"
+          class="coin-alerts-popover"
+          role="region"
+          aria-label="List notifications"
+          hidden
         >
-          Dismiss
-        </button>
+          <div id="diffBanner" class="diff-banner diff-banner--coin" role="status" hidden></div>
+          <div id="watchLeaveBanner" class="watch-banner watch-banner--coin" role="status" hidden>
+            <span id="watchLeaveBannerText"></span>
+            <button
+              type="button"
+              id="watchLeaveBannerDismiss"
+              class="secondary"
+              title="Dismiss this watchlist notice until the set of symbols that left the list changes"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
       </div>
     </div>
+
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
-      <p class="toolbar filters" title="Search and venue filters apply to the active tab’s table">
-        <label title="Filter rows by symbol or name (case-insensitive substring)">
-          Search
-          <input
-            id="searchInput"
-            type="search"
-            placeholder="Symbol or name"
-            autocomplete="off"
-            title="Filter by symbol or name; combines with exchange and column filters"
-          />
-        </label>
-        <div class="exchange-filter-wrap">
-          <span id="exchangeFilterLabel" class="exchange-filter-label" title="Require listing on at least one checked venue"
-            >Exchanges</span
-          >
-          <details id="exchangeFilterDetails" class="exchange-filter-details">
-            <summary
-              class="exchange-filter-summary"
-              title="Open venue checklist. No boxes checked = all venues. One or more checked = coin must list on at least one of them."
-            >
-              <span id="exchangeFilterSummary">All exchanges</span>
-            </summary>
-            <div
-              class="exchange-filter-panel"
-              role="group"
-              aria-labelledby="exchangeFilterLabel"
-              title="Target exchanges from the scanner"
-            >
-              <label class="exchange-cb-row" title="Require Coinbase listing (or combine with other checked venues)"
-                ><input type="checkbox" data-exchange-cb value="coinbase" /> Coinbase</label
-              >
-              <label class="exchange-cb-row" title="Require Kraken listing (or combine with other checked venues)"
-                ><input type="checkbox" data-exchange-cb value="kraken" /> Kraken</label
-              >
-              <label class="exchange-cb-row" title="Require MEXC listing (or combine with other checked venues)"
-                ><input type="checkbox" data-exchange-cb value="mexc" /> MEXC</label
-              >
-              <div class="exchange-filter-actions">
-                <button
-                  type="button"
-                  id="exchangeFilterSelectAll"
-                  class="secondary"
-                  title="Check Coinbase, Kraken, and MEXC (coins listed on any of them pass the filter)"
-                >
-                  Select all
-                </button>
-                <button type="button" id="exchangeFilterApply" class="secondary" title="Close this menu">
-                  Apply
-                </button>
-              </div>
-            </div>
-          </details>
-        </div>
-      </p>
       <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
       <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
       <div class="table-scroll">
@@ -214,7 +115,8 @@
           <caption class="visually-hidden">
             Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons; 7d and 30d
             columns show gain and a small trend chart (orange line = last close in the window). Star a symbol on the
-            Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row.
+            Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row. Use the
+            Settings tab for export and search.
           </caption>
           <thead>
             <tr>
@@ -246,7 +148,7 @@
                   class="sort-btn"
                   data-sort="g7"
                   aria-label="Sort by 7-day gain"
-                  title="Sort by 7-day % gain (sparkline uses last 7d of 1h closes when present, else last week of daily or a smoothed estimate)"
+                  title="Sort by 7-day % gain (sparkline uses last 7 days of 1h closes when present, else last week of daily or a smoothed estimate)"
                 >
                   7d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>
@@ -332,7 +234,51 @@
                   </select>
                 </div>
               </th>
-              <th scope="col" id="col-exch" title="Per-exchange 24h volume from snapshot">Volume / exchanges</th>
+              <th scope="col" id="col-exch" title="Per-exchange 24h volume and venue filter">
+                <div class="th-split th-split--exch">
+                  <span class="exch-col-heading" title="Volume breakdown by exchange">Volume / exchanges</span>
+                  <div class="exchange-filter-wrap exchange-filter-wrap--th">
+                    <span id="exchangeFilterLabel" class="exchange-filter-label visually-hidden">Exchanges</span>
+                    <details id="exchangeFilterDetails" class="exchange-filter-details">
+                      <summary
+                        class="exchange-filter-summary"
+                        title="Open venue checklist. No boxes checked = all venues. One or more checked = coin must list on at least one of them."
+                      >
+                        <span id="exchangeFilterSummary">All</span>
+                      </summary>
+                      <div
+                        class="exchange-filter-panel"
+                        role="group"
+                        aria-labelledby="exchangeFilterLabel"
+                        title="Target exchanges from the scanner"
+                      >
+                        <label class="exchange-cb-row" title="Require Coinbase listing (or combine with other checked venues)"
+                          ><input type="checkbox" data-exchange-cb value="coinbase" /> Coinbase</label
+                        >
+                        <label class="exchange-cb-row" title="Require Kraken listing (or combine with other checked venues)"
+                          ><input type="checkbox" data-exchange-cb value="kraken" /> Kraken</label
+                        >
+                        <label class="exchange-cb-row" title="Require MEXC listing (or combine with other checked venues)"
+                          ><input type="checkbox" data-exchange-cb value="mexc" /> MEXC</label
+                        >
+                        <div class="exchange-filter-actions">
+                          <button
+                            type="button"
+                            id="exchangeFilterSelectAll"
+                            class="secondary"
+                            title="Check Coinbase, Kraken, and MEXC (coins listed on any of them pass the filter)"
+                          >
+                            Select all
+                          </button>
+                          <button type="button" id="exchangeFilterApply" class="secondary" title="Close this menu">
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              </th>
               <th scope="col" id="col-backtest" title="Chart link and optimizer results when snapshot includes backtest">
                 Backtest
               </th>
@@ -343,13 +289,13 @@
       </div>
     </div>
 
-    <div id="opsPanel" role="tabpanel" aria-labelledby="tabOps" class="ops-panel" hidden>
-      <p class="ops-panel-lead" title="Scanner and relay messages are summarized here and in the history list">
+    <div id="opsPanel" role="tabpanel" aria-labelledby="tabLogs" class="ops-panel" hidden>
+      <p class="ops-panel-lead" title="Scanner and relay messages are summarized here and in the log list">
         Operational messages from the scanner run, relay, regime gate, snapshot age, and API usage. List changes (new
-        or dropped symbols) stay on the Qualified / Watchlist tabs — use the bell in the toolbar.
+        or dropped symbols) use the bell next to the tabs. Log entries older than 24 hours are removed automatically.
       </p>
       <p class="ops-panel-actions">
-        <button type="button" id="opsMarkReadBtn" class="secondary" title="Clear the Alerts tab badge (counts items since you last marked read)">
+        <button type="button" id="opsMarkReadBtn" class="secondary" title="Clear the Logs tab badge (counts entries since you last marked read)">
           Mark all read
         </button>
         <button
@@ -376,9 +322,100 @@
         hidden
       ></div>
       <section class="ops-feed-section" aria-labelledby="opsFeedHeading">
-        <h2 id="opsFeedHeading" class="ops-feed-heading">History</h2>
+        <h2 id="opsFeedHeading" class="ops-feed-heading">Log history (24h)</h2>
         <p id="opsFeedEmpty" class="ops-feed-empty">New snapshot summaries and warnings will appear here after each load.</p>
-        <ul id="opsFeedList" class="ops-feed-list" title="Chronological operational notifications"></ul>
+        <ul id="opsFeedList" class="ops-feed-list" title="Chronological operational log (rolling 24 hours)"></ul>
+      </section>
+    </div>
+
+    <div id="settingsPanel" role="tabpanel" aria-labelledby="tabSettings" class="settings-panel" hidden>
+      <h2 class="settings-panel-title">Settings</h2>
+      <section class="settings-section" aria-labelledby="settingsAlertsHeading">
+        <h3 id="settingsAlertsHeading" class="settings-section-title">Tier-A update alerts</h3>
+        <p class="settings-section-hint">
+          Browser notifications when your filtered Qualified table changes (column filters and search). Watchlist
+          in/out uses the full qualified set.
+        </p>
+        <label class="settings-field">
+          <span class="settings-label">Alert poll</span>
+          <select
+            id="pollIntervalSelect"
+            class="toolbar-select settings-select"
+            title="Tier-A: how often to re-fetch the snapshot and compare (1h–1D, TradingView-style)"
+          ></select>
+        </label>
+        <p class="settings-actions">
+          <button
+            id="notifyBtn"
+            type="button"
+            class="secondary notify-tier-a-btn"
+            title="Tier-A: request permission and enable browser notifications for table changes"
+          >
+            Enable update alerts
+          </button>
+        </p>
+      </section>
+      <section class="settings-section" aria-labelledby="settingsPushHeading">
+        <h3 id="settingsPushHeading" class="settings-section-title">Tier-B list change push</h3>
+        <p class="settings-section-hint">
+          Off-device push when the scanner active list gains or loses a coin that matches your Exchanges filter (none
+          checked = all venues).
+        </p>
+        <p class="settings-actions">
+          <button
+            id="pushTierBBtn"
+            type="button"
+            class="secondary"
+            hidden
+            title="Subscribe or unsubscribe from list-change push notifications"
+          >
+            List change push…
+          </button>
+        </p>
+      </section>
+      <section class="settings-section" aria-labelledby="settingsThemeHeading">
+        <h3 id="settingsThemeHeading" class="settings-section-title">Appearance</h3>
+        <p class="settings-actions">
+          <button
+            id="themeCycleBtn"
+            type="button"
+            class="secondary"
+            title="Cycle theme: system → light → dark (saved in this browser)"
+          >
+            Theme: system
+          </button>
+        </p>
+      </section>
+      <section class="settings-section" aria-labelledby="settingsExportHeading">
+        <h3 id="settingsExportHeading" class="settings-section-title">Export &amp; search</h3>
+        <p class="settings-section-hint">Export uses the current tab and filters. Search applies to the Qualified and Watchlist tables.</p>
+        <div class="settings-export-search-row">
+          <span class="export-toolbar settings-export-toolbar" title="Download the current tab’s filtered rows">
+            <label class="visually-hidden" for="exportFormatSelect">Export format</label>
+            <select
+              id="exportFormatSelect"
+              class="toolbar-select"
+              aria-label="Export format"
+              title="Comma-separated values or JSON array of coin objects"
+            >
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+            </select>
+            <button id="exportBtn" type="button" class="secondary" title="Download export file for the current tab and filters">
+              Export
+            </button>
+          </span>
+          <label class="settings-search-field" title="Filter rows by symbol or name (case-insensitive substring)">
+            <span class="settings-label">Search</span>
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="Symbol or name"
+              autocomplete="off"
+              title="Filter by symbol or name; combines with column filters"
+            />
+          </label>
+        </div>
       </section>
     </div>
 
