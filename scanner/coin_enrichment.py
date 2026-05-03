@@ -10,6 +10,9 @@ from typing import Any
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.signals import generate_indicator_signals
 
+# Dashboard sparklines: separate 7d vs 30d windows at 1h resolution (30 * 24 bars).
+SPARKLINE_HOURLY_MAX_BARS = 30 * 24
+
 
 def attach_rank_movement(final_results: list[dict], previous_rank_map: dict[str, int]) -> None:
     for rank, coin in enumerate(final_results, start=1):
@@ -146,8 +149,8 @@ def attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
     coin["volume_baseline_24h"] = baseline_avg
 
 
-def _hourly_closes_from_scanner_db(db_path: Path, symbol: str, *, max_bars: int = 144) -> list[float]:
-    """Last ``max_bars`` 1h closes (oldest→newest), Telegram chart parity (dedupe ts across exchanges)."""
+def _hourly_closes_from_scanner_db(db_path: Path, symbol: str, *, max_bars: int = SPARKLINE_HOURLY_MAX_BARS) -> list[float]:
+    """Last ``max_bars`` 1h closes (oldest→newest); dedupe timestamp across exchanges."""
     sym = str(symbol or "").strip().upper()
     if not sym or not db_path.is_file():
         return []
@@ -184,10 +187,10 @@ def attach_hourly_sparkline_closes_for_snapshot(
     coins: list[dict[str, Any]],
     scanner_db_path: Path,
     *,
-    max_bars: int = 144,
+    max_bars: int = SPARKLINE_HOURLY_MAX_BARS,
     logger: Any | None = None,
 ) -> None:
-    """Attach ``closes_1h`` for dashboard sparklines (same bar count window as Telegram local charts)."""
+    """Attach ``closes_1h`` (1h OHLCV closes) for dashboard 7d / 30d sparklines."""
     path = Path(scanner_db_path)
     if not coins or not path.is_file():
         return

@@ -144,7 +144,7 @@
         <table class="qualified-grid">
           <caption class="visually-hidden">
             Qualified or watchlist coins from the scanner snapshot. Sort with column header buttons; 7d and 30d
-            columns show gain and a small trend chart (orange line = last close in the window). Star a symbol on the
+            columns show gain and hourly-close trend charts—7d uses up to a week of 1h bars, 30d up to a month (orange line = last close in each window). Star a symbol on the
             Qualified tab to add it to your watchlist. Use #symbol=BTC (or ?symbol=BTC) to highlight a row. Use the
             tab row (search beside the bell) to filter and Settings to export.
           </caption>
@@ -172,24 +172,24 @@
                   Name
                 </button>
               </th>
-              <th scope="col" id="col-g7" title="Seven-day gain and last-week price trend sparkline">
+              <th scope="col" id="col-g7" title="Seven-day gain and 1h-close sparkline (last week on file)">
                 <button
                   type="button"
                   class="sort-btn"
                   data-sort="g7"
                   aria-label="Sort by 7-day gain"
-                  title="Sort by 7-day % gain (sparkline uses the last 7 snapshot daily closes when present, else up to ~7 days of hourly closes, else a smoothed estimate)"
+                  title="Sort by 7-day % gain (sparkline: last up to 168 hourly closes from closes_1h; no synthetic curve)"
                 >
                   7d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>
               </th>
-              <th scope="col" id="col-g30" title="Thirty-day gain and price trend sparkline">
+              <th scope="col" id="col-g30" title="Thirty-day gain and 1h-close sparkline (last month on file)">
                 <button
                   type="button"
                   class="sort-btn"
                   data-sort="g30"
                   aria-label="Sort by 30-day gain"
-                  title="Sort by 30-day % gain (sparkline uses snapshot daily closes when present, else hourly, else a smoothed estimate)"
+                  title="Sort by 30-day % gain (sparkline: last up to 720 hourly closes from closes_1h; no synthetic curve)"
                 >
                   30d <span class="th-sub" aria-hidden="true">· trend</span>
                 </button>

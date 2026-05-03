@@ -51,6 +51,7 @@ from utils.still_qualifying_notify import sync_still_qualifying_scan_message
 from utils.logger import app_logger, maybe_install_structured_json_handler
 from scanner.active_ranking import build_active_ranking_rows
 from scanner.coin_enrichment import (
+    SPARKLINE_HOURLY_MAX_BARS,
     attach_hourly_sparkline_closes_for_snapshot,
     attach_rank_movement,
     attach_signal_age,
@@ -820,7 +821,7 @@ def run_scanner():
                     attach_hourly_sparkline_closes_for_snapshot(
                         final_results,
                         settings.db_paths["scanner"],
-                        max_bars=144,
+                        max_bars=SPARKLINE_HOURLY_MAX_BARS,
                         logger=app_logger,
                     )
                 finished_at = datetime.now(timezone.utc)
