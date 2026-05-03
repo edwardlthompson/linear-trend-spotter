@@ -73,8 +73,11 @@ body {
 
 .table-scroll {
   overflow-x: auto;
+  overflow-y: visible;
   margin: 0 -0.25rem;
   padding: 0 0.25rem;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 h1 {
@@ -961,7 +964,11 @@ table {
 }
 
 table.qualified-grid {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
   border: 1px solid var(--color-border);
+  overflow: visible;
 }
 
 table.qualified-grid th,

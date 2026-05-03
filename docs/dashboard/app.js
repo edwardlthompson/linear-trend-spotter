@@ -1651,26 +1651,33 @@
     return syntheticClosesFromGains(c);
   }
 
-  /** Prefer snapshot daily closes for the 30d column; else hourly strip; else synthetic from gains. */
+  /**
+   * 30d sparkline: snapshot daily closes when present; else **daily-shaped** series from `effectiveCloses30d`
+   * (includes synthetic from gains) so we do not paint the same short `closes_1h` strip as the 7d column.
+   * Hourly strip is only a last resort when no daily series can be built.
+   */
   function effectiveSparklineCloses(c) {
     const raw30 = c.closes_30d;
     if (Array.isArray(raw30) && raw30.length >= 2) {
       const nums = raw30.map((x) => Number(x)).filter((x) => Number.isFinite(x));
       if (nums.length >= 2) return nums;
     }
+    const daily = effectiveCloses30d(c);
+    if (daily.length >= 2) return daily;
+
     const h1 = c.closes_1h;
     if (Array.isArray(h1) && h1.length >= 2) {
       const nums = h1.map((x) => Number(x)).filter((x) => Number.isFinite(x));
       if (nums.length >= 2) return nums;
     }
-    return effectiveCloses30d(c);
+    return daily;
   }
 
   const SPARKLINE_7D_MAX_1H_BARS = 7 * 24;
 
   /**
-   * Series for 7d sparkline: last 7 **daily** closes when `closes_30d` has enough points (calendar week, distinct
-   * from the full daily series used in the 30d column). Else last ~168 hourly closes, else synthetic 7d.
+   * 7d sparkline: last 7 **daily** closes (raw snapshot, else `effectiveCloses30d`) before using `closes_1h`,
+   * so the curve differs from the 30d column whenever a multi-day daily series exists.
    */
   function effectiveSparklineCloses7d(c) {
     const raw30 = c.closes_30d;
@@ -1678,6 +1685,9 @@
       const dnums = raw30.map((x) => Number(x)).filter((x) => Number.isFinite(x));
       if (dnums.length >= 7) return dnums.slice(-7);
     }
+    const daily = effectiveCloses30d(c);
+    if (daily.length >= 7) return daily.slice(-7);
+
     const h1 = c.closes_1h;
     if (Array.isArray(h1) && h1.length >= 2) {
       const nums = h1.map((x) => Number(x)).filter((x) => Number.isFinite(x));
@@ -1685,9 +1695,7 @@
         return nums.length > SPARKLINE_7D_MAX_1H_BARS ? nums.slice(-SPARKLINE_7D_MAX_1H_BARS) : nums.slice();
       }
     }
-    const d30 = effectiveCloses30d(c);
-    if (d30.length >= 7) return d30.slice(-7);
-    if (d30.length >= 2) return d30;
+    if (daily.length >= 2) return daily;
     return syntheticCloses7dFromGain(c);
   }
 
@@ -1887,12 +1895,13 @@
           c.closes_30d
             .map((x) => Number(x))
             .filter((x) => Number.isFinite(x)).length >= 7;
+        const g7FromEffectiveDaily = !g7FromSnapshotDaily && has7dFromDaily;
         const g7Title = g7FromSnapshotDaily
-          ? "7-day % from snapshot; sparkline shows the last 7 daily closes (densified for display when needed); orange line = last close in that window"
-          : has1h
-            ? "7-day % from snapshot; sparkline uses up to the last 168 hourly closes (~7 days; densified when needed); orange line = last close in window"
-            : has7dFromDaily
-              ? "7-day % and price trend from the last week of estimated daily closes (densified when needed)"
+          ? "7-day % from snapshot; sparkline shows the last 7 snapshot daily closes (densified for display when needed); orange line = last close in that window"
+          : g7FromEffectiveDaily
+            ? "7-day % from snapshot; sparkline shows the last 7 daily points from the estimated/snapshot daily series (densified when needed); orange line = last close in window"
+            : has1h
+              ? "7-day % from snapshot; sparkline uses up to the last 168 hourly closes (~7 days; densified when needed); orange line = last close in window"
               : "7-day % from snapshot; short trend estimated from the 7d return then smoothed for display when finer data is absent";
         const spark7 = sparklineSvg(closes7, 168, 44);
         const g7Cell = `<div class="g7-cell" title="${escapeAttr(g7Title)}"><span class="g7-pct"><span class="visually-hidden">7-day gain </span>${g7}%</span>${spark7}</div>`;
@@ -1900,9 +1909,11 @@
         const closes = densifySparklinePoints(rawSpark, SPARKLINE_TARGET_POINTS);
         const g30Title = hasRealDaily
           ? "30-day % from snapshot; sparkline from snapshot daily closes (interpolated for display when needed); orange line = last close in window"
-          : has1h
-            ? "30-day % from snapshot; sparkline uses hourly closes when no daily series (interpolated for display); orange line = last close in window"
-            : "30-day % from snapshot; trend estimated from 7d/30d returns then smoothed for display; orange line = last close in window";
+          : has7dFromDaily
+            ? "30-day % from snapshot; sparkline from estimated daily series (same basis as 7d window; interpolated for display); orange line = last close in window"
+            : has1h
+              ? "30-day % from snapshot; sparkline uses hourly closes only when no daily series exists (interpolated for display); orange line = last close in window"
+              : "30-day % from snapshot; trend estimated from 7d/30d returns then smoothed for display; orange line = last close in window";
         const spark = sparklineSvg(closes, 168, 44);
         const g30Cell = `<div class="g30-cell" title="${escapeAttr(g30Title)}"><span class="g30-pct"><span class="visually-hidden">30-day gain </span>${g30pct}%</span>${spark}</div>`;
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
