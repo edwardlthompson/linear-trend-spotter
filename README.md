@@ -1,7 +1,7 @@
 # Linear Trend Spotter
 
 <p align="center">
-  <img src="docs/dashboard/icons/app-icon.svg" width="96" height="96" alt="Linear Trend Spotter — trend mark" />
+  <img src="docs/dashboard/icons/icon-192.png" width="96" height="96" alt="Linear Trend Spotter — trend mark" />
 </p>
 
 Automated full-exchange scanner focused on identifying sustained trend quality (not one-candle pumps), with integrated multi-strategy backtesting to validate and rank opportunities before alerting.

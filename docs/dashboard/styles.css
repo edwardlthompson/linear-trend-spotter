@@ -612,15 +612,114 @@ html[data-theme="dark"] tr.coin-row--watchlist-only td {
 
 .api-budget-list {
   margin: 0;
-  padding-left: 1.15rem;
+  padding: 0;
+  list-style: none;
 }
 
-.api-budget-list li {
-  margin-bottom: 0.5rem;
+.api-budget-item {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.api-budget-list li:last-child {
+.api-budget-item:last-child {
   margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.api-budget-rowhead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.api-budget-meta {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.api-budget-bar-track {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--color-muted) 35%, transparent);
+  overflow: hidden;
+  margin: 0.25rem 0 0.35rem;
+}
+
+.api-budget-bar-track--thin {
+  height: 6px;
+  margin: 0.15rem 0 0;
+  flex: 1;
+  min-width: 4rem;
+}
+
+.api-budget-bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  min-width: 0;
+  transition: width 0.25s ease;
+}
+
+.api-budget-bar-fill.budget-meter--ok {
+  background-color: #15803d;
+}
+
+.api-budget-bar-fill.budget-meter--warn {
+  background-color: #ca8a04;
+}
+
+.api-budget-bar-fill.budget-meter--danger {
+  background-color: #b91c1c;
+}
+
+.api-budget-bar-fill.budget-meter--neutral {
+  background-color: color-mix(in srgb, var(--color-muted) 55%, var(--color-border));
+}
+
+.api-budget-bar-fill--share {
+  background-color: color-mix(in srgb, var(--color-accent, #ea580c) 75%, var(--color-muted));
+  opacity: 0.9;
+}
+
+.api-budget-breakdown {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.api-budget-br-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(4rem, 40%);
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.api-budget-br-label {
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-budget-br-count {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.api-budget-risk {
+  margin: 0.15rem 0 0.25rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .api-budget-sub {

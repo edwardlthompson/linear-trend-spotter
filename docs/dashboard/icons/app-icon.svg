@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Linear Trend Spotter">
-  <!-- High-contrast mark for 1632px favicons: one stroke + one dot -->
+  <!-- High-contrast mark for 16-32px favicons: one stroke + one dot -->
   <rect width="512" height="512" rx="112" fill="#0f172a"/>
   <line
     x1="108"

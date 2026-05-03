@@ -1412,31 +1412,59 @@
       const cap = capRaw != null ? Number(capRaw) : 0;
       const name = escapeHtml(s.name != null ? String(s.name) : String(s.id || "API"));
       const pricing = String(s.pricing_url || "").trim();
-      const sub =
-        Array.isArray(s.breakdown) && s.breakdown.length
-          ? s.breakdown
-              .map((b) => `${escapeHtml(String(b.suffix || "?"))}: ${Math.round(Number(b.count) || 0)}`)
-              .join(", ")
-          : "";
       let riskClass = "budget-meter--neutral";
       let riskText;
+      let barPct = 0;
       if (cap > 0 && Number.isFinite(cap)) {
         const perScanPct = (n / cap) * 100;
+        barPct = Math.min(100, perScanPct);
         const projectedPct = ((n * scansPerMonth) / cap) * 100;
         if (projectedPct >= 100) riskClass = "budget-meter--danger";
         else if (projectedPct >= 70) riskClass = "budget-meter--warn";
         else riskClass = "budget-meter--ok";
-        riskText = `Projected ~${projectedPct.toFixed(1)}% of monthly cap if every scan matches this load (~${scansPerMonth.toFixed(0)} scans/mo at ${intervalMin}m interval). This scan alone: ${perScanPct.toFixed(3)}% of cap.`;
+        riskText = `Projected ~${projectedPct.toFixed(1)}% of monthly cap if every scan matches this load (~${scansPerMonth.toFixed(0)} scans/mo at ${intervalMin}m interval). This scan: ${perScanPct.toFixed(2)}% of cap (${n} / ${Math.round(cap)} HTTP).`;
       } else {
         riskText =
-          "Configure monthly HTTP caps in the scanner (SCAN_COSTS + per-vendor cap settings) to see a green/yellow/red traffic-light vs overage risk.";
+          "Configure monthly HTTP caps in the scanner (SCAN_COSTS + per-vendor cap settings) to see usage vs limit on the bar and green/yellow/red risk.";
       }
       const riskTitle = escapeAttr(riskText);
-      let li = `<li title="${riskTitle}"><strong>${name}</strong>: ${n} HTTP this scan`;
-      if (sub) li += `<br/><span class="api-budget-sub">${sub}</span>`;
-      li += `<br/><span class="${riskClass}" title="${riskTitle}">${escapeHtml(riskText)}</span>`;
+      const capLabel =
+        cap > 0 && Number.isFinite(cap)
+          ? `${n} HTTP this scan · monthly cap ${Math.round(cap)} HTTP`
+          : `${n} HTTP this scan · no monthly cap in snapshot`;
+      const ariaMax = cap > 0 && Number.isFinite(cap) ? Math.round(cap) : 0;
+      const overCap = ariaMax > 0 && n > ariaMax;
+      const ariaNow = ariaMax > 0 ? Math.min(n, ariaMax) : 0;
+      const progressAttrs =
+        cap > 0 && Number.isFinite(cap) && !overCap
+          ? ` role="progressbar" aria-valuemin="0" aria-valuemax="${ariaMax}" aria-valuenow="${ariaNow}" aria-label="${escapeAttr(name)}: ${n} of ${ariaMax} HTTP this scan"`
+          : cap > 0 && Number.isFinite(cap) && overCap
+            ? ` role="img" aria-label="${escapeAttr(name)}: ${n} HTTP this scan, over monthly cap of ${ariaMax}"`
+            : ` role="img" aria-label="${escapeAttr(name)}: ${n} HTTP this scan (set a monthly cap to show limit bar)"`;
+
+      const breakdown = Array.isArray(s.breakdown) ? s.breakdown : [];
+      let breakdownHtml = "";
+      if (breakdown.length && n > 0) {
+        const rows = [];
+        for (const b of breakdown) {
+          const suf = escapeHtml(String(b.suffix || "?"));
+          const c = Math.round(Number(b.count) || 0);
+          const share = Math.min(100, (c / n) * 100);
+          rows.push(
+            `<li class="api-budget-br-row"><span class="api-budget-br-label" title="${escapeAttr(suf)}">${suf}</span><span class="api-budget-br-count">${c}</span><div class="api-budget-bar-track api-budget-bar-track--thin" title="${c} of ${n} HTTP this scan"><div class="api-budget-bar-fill api-budget-bar-fill--share" style="width:${share.toFixed(1)}%"></div></div></li>`,
+          );
+        }
+        breakdownHtml = `<ul class="api-budget-breakdown">${rows.join("")}</ul>`;
+      }
+
+      const fillStyle =
+        cap > 0 && Number.isFinite(cap) ? `width:${barPct.toFixed(2)}%` : "width:0%";
+      let li = `<li class="api-budget-item"><div class="api-budget-rowhead"><strong>${name}</strong><span class="api-budget-meta">${escapeHtml(capLabel)}</span></div>`;
+      li += `<div class="api-budget-bar-track"${progressAttrs}><div class="api-budget-bar-fill ${riskClass}" style="${fillStyle}"></div></div>`;
+      li += `<p class="api-budget-risk ${riskClass}" title="${riskTitle}">${escapeHtml(riskText)}</p>`;
+      li += breakdownHtml;
       if (pricing) {
-        li += `<br/><a href="${escapeAttr(pricing)}" class="api-budget-link" rel="noopener noreferrer" target="_blank" title="Open vendor pricing page">Vendor pricing</a>`;
+        li += `<a href="${escapeAttr(pricing)}" class="api-budget-link" rel="noopener noreferrer" target="_blank" title="Open vendor pricing page">Vendor pricing</a>`;
       }
       li += `</li>`;
       items.push(li);
