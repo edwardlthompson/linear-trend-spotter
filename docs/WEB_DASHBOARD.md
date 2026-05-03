@@ -6,6 +6,8 @@ For **Telegram vs website-only delivery** (snapshots, env vars, Render), see **[
 
 The static UI under `docs/dashboard/` loads **only** the JSON snapshot written by the Render worker (`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`, `PUBLIC_QUALIFIED_SNAPSHOT_FILE`). Browsers must **not** call market APIs.
 
+Default URL is set in `docs/dashboard/config.js` (`window.__SNAPSHOT_URL__`) or overridden with **`?api=`** on the dashboard URL. A collapsible **Data source** control in the UI can expose URL/reload without cluttering the header.
+
 ## Local preview
 
 From the repo root, serve the dashboard folder and pass the snapshot URL (any HTTPS or local file server that returns JSON):
@@ -17,13 +19,32 @@ python -m http.server 8765
 
 Open `http://localhost:8765/?api=https%3A%2F%2Fyour-snapshot-relay.example%2Fqualified_public_snapshot.json` (use the **snapshot relay** GET URL, not the background worker).
 
-## Dashboard UI extensions
+## Current grid and columns
 
-See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md): exchange column + filter, 7d / vol acceleration, Tier-A notifications scoped to **filtered** rows, name-click **modal** for backtest JSON. Snapshot (`field_set` **`full`**) must include `listed_on`, `exchange_volumes`, acceleration fields — implemented in `utils/scan_artifacts.build_public_qualified_snapshot`.
+The **Qualified** and **Watchlist** tabs render a **single logical table** with these behaviors:
 
-**Sort & filters (refresh-safe):** Column sort, **Health ≥** chips, **Search**, and **Exchanges** (multi-select: Coinbase, Kraken, MEXC — matches scanner `TARGET_EXCHANGES`) are stored in **`localStorage`** (`qualified_dash_ui_*` keys, exchanges as `qualified_dash_ui_exchanges_json`) and restored on load. Theme and **Alert poll** interval were already persisted separately.
+- **One row per coin per venue** for the scanner’s target exchanges (Coinbase, Kraken, MEXC): rows are derived from `listed_on` and/or `exchange_volumes` in the snapshot. The **Name** column shows the venue in parentheses (e.g. `Jito (Coinbase)`). **Exchange** shows the venue label; **24h vol** shows that venue’s approximate USD volume from `exchange_volumes`.
+- **7d %** and **30d %** are numeric gain columns (sort keys `g7pct`, `g30pct`). **7d chart** and **30d chart** show `closes_1h` sparklines (high/low reference lines and orange last-close). Beside each chart, **% distance of last close below the window high** is shown; those columns sort independently (`g7hi`, `g30hi`).
+- **Uniformity** and **Health** have header **minimum** filters (Health includes **≥ 60**, **≥ 65**, **≥ 70**). **Vol Δ%** has acceleration filters. **24h vol** has a **floor** filter: **≥ $100k**, **$500k**, **$1M**, **$10M** (applies to the row’s venue volume).
+- **Exchange** header holds the **multi-select** checklist: no boxes checked = all venues; one or more checked = only rows whose **Exchange** matches a checked venue (row-level filter, not “coin listed on any of these”).
+- **Backtest**: when the snapshot includes data, **Chart** / **Results** open links or a modal; there is no separate “expand row” sheet for OHLCV.
 
-**Tier-A notifications** compare the **fully filtered** qualified list (including exchange checkboxes) between polls, so e.g. only **Coinbase**-listed rows can trigger “New / Out” alerts when that filter is active.
+Snapshot **`field_set: full`** should include `listed_on`, `exchange_volumes`, `closes_1h`, gains, health, uniformity, and acceleration fields where you want charts and filters populated — built in `utils/scan_artifacts.build_public_qualified_snapshot`.
+
+See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md) for longer-term ideas; it may lag the live UI.
+
+## Sort, filters, and persistence (refresh-safe)
+
+Column sorts, **Health** / **Uniformity** / **Vol Δ%** / **24h vol** / **Exchange** filters, **search** query, **active tab**, **Tier-A poll interval**, and **theme** are stored in **`localStorage`** (`qualified_dash_ui_*` keys; exchanges as `qualified_dash_ui_exchanges_json`; volume floor as `qualified_dash_ui_vol_min_usd`) and restored on load.
+
+The header **search** is width-capped (similar to a typical desktop search bar) and matches **symbol**, **name**, and **venue label** substrings (case-insensitive, debounced).
+
+**Tier-A update alerts** (Settings → enable notifications + **Alert poll**) compare the **fully filtered view** between polls, including exchange and volume floor filters. The stored baseline is a JSON array of **row keys** `SYMBOL|exchangeId` (`qualified_dash_poll_filtered_rows_v2`), so duplicate symbols on different venues are tracked separately. A separate digest can fire a **“snapshot refreshed”** notification when the JSON body changes but the filtered row set does not.
+
+## Logs and API budget
+
+- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, optional **`api_cost_panel`** block when the scanner runs with scan-cost reporting (`SCAN_COSTS_ENABLED` / snapshot `api_cost_panel`), and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
+- **Settings** tab: duplicates the same **API usage & budget** panel when `api_cost_panel` is present, so meters are visible without opening Logs.
 
 ## GitHub Pages (Q6)
 
@@ -45,9 +66,9 @@ Alternatively, configure CORS on another HTTPS host (static headers, reverse pro
 
 Implemented under `docs/dashboard/`:
 
-- **Manifest & icons:** `manifest.webmanifest`, `icons/icon-192.png`, `icons/icon-512.png` (regenerate with `python scripts/gen_dashboard_pwa_icons.py` if you change sizes or colors).
+- **Manifest & icons:** `manifest.webmanifest`, PNG icons under `icons/`, optional **`icons/app-icon.svg`** as the primary **favicon** (`rel="icon"`). Regenerate PNGs with `python scripts/gen_dashboard_pwa_icons.py` if you change sizes or colors. **`launch_handler`** with **`client_mode: "navigate-existing"`** asks supporting browsers to reuse one desktop app window when possible.
 - **Service worker:** `sw.js` — static shell **cache-first**; same-origin `*.json` **network-only**. Cross-origin snapshot URLs (typical Render/GitHub setup) are **not** handled by this SW, so the qualified list is never served from an asset cache. After editing cached files, bump **`CACHE_VERSION`** inside `sw.js` so clients drop old caches.
-- **Tier-A alerts:** **Enable update alerts** in the UI requests notification permission, registers the SW, then polls the snapshot URL on the interval you choose in **Alert poll** — **1h, 2h, 3h, 4h, 6h, 8h, 12h, or 1D** (TradingView-style steps; default **1h**). The choice is stored in `localStorage` as `qualified_dash_poll_interval_ms`. The tab also rechecks when it becomes visible again (`visibilitychange`). A **SHA-256** digest of the snapshot body is compared to the previous fetch (`qualified_dash_last_snap_digest`); on change, **`registration.showNotification`** is used when the SW is active.
+- **Tier-A alerts:** **Enable update alerts** requests notification permission, registers the SW, then polls the snapshot URL on the interval chosen in **Alert poll** — **1h, 2h, 3h, 4h, 6h, 8h, 12h, or 1D** (default **1h**). Stored as `qualified_dash_poll_interval_ms`. The tab also refetches when it becomes visible again (`visibilitychange`). Notifications use **`registration.showNotification`** with **absolute** `icon` / `badge` URLs (better on Android), optional vibration, filtered-row diff and/or body-digest “refresh” messaging, and `qualified_dash_last_poll_snapshot_digest` to avoid duplicate refresh toasts.
 - **iOS Safari:** Web Notifications are limited; users often need **Add to Home Screen** and a user gesture. The dashboard shows a short hint if permission is not granted.
 
 ### Tier-B Web Push (Q21)
@@ -67,7 +88,7 @@ Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere),
 
 **Dashboard**
 
-- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **Enable list-change push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits).
+- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **List change push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits).
 
 **Privacy / rate**
 
@@ -78,18 +99,18 @@ Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere),
 
 The dashboard compares the current snapshot symbol set to the previous successful load (`localStorage`). A status banner summarizes **new** and **dropped** symbols and any **`schema_version`** change; rows that are new since the last visit show a **New** badge. Clear site data for the origin to reset the baseline.
 
-## Sort, health filter, and search (Q11–Q12)
+## Layout and deep links
 
-Column headers sort the in-memory table (toggle direction on repeat clicks). **Health ≥** chips filter by `health_score`. The search box filters symbols and names (substring, debounced). All are client-side only; the snapshot JSON is still fetched on the same cadence as before (Load button + optional 15-minute alerts).
+- The main layout keeps header, tabs, and meta above a **scrollable table region**; **column headers are sticky** within that region so coin rows scroll underneath.
+- **Deep links:** Append **`#symbol=BTC`** or **`?symbol=BTC`** (symbol only) to focus and briefly **highlight all rows** for that symbol after data loads; focusing a coin row updates the hash via **`replaceState`** (no extra history entries).
 
-## Theme, export, deep links, a11y, chart thumb (Q15–Q19)
+## Theme, export, a11y (Q15–Q19)
 
 - **Theme:** **Theme** cycles **system** (follows `prefers-color-scheme`), **light**, and **dark**; choice is stored as `qualified_dash_theme` in `localStorage`. The `<meta name="theme-color" id="themeColorMeta">` tag updates for mobile browser chrome.
-- **Export:** **Export CSV** / **Export JSON** download the **current filtered and sorted** row set only; nothing is uploaded.
-- **Deep links:** Append **`#symbol=BTC`** or **`?symbol=BTC`** (symbol only) to focus and briefly highlight a row after data loads; focusing a coin row updates the hash via **`replaceState`** (no extra history entries).
+- **Export:** **Export** (CSV or JSON) downloads the **current filtered and sorted view**, including **per-venue rows**. CSV includes `row_exchange`, `row_vol_24h_usd`, and chart **% below window high** columns; JSON adds `dashboard_row_*` and `dashboard_chart_*` fields on each exported coin object (watchlist-only placeholder rows stay minimal).
 - **Accessibility:** Table **`caption`** (visually hidden), sortable **`aria-sort`**, header **`scope`/`id`** and cell **`headers`**, **`prefers-reduced-motion`** in CSS, visible **`:focus-visible`** on controls.
-- **Chart image:** If a coin includes **`chart_image_url`** (`https://` only, optional in **`field_set: full`** snapshot), the expanded row shows a lazy-loaded image. Cross-origin images must allow this origin (**`Access-Control-Allow-Origin`**) or the image may fail to paint in the browser.
+- **Backtest chart image:** If a coin includes **`chart_image_url`** (`https://` only, optional in **`field_set: full`** snapshot), the modal may show a lazy-loaded image. Cross-origin images must allow this origin (**`Access-Control-Allow-Origin`**) or the image may fail to paint in the browser.
 
 ## Scan health strip (Q20)
 
-When the worker writes **`scan_duration_s`**, **`coins_evaluated`**, and/or **`errors_count`** on the snapshot (enabled with **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** and a non-empty qualified list), the dashboard shows a read-only **`#healthStrip`** below the stale banner. Older or hand-made JSON without these keys leaves the strip hidden.
+When the worker writes **`scan_duration_s`**, **`coins_evaluated`**, and/or **`errors_count`** on the snapshot (enabled with **`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`** and a non-empty qualified list), the dashboard shows a read-only **`#healthStrip`** (Logs tab telemetry cluster). Older or hand-made JSON without these keys leaves the strip hidden.
