@@ -832,14 +832,14 @@ def run_scanner():
                     if isinstance(v, bool) or not isinstance(v, (int, float)):
                         continue
                     err_total += int(v)
-                api_cost_panel = None
-                if settings.scan_costs_enabled:
-                    api_cost_panel = build_api_cost_panel_for_snapshot(
-                        metrics.get_summary(),
-                        coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
-                        polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
-                        cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
-                    )
+                # Always embed HTTP usage counts from this scan (metrics H0/J3) so the dashboard
+                # can show per-vendor bars; SCAN_COSTS_ENABLED only gates the separate scan_costs.json artifact.
+                api_cost_panel = build_api_cost_panel_for_snapshot(
+                    metrics.get_summary(),
+                    coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
+                    polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
+                    cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
+                )
                 write_public_qualified_snapshot(
                     settings.DATA_DIR,
                     settings.public_qualified_snapshot_file,

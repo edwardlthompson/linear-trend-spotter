@@ -47,7 +47,7 @@
     },
     "api_cost_panel": {
       "type": "object",
-      "description": "When SCAN_COSTS_ENABLED: last-scan HTTP usage per provider + optional monthly caps (dashboard)",
+      "description": "Last-scan HTTP usage per provider (metrics) + optional monthly caps for dashboard meters",
       "properties": {
         "schema_version": { "type": "integer" },
         "note": { "type": "string" },

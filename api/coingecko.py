@@ -166,21 +166,28 @@ class CoinGeckoClient:
         coin_id: str,
         *,
         exchange_ids: Optional[str] = None,
+        page: Optional[int] = None,
     ) -> Optional[Dict]:
         """Get tickers for a coin (exchange volume data).
 
         When ``exchange_ids`` is set (comma-separated CG exchange identifiers),
         CoinGecko returns only those venues—smaller payloads, same HTTP cost as
         an unfiltered call.
+
+        Results are paginated (100 tickers per page). Pass ``page`` (1-based) to
+        fetch later pages when merging volumes across many pairs.
         """
         self.logger.debug("Fetching tickers for %s", coin_id)
-        params: Optional[dict[str, str]] = None
+        params: dict[str, str] = {}
         if exchange_ids and str(exchange_ids).strip():
-            params = {"exchange_ids": str(exchange_ids).strip()}
+            params["exchange_ids"] = str(exchange_ids).strip()
+        if page is not None and int(page) >= 1:
+            params["page"] = str(int(page))
+        req_params: Optional[dict[str, str]] = params or None
         # Non-critical endpoint in this pipeline: fail fast to avoid scan stalls
         return self._make_request(
             f"{self.base_url}/coins/{coin_id}/tickers",
-            params=params,
+            params=req_params,
             max_retries=1,
             max_backoff_seconds=10,
         )

@@ -1,7 +1,7 @@
 /**
  * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
  * stale banner; theme (Q15); export CSV/JSON (Q16); deep links (Q17); a11y (Q18);
- * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); Qualified / Watchlist / Logs / Settings tabs; coin bell popover; rolling 24h ops log. 7d/30d sparklines from `closes_1h` only (last 168 vs 720 hourly bars). Snapshot URL from ?api=… or window.__SNAPSHOT_URL__ in config.js (no URL field in UI).
+ * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); Qualified / Watchlist / Logs / Settings tabs; coin bell popover; rolling 24h ops log. 7d/30d sparklines from `closes_1h` (7d only when ≥168 bars; 30d uses last 720 hourly bars). Watchlist pins are `SYMBOL|venue` row keys. Snapshot URL from ?api=… or window.__SNAPSHOT_URL__ in config.js (no URL field in UI).
  */
 (function () {
   /** TradingView-style steps from 1h through 1D (Tier-A browser poll; not server scan rate). */
@@ -43,8 +43,10 @@
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
   const LS_UI_EXCHANGES_JSON = "qualified_dash_ui_exchanges_json";
-  /** Uppercase symbols — user watch list; transitions vs full snapshot qualified set (not table filters). */
+  /** Uppercase symbols — legacy watch list only (migrated once to row keys). */
   const LS_PINNED_SYMBOLS_JSON = "qualified_dash_pinned_symbols_json";
+  /** Watch pins: `SYMBOL|exchangeId` (e.g. `PENDLE|coinbase`) so each venue row is independent. */
+  const LS_PINNED_ROW_KEYS_JSON = "qualified_dash_pinned_row_keys_json";
   /** Maps symbol → was qualified on last snapshot (boolean). */
   const LS_PINNED_WAS_QUALIFIED_JSON = "qualified_dash_pinned_was_qualified_json";
   /** ``qualified`` | ``watchlist`` | ``logs`` | ``settings`` — which main tab is active. */
@@ -427,7 +429,7 @@
 
   function updateWatchlistBadge() {
     if (!elWatchlistBadge) return;
-    const n = getPinnedSet().size;
+    const n = getPinnedRowKeySet().size;
     elWatchlistBadge.textContent = n ? String(n) : "";
     elWatchlistBadge.hidden = n === 0;
   }
@@ -830,22 +832,108 @@
       .replace(/\s+/g, "");
   }
 
-  function getPinnedSet() {
-    try {
-      const raw = localStorage.getItem(LS_PINNED_SYMBOLS_JSON);
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw);
-      if (!Array.isArray(arr)) return new Set();
-      return new Set(arr.map((s) => normalizeWatchSymbol(s)).filter(Boolean));
-    } catch {
-      return new Set();
+  function normalizeRowPinKey(raw) {
+    const s = String(raw || "").trim();
+    const i = s.indexOf("|");
+    if (i === -1) {
+      const sym = normalizeWatchSymbol(s);
+      return sym ? `${sym}|` : "";
     }
+    const sym = normalizeWatchSymbol(s.slice(0, i));
+    const ex = s.slice(i + 1).trim().toLowerCase();
+    if (!sym) return "";
+    return ex ? `${sym}|${ex}` : `${sym}|`;
   }
 
-  function persistPinnedSet(set) {
-    const sorted = [...set].sort();
-    if (!sorted.length) localStorage.removeItem(LS_PINNED_SYMBOLS_JSON);
-    else localStorage.setItem(LS_PINNED_SYMBOLS_JSON, JSON.stringify(sorted));
+  function parseRowPinKey(key) {
+    const s = String(key || "").trim();
+    const i = s.indexOf("|");
+    if (i === -1) return { sym: normalizeWatchSymbol(s), ex: "" };
+    return { sym: normalizeWatchSymbol(s.slice(0, i)), ex: s.slice(i + 1).trim().toLowerCase() };
+  }
+
+  function rowViewPinKey(r) {
+    const sym = normalizeWatchSymbol(r.coin && r.coin.symbol);
+    const ex = r.exchangeId ? String(r.exchangeId).trim().toLowerCase() : "";
+    return ex ? `${sym}|${ex}` : `${sym}|`;
+  }
+
+  function rowPinKeyDisplayLabel(key) {
+    const { sym, ex } = parseRowPinKey(key);
+    if (!sym) return String(key || "");
+    if (!ex) return sym;
+    const lab = EXCHANGE_LABELS[ex] || ex;
+    return `${sym} (${lab})`;
+  }
+
+  function migrateLegacyPinsToRowKeys(coins, legacySymbols) {
+    const bySym = new Map();
+    for (const c of coins) {
+      if (c && !c._watchlist_only) bySym.set(String(c.symbol || "").toUpperCase(), c);
+    }
+    const keys = new Set();
+    for (const item of legacySymbols) {
+      const sym = normalizeWatchSymbol(item);
+      if (!sym) continue;
+      const hit = bySym.get(sym);
+      if (!hit) {
+        keys.add(`${sym}|`);
+        continue;
+      }
+      const rows = explodeCoinRowsForTable([hit]).filter((row) => !row.coin._watchlist_only);
+      for (const row of rows) {
+        if (row.exchangeId) keys.add(`${sym}|${row.exchangeId}`);
+      }
+      if (!rows.length) keys.add(`${sym}|`);
+    }
+    const sorted = [...keys].sort();
+    if (sorted.length) localStorage.setItem(LS_PINNED_ROW_KEYS_JSON, JSON.stringify(sorted));
+    else localStorage.removeItem(LS_PINNED_ROW_KEYS_JSON);
+    localStorage.removeItem(LS_PINNED_SYMBOLS_JSON);
+  }
+
+  /** Pinned table row keys `SYMBOL|venue` (after optional one-time migration from symbol-only storage). */
+  function getPinnedRowKeySet() {
+    const coins = Array.isArray(lastPayload?.coins) ? lastPayload.coins : [];
+    try {
+      const rawNew = localStorage.getItem(LS_PINNED_ROW_KEYS_JSON);
+      if (rawNew) {
+        const arr = JSON.parse(rawNew);
+        if (Array.isArray(arr) && arr.length) {
+          return new Set(arr.map(normalizeRowPinKey).filter(Boolean));
+        }
+      }
+    } catch {
+      /* fall through */
+    }
+    try {
+      const rawLeg = localStorage.getItem(LS_PINNED_SYMBOLS_JSON);
+      if (rawLeg && coins.length) {
+        const leg = JSON.parse(rawLeg);
+        if (Array.isArray(leg) && leg.length) {
+          migrateLegacyPinsToRowKeys(coins, leg);
+          const raw2 = localStorage.getItem(LS_PINNED_ROW_KEYS_JSON);
+          if (raw2) {
+            const arr2 = JSON.parse(raw2);
+            if (Array.isArray(arr2) && arr2.length) {
+              return new Set(arr2.map(normalizeRowPinKey).filter(Boolean));
+            }
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return new Set();
+  }
+
+  function persistPinnedRowKeys(set) {
+    const sorted = [...set].map(normalizeRowPinKey).filter(Boolean).sort();
+    if (!sorted.length) {
+      localStorage.removeItem(LS_PINNED_ROW_KEYS_JSON);
+      return;
+    }
+    localStorage.setItem(LS_PINNED_ROW_KEYS_JSON, JSON.stringify(sorted));
   }
 
   function readPinnedWasQualObject() {
@@ -866,17 +954,18 @@
   }
 
   /**
-   * Compare each pinned symbol against the full qualified set (unfiltered). Updates stored was-qualified map.
+   * Compare each pinned row key against the full qualified set (by symbol). Updates stored was-qualified map.
    * First time a pin appears in storage it baselines without enter/leave.
    */
   function reconcilePinnedQualifiedState(currSet) {
-    const pinned = [...getPinnedSet()];
+    const pinned = [...getPinnedRowKeySet()];
     const raw = readPinnedWasQualObject();
     const entered = [];
     const left = [];
     const pinSet = new Set(pinned);
     for (const p of pinned) {
-      const nowQ = currSet.has(p);
+      const { sym } = parseRowPinKey(p);
+      const nowQ = sym ? currSet.has(sym) : false;
       if (!Object.prototype.hasOwnProperty.call(raw, p)) {
         raw[p] = nowQ;
         continue;
@@ -895,30 +984,32 @@
     return { entered, left };
   }
 
-  function bootstrapPinStateForSymbol(sym) {
-    const s = normalizeWatchSymbol(sym);
-    if (!s || !lastPayload) return;
+  function bootstrapPinStateForRowKey(rowKey) {
+    const k = normalizeRowPinKey(rowKey);
+    if (!k || !lastPayload) return;
+    const { sym } = parseRowPinKey(k);
+    if (!sym) return;
     const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
     const currSet = new Set(coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean));
     const raw = readPinnedWasQualObject();
-    raw[s] = currSet.has(s);
+    raw[k] = currSet.has(sym);
     writePinnedWasQualObject(raw);
   }
 
-  function togglePin(rawSym) {
-    const s = normalizeWatchSymbol(rawSym);
-    if (!s) return;
-    const set = getPinnedSet();
-    if (set.has(s)) {
-      set.delete(s);
+  function togglePinRow(rawKey) {
+    const k = normalizeRowPinKey(rawKey);
+    if (!k) return;
+    const set = getPinnedRowKeySet();
+    if (set.has(k)) {
+      set.delete(k);
       const raw = readPinnedWasQualObject();
-      delete raw[s];
+      delete raw[k];
       writePinnedWasQualObject(raw);
     } else {
-      set.add(s);
-      bootstrapPinStateForSymbol(s);
+      set.add(k);
+      bootstrapPinStateForRowKey(k);
     }
-    persistPinnedSet(set);
+    persistPinnedRowKeys(set);
     if (lastPayload) {
       applyTableView();
       updateWatchlistBadge();
@@ -951,7 +1042,8 @@
       return;
     }
     elWatchLeaveBanner.hidden = false;
-    elWatchLeaveBannerText.textContent = `Watched symbols left the qualified list: ${left.join(", ")}`;
+    const leftLbl = left.map((k) => rowPinKeyDisplayLabel(k)).join(", ");
+    elWatchLeaveBannerText.textContent = `Watched rows left the qualified list: ${leftLbl}`;
     syncCoinBellBadge();
   }
 
@@ -1225,36 +1317,44 @@
     });
   }
 
-  function getWatchlistCoinRows() {
+  /** One table row per pinned `SYMBOL|venue` key (same shape as `explodeCoinRowsForTable`). */
+  function getWatchlistViewRows() {
     if (!lastPayload) return [];
     const coins = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
     const bySym = new Map();
     for (const c of coins) {
-      bySym.set(String(c.symbol || "").toUpperCase(), c);
+      if (c && !c._watchlist_only) bySym.set(String(c.symbol || "").toUpperCase(), c);
     }
-    const pinned = [...getPinnedSet()].sort((a, b) => a.localeCompare(b));
-    return pinned.map((sym) => {
+    const pinned = [...getPinnedRowKeySet()].sort((a, b) => a.localeCompare(b));
+    return pinned.map((key) => {
+      const { sym, ex } = parseRowPinKey(key);
       const hit = bySym.get(sym);
-      if (hit) return hit;
+      if (hit) {
+        const ev = hit.exchange_volumes && typeof hit.exchange_volumes === "object" ? hit.exchange_volumes : {};
+        const exKey = ex || null;
+        const volUsd = exKey ? parseVolUsd(ev[exKey]) : null;
+        return { coin: hit, exchangeId: exKey, volUsd };
+      }
       return {
-        symbol: sym,
-        name: "",
-        gains: {},
-        listed_on: [],
-        _watchlist_only: true,
+        coin: {
+          symbol: sym,
+          name: "",
+          gains: {},
+          listed_on: ex ? [ex] : [],
+          _watchlist_only: true,
+        },
+        exchangeId: ex || null,
+        volUsd: null,
       };
     });
   }
 
   function getFilteredSortedViewRows() {
     if (!lastPayload) return [];
-    const base =
+    const exploded =
       activeView === "watchlist"
-        ? getWatchlistCoinRows()
-        : Array.isArray(lastPayload.coins)
-          ? lastPayload.coins
-          : [];
-    const exploded = explodeCoinRowsForTable(base);
+        ? getWatchlistViewRows()
+        : explodeCoinRowsForTable(Array.isArray(lastPayload.coins) ? lastPayload.coins : []);
     const filtered = applyFiltersToViewRows(exploded);
     const copy = filtered.slice();
     sortViewRowsInPlace(copy);
@@ -1830,11 +1930,11 @@
     return nums.length >= 2 ? nums : null;
   }
 
-  /** Last week of real hourly closes only (no synthetic). */
+  /** Last 7 full days of hourly closes only; omit chart if fewer than 168 bars (no 30d slice). */
   function effectiveSparklineCloses7d(c) {
     const nums = hourlyClosesNumeric(c);
-    if (!nums) return [];
-    return nums.length > SPARKLINE_1H_BARS_7D ? nums.slice(-SPARKLINE_1H_BARS_7D) : nums.slice();
+    if (!nums || nums.length < SPARKLINE_1H_BARS_7D) return [];
+    return nums.slice(-SPARKLINE_1H_BARS_7D);
   }
 
   /** Last 30 days of real hourly closes only (no synthetic). */
@@ -1992,7 +2092,7 @@
       let msg;
       if (activeView === "watchlist") {
         msg =
-          getPinnedSet().size === 0
+          getPinnedRowKeySet().size === 0
             ? "Your watchlist is empty. On the Qualified tab, click the star next to a symbol to add it here."
             : "No watchlist rows match the current filters.";
       } else {
@@ -2006,11 +2106,22 @@
         const rawSym = String(c.symbol || "").toUpperCase();
         const watchOnly = c._watchlist_only === true;
         if (watchOnly) {
+          const pk = rowViewPinKey(r);
           const sym = escapeHtml(String(c.symbol || ""));
-          const pinLabel = `Remove ${rawSym} from watchlist`;
-          const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">\u2605</button>`;
+          const pinLab = rowPinKeyDisplayLabel(pk);
+          const pinLabel = `Remove ${pinLab} from watchlist`;
+          const pinBtn = `<button type="button" class="pin-btn" data-pin-key="${escapeAttr(pk)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">\u2605</button>`;
           const dash = '<span class="cell-muted">\u2014</span>';
-          return `<tr class="coin-row coin-row--watchlist-only" data-symbol="${escapeAttr(rawSym)}">
+          const exchTitle = r.exchangeId ? EXCHANGE_LABELS[r.exchangeId] || r.exchangeId : "";
+          const venueCell =
+            r.exchangeId && exchTitle
+              ? `<span class="venue-cell" title="${escapeAttr(`Watchlist pin for ${exchTitle}`)}">${escapeHtml(exchTitle)}</span>`
+              : dash;
+          const exAttr = r.exchangeId ? escapeAttr(r.exchangeId) : "";
+          const isPinEnter = pinEnterSet.has(pk);
+          const wlRowClass = ["coin-row", "coin-row--watchlist-only"];
+          if (isPinEnter) wlRowClass.push("coin-row--pin-enter");
+          return `<tr class="${wlRowClass.join(" ")}" data-symbol="${escapeAttr(rawSym)}" data-exchange="${exAttr}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong></span></td>
           <td headers="col-name"><span class="cell-muted" title="Symbol not in the current qualified snapshot">Not in snapshot</span></td>
           <td headers="col-g7pct" class="num">${dash}</td>
@@ -2020,13 +2131,14 @@
           <td headers="col-uniformity" class="num">${dash}</td>
           <td headers="col-health" class="num">${dash}</td>
           <td headers="col-volaccel" class="num">${dash}</td>
-          <td headers="col-venue" class="exch-col">${dash}</td>
+          <td headers="col-venue" class="exch-col">${venueCell}</td>
           <td headers="col-vol24h" class="num">${dash}</td>
           <td headers="col-backtest">${dash}</td>
         </tr>`;
         }
-        const isPinned = pinnedSet.has(rawSym);
-        const isPinEnter = pinEnterSet.has(rawSym);
+        const pk = rowViewPinKey(r);
+        const isPinned = pinnedSet.has(pk);
+        const isPinEnter = pinEnterSet.has(pk);
         const rowClasses = ["coin-row"];
         if (isPinned) rowClasses.push("coin-row--pinned");
         if (isPinEnter) rowClasses.push("coin-row--pin-enter");
@@ -2043,7 +2155,7 @@
         const g7Title = !hSeries
           ? "7-day % from snapshot; no hourly closes_1h series in this snapshot for a chart"
           : nHour < SPARKLINE_1H_BARS_7D
-            ? `7-day % from snapshot; sparkline plots ${rawSpark7.length} hourly closes on file (full week = ${SPARKLINE_1H_BARS_7D} bars); orange line = last close in window`
+            ? `7-day % from snapshot; 7d chart needs ${SPARKLINE_1H_BARS_7D} hourly closes (have ${nHour}) — chart hidden`
             : `7-day % from snapshot; sparkline plots last ${SPARKLINE_1H_BARS_7D} hourly closes (1h bars); orange line = last close in window`;
         const g30Title = !hSeries
           ? "30-day % from snapshot; no hourly closes_1h series in this snapshot for a chart"
@@ -2076,9 +2188,10 @@
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
-        const pinLabel = isPinned ? `Remove ${rawSym} from watchlist` : `Add ${rawSym} to watchlist`;
+        const pinLab = rowPinKeyDisplayLabel(pk);
+        const pinLabel = isPinned ? `Remove ${pinLab} from watchlist` : `Add ${pinLab} to watchlist`;
         const pinChar = isPinned ? "\u2605" : "\u2606";
-        const pinBtn = `<button type="button" class="pin-btn" data-symbol="${escapeAttr(rawSym)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">${pinChar}</button>`;
+        const pinBtn = `<button type="button" class="pin-btn" data-pin-key="${escapeAttr(pk)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">${pinChar}</button>`;
         const venueCell =
           r.exchangeId && exchTitle
             ? `<span class="venue-cell" title="${escapeAttr(`24h volume row for ${exchTitle}`)}">${escapeHtml(exchTitle)}</span>`
@@ -2107,7 +2220,7 @@
   function applyTableView() {
     if (!lastPayload) return;
     const filtered = getFilteredSortedViewRows();
-    const pinned = getPinnedSet();
+    const pinned = getPinnedRowKeySet();
     elTbody.innerHTML = renderRowsHtml(filtered, pinned, pinEnterFlashSet);
     updateSortHeaderClasses();
     applyHashHighlight();
@@ -2241,7 +2354,7 @@
     if (notifyAlertsEnabled) {
       alertSuffix = ` · Tier-A update alerts on (${pollIntervalHumanPhrase(getPollIntervalMs())})`;
     }
-    const nWatch = getPinnedSet().size;
+    const nWatch = getPinnedRowKeySet().size;
     const watchHint = nWatch ? ` · ${nWatch} watched` : "";
     const snapExtra = snapshotMetaSuffix;
     snapshotMetaSuffix = "";
@@ -2308,7 +2421,8 @@
       if (pinBtn) {
         ev.preventDefault();
         ev.stopPropagation();
-        togglePin(pinBtn.getAttribute("data-symbol") || "");
+        const pk = pinBtn.getAttribute("data-pin-key") || pinBtn.getAttribute("data-symbol") || "";
+        togglePinRow(pk);
         return;
       }
       const sheetBtn = ev.target.closest(".bt-sheet-btn");
@@ -2470,9 +2584,11 @@
     const filteredSet = new Set(
       filtered.map((r) => String(r.coin.symbol || "").toUpperCase()).filter(Boolean),
     );
-    const enteredFiltered = entered
-      .map((s) => String(s || "").toUpperCase())
-      .filter((s) => filteredSet.has(s));
+    const enteredFiltered = [
+      ...new Set(
+        entered.map((k) => parseRowPinKey(String(k || "")).sym).filter((s) => s && filteredSet.has(s)),
+      ),
+    ];
     const parts = [];
     if (enteredFiltered.length) {
       parts.push(
@@ -2480,7 +2596,8 @@
       );
     }
     if (left.length) {
-      parts.push(`Out: ${left.slice(0, 12).join(", ")}${left.length > 12 ? "…" : ""}`);
+      const leftLbl = left.slice(0, 12).map((k) => rowPinKeyDisplayLabel(k));
+      parts.push(`Out: ${leftLbl.join(", ")}${left.length > 12 ? "…" : ""}`);
     }
     if (!parts.length) return;
     const body = `Watch · ${parts.join(" · ")}`;

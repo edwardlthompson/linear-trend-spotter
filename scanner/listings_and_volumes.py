@@ -111,7 +111,19 @@ def hydrate_exchange_volumes_from_coingecko(
         by_gid[gid_key].append(coin)
 
     for gid_key, group in by_gid.items():
-        tickers = gecko.get_tickers(gid_key, exchange_ids=ticker_exchange_csv)
+        merged: list[dict[str, Any]] = []
+        max_pages = 12
+        for page in range(1, max_pages + 1):
+            chunk = gecko.get_tickers(gid_key, exchange_ids=ticker_exchange_csv, page=page)
+            if not chunk or not isinstance(chunk.get("tickers"), list):
+                break
+            batch = chunk["tickers"]
+            if not batch:
+                break
+            merged.extend(batch)
+            if len(batch) < 100:
+                break
+        tickers = {"tickers": merged} if merged else None
         if tickers:
             volumes = process_tickers(tickers, target_exchanges)
             for c in group:

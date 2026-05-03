@@ -115,7 +115,7 @@ def build_api_cost_panel_for_snapshot(
     return {
         "schema_version": 1,
         "note": (
-            "Per-source HTTP request counts from this scan (metrics H0/J3). "
+            "Per-source HTTP request counts from this scan (metrics H0/J3); included in every public snapshot. "
             "Optional monthly_budget_http is your configured cap; use pricing_url to map plans/credits."
         ),
         "sources": sources,
