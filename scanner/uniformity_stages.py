@@ -11,6 +11,57 @@ from scanner.regime_filter import evaluate_regime_gate
 from utils.insights import compute_data_reliability
 
 
+def _fetch_hourly_ohlcv_for_uniformity(
+    coin: dict[str, Any],
+    *,
+    cache: Any,
+    gecko: Any,
+    history_fallback: Any,
+    cache_price_hours: int,
+    uniformity_days: int,
+    source_order: tuple[str, ...],
+) -> tuple[list[dict[str, Any]] | None, str]:
+    """Try hourly OHLCV sources in ``source_order`` (cache then live API for each)."""
+    sym = str(coin.get("symbol") or "").strip().upper()
+    cg_id = str(coin.get("cg_id") or "").strip().lower()
+    if not sym or not cg_id:
+        return None, "none"
+
+    for src in source_order:
+        if src == "coingecko":
+            found, cached_rows = cache.get_ohlcv_rows(
+                "coingecko", sym, "1h", max_age_hours=cache_price_hours
+            )
+            if found and cached_rows:
+                return cached_rows, "coingecko_cache"
+            api_rows = gecko.get_hourly_ohlcv(cg_id, days=max(30, uniformity_days))
+            if api_rows:
+                cache.cache_ohlcv_rows("coingecko", sym, "1h", api_rows, source="coingecko_api")
+                return api_rows, "coingecko_api"
+        elif src == "polygon":
+            found_polygon, cached_polygon_rows = cache.get_ohlcv_rows(
+                "polygon", sym, "1h", max_age_hours=cache_price_hours
+            )
+            if found_polygon and cached_polygon_rows:
+                return cached_polygon_rows, "polygon_cache"
+            polygon_rows = history_fallback.get_polygon_30d_hourly_ohlcv(sym)
+            if polygon_rows:
+                cache.cache_ohlcv_rows("polygon", sym, "1h", polygon_rows, source="polygon_api")
+                return polygon_rows, "polygon_api"
+        elif src == "cmc":
+            found_cmc, cached_cmc_rows = cache.get_ohlcv_rows(
+                "cmc", sym, "1h", max_age_hours=cache_price_hours
+            )
+            if found_cmc and cached_cmc_rows:
+                return cached_cmc_rows, "cmc_cache"
+            cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(sym, days=max(30, uniformity_days))
+            if cmc_hourly:
+                cache.cache_ohlcv_rows("cmc", sym, "1h", cmc_hourly, source="cmc_api")
+                return cmc_hourly, "cmc_api"
+
+    return None, "none"
+
+
 def compute_uniformities_from_ohlcv(
     coins_with_cg_ids: list[dict[str, Any]],
     *,
@@ -48,50 +99,19 @@ def compute_uniformities_from_ohlcv(
     app_logger.info(f"\n   Cached: {len(cached_coins)}, Need fetching: {len(uncached_coins)}")
 
     uniformity_days = settings.uniformity_period
+    ohlcv_order = settings.ohlcv_uniformity_source_order
     for i, coin in enumerate(uncached_coins, 1):
         app_logger.info(f"\n   [{i}/{len(uncached_coins)}] {coin['symbol']}")
 
-        ohlcv_source = "none"
-        found, cached_rows = cache.get_ohlcv_rows(
-            "coingecko", coin["symbol"], "1h", max_age_hours=settings.cache_price_hours
+        hourly_rows, ohlcv_source = _fetch_hourly_ohlcv_for_uniformity(
+            coin,
+            cache=cache,
+            gecko=gecko,
+            history_fallback=history_fallback,
+            cache_price_hours=settings.cache_price_hours,
+            uniformity_days=uniformity_days,
+            source_order=ohlcv_order,
         )
-        hourly_rows = cached_rows if found and cached_rows else None
-        if hourly_rows:
-            ohlcv_source = "coingecko_cache"
-        else:
-            api_rows = gecko.get_hourly_ohlcv(coin["cg_id"], days=max(30, uniformity_days))
-            if api_rows:
-                cache.cache_ohlcv_rows("coingecko", coin["symbol"], "1h", api_rows, source="coingecko_api")
-                hourly_rows = api_rows
-                ohlcv_source = "coingecko_api"
-
-        if not hourly_rows:
-            found_polygon, cached_polygon_rows = cache.get_ohlcv_rows(
-                "polygon", coin["symbol"], "1h", max_age_hours=settings.cache_price_hours
-            )
-            if found_polygon and cached_polygon_rows:
-                hourly_rows = cached_polygon_rows
-                ohlcv_source = "polygon_cache"
-            else:
-                polygon_rows = history_fallback.get_polygon_30d_hourly_ohlcv(coin["symbol"])
-                if polygon_rows:
-                    cache.cache_ohlcv_rows("polygon", coin["symbol"], "1h", polygon_rows, source="polygon_api")
-                    hourly_rows = polygon_rows
-                    ohlcv_source = "polygon_api"
-
-        if not hourly_rows:
-            found_cmc, cached_cmc_rows = cache.get_ohlcv_rows(
-                "cmc", coin["symbol"], "1h", max_age_hours=settings.cache_price_hours
-            )
-            if found_cmc and cached_cmc_rows:
-                hourly_rows = cached_cmc_rows
-                ohlcv_source = "cmc_cache"
-            else:
-                cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(coin["symbol"], days=max(30, uniformity_days))
-                if cmc_hourly:
-                    cache.cache_ohlcv_rows("cmc", coin["symbol"], "1h", cmc_hourly, source="cmc_api")
-                    hourly_rows = cmc_hourly
-                    ohlcv_source = "cmc_api"
 
         if not hourly_rows:
             app_logger.info("      ⏳ No OHLCV data available - will retry next scan")

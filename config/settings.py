@@ -65,6 +65,7 @@ class Settings:
             'CACHE_GECKO_ID_DAYS': 30,
             'CACHE_EXCHANGE_HOURS': 24,
             'CACHE_PRICE_HOURS': 12,
+            'OHLCV_UNIFORMITY_SOURCE_ORDER': 'coingecko,polygon,cmc',
             'CIRCUIT_FAILURE_THRESHOLD': 5,
             'CIRCUIT_RECOVERY_TIMEOUT': 60,
             'BACKTEST_ENABLED': True,
@@ -203,6 +204,17 @@ class Settings:
             errors.append("TOP_COINS_PROVIDER must be one of: cmc, coingecko")
         else:
             normalized['TOP_COINS_PROVIDER'] = provider
+
+        _src_order_raw = str(normalized.get("OHLCV_UNIFORMITY_SOURCE_ORDER", "coingecko,polygon,cmc")).strip()
+        _src_parts = [p.strip().lower() for p in _src_order_raw.split(",") if p.strip()]
+        _allowed_ohlcv = {"coingecko", "polygon", "cmc"}
+        if len(_src_parts) != 3 or set(_src_parts) != _allowed_ohlcv:
+            errors.append(
+                "OHLCV_UNIFORMITY_SOURCE_ORDER must list each of coingecko, polygon, cmc exactly once "
+                "(comma-separated; default coingecko,polygon,cmc)",
+            )
+        else:
+            normalized["OHLCV_UNIFORMITY_SOURCE_ORDER"] = ",".join(_src_parts)
 
         for bool_key in [
             'ENTRY_NOTIFICATIONS',
@@ -570,6 +582,16 @@ class Settings:
     @property
     def cache_price_hours(self) -> int:
         return self._config.get('CACHE_PRICE_HOURS', 12)
+
+    @property
+    def ohlcv_uniformity_source_order(self) -> tuple[str, ...]:
+        """Order to try hourly OHLCV sources for uniformity (cache then live API per source)."""
+        raw = str(self._config.get("OHLCV_UNIFORMITY_SOURCE_ORDER", "coingecko,polygon,cmc")).strip()
+        parts = tuple(p.strip().lower() for p in raw.split(",") if p.strip())
+        allowed = {"coingecko", "polygon", "cmc"}
+        if len(parts) == 3 and set(parts) == allowed:
+            return parts
+        return ("coingecko", "polygon", "cmc")
     
     @property
     def circuit_failure_threshold(self) -> int:
