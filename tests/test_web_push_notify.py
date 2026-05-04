@@ -1,6 +1,6 @@
 """Tests for Tier-B web push copy (qualified entry/exit)."""
 
-from scanner.web_push_notify import build_qualified_change_push_copy, listed_on_for_push
+from scanner.web_push_notify import _coin_push_row, build_qualified_change_push_copy, listed_on_for_push
 
 
 def test_build_push_copy_entry_only():
@@ -39,3 +39,16 @@ def test_listed_on_infer_from_volumes():
         }
     )
     assert lo == ["kraken"]
+
+
+def test_coin_push_row_includes_exit_reason():
+    row = _coin_push_row(
+        {
+            "symbol": "sol",
+            "listed_on": ["kraken"],
+            "exit_reason": "Uniformity score below threshold (52.1 < 55)",
+        }
+    )
+    assert row is not None
+    assert row["symbol"] == "SOL"
+    assert row["exit_reason"].startswith("Uniformity score below threshold")

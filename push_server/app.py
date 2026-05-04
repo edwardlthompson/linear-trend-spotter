@@ -22,7 +22,6 @@ from pywebpush import WebPushException, webpush
 
 from push_server.notify_filtering import (
     filter_events_for_subscriber,
-    format_change_body,
     normalize_notify_exchange_ids,
 )
 
@@ -115,6 +114,36 @@ def _envelope_endpoint(env: dict[str, Any]) -> str | None:
     if isinstance(sub, dict):
         return str(sub.get("endpoint") or "").strip() or None
     return None
+
+
+def _trim(text: str, limit: int) -> str:
+    value = str(text or "").strip()
+    if len(value) <= limit:
+        return value
+    return value[: max(0, limit - 1)] + "…"
+
+
+def _entry_notification_payload(coin: dict[str, Any], url: str) -> dict[str, str]:
+    sym = str(coin.get("symbol", "")).upper().strip() or "UNKNOWN"
+    return {
+        "title": _trim(f"Qualified entry: {sym}", 120),
+        "body": _trim(f"{sym} entered the qualified list.", 240),
+        "url": _trim(url, 2000),
+    }
+
+
+def _exit_notification_payload(coin: dict[str, Any], url: str) -> dict[str, str]:
+    sym = str(coin.get("symbol", "")).upper().strip() or "UNKNOWN"
+    reason = str(coin.get("exit_reason", "")).strip()
+    if reason:
+        body = f"{sym} exited the qualified list. Reason: {reason}"
+    else:
+        body = f"{sym} exited the qualified list."
+    return {
+        "title": _trim(f"Qualified exit: {sym}", 120),
+        "body": _trim(body, 240),
+        "url": _trim(url, 2000),
+    }
 
 
 def _dedupe_merge_envelope(subs: list[dict[str, Any]], new_env: dict[str, Any]) -> list[dict[str, Any]]:
@@ -211,40 +240,47 @@ def notify_scan():
         if not isinstance(sub_info, dict) or not sub_info.get("endpoint"):
             continue
         notify_ids = normalize_notify_exchange_ids(env.get("notify_exchanges"))
+        payloads: list[dict[str, str]]
         if structured:
             ent_f, ext_f = filter_events_for_subscriber(notify_ids, entered_coins, exited_coins)
             if not ent_f and not ext_f:
                 kept.append(env)
                 continue
-            msg = format_change_body(ent_f, ext_f)
-            title = title_default
+            payloads = []
+            for coin in ent_f:
+                payloads.append(_entry_notification_payload(coin, url))
+            for coin in ext_f:
+                payloads.append(_exit_notification_payload(coin, url))
         else:
-            title = title_default
-            msg = msg_default
+            payloads = [{"title": title_default, "body": msg_default, "url": url}]
 
-        payload = json.dumps({"title": title, "body": msg, "url": url}, separators=(",", ":"))
-        try:
-            webpush(
-                subscription_info=sub_info,
-                data=payload,
-                vapid_private_key=vapid_private,
-                vapid_claims={"sub": f"mailto:{vapid_email}"},
-                ttl=86400,
-            )
-            sent += 1
-            kept.append(env)
-        except WebPushException as e:
-            status = getattr(e.response, "status_code", None) if e.response else None
-            if status in (404, 410):
-                removed += 1
-                continue
-            _logger.warning("webpush failed: %s", e)
-            failed += 1
-            kept.append(env)
-        except Exception as e:
-            _logger.warning("webpush error: %s", e)
-            failed += 1
-            kept.append(env)
+        endpoint_removed = False
+        for event_payload in payloads:
+            payload = json.dumps(event_payload, separators=(",", ":"))
+            try:
+                webpush(
+                    subscription_info=sub_info,
+                    data=payload,
+                    vapid_private_key=vapid_private,
+                    vapid_claims={"sub": f"mailto:{vapid_email}"},
+                    ttl=86400,
+                )
+                sent += 1
+            except WebPushException as e:
+                status = getattr(e.response, "status_code", None) if e.response else None
+                if status in (404, 410):
+                    removed += 1
+                    endpoint_removed = True
+                    break
+                _logger.warning("webpush failed: %s", e)
+                failed += 1
+            except Exception as e:
+                _logger.warning("webpush error: %s", e)
+                failed += 1
+
+        if endpoint_removed:
+            continue
+        kept.append(env)
 
     with _lock:
         _save_subscriptions(kept)

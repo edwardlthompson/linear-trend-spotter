@@ -46,7 +46,11 @@ def _coin_push_row(coin: Mapping[str, Any] | None) -> dict[str, Any] | None:
     sym = str(coin.get("symbol", "")).upper().strip()
     if not sym:
         return None
-    return {"symbol": sym, "listed_on": listed_on_for_push(coin)}
+    row: dict[str, Any] = {"symbol": sym, "listed_on": listed_on_for_push(coin)}
+    exit_reason = str(coin.get("exit_reason", "")).strip()
+    if exit_reason:
+        row["exit_reason"] = exit_reason
+    return row
 
 
 def _post_notify_payload(payload: dict[str, Any]) -> bool:
