@@ -37,15 +37,13 @@ Future dashboard milestones are tracked in [`EXECUTION_PLAN.md`](EXECUTION_PLAN.
 
 ## Sort, filters, and persistence (refresh-safe)
 
-Column sorts, **Health** / **Uniformity** / **Vol Δ%** / **24h vol** / **Exchange** filters, **search** query, **active tab**, **Tier-A poll interval**, and **theme** are stored in **`localStorage`** (`qualified_dash_ui_*` keys; exchanges as `qualified_dash_ui_exchanges_json`; volume floor as `qualified_dash_ui_vol_min_usd`) and restored on load.
+Column sorts, **Health** / **Uniformity** / **Vol Δ%** / **24h vol** / **Exchange** filters, **active tab**, **Tier-A poll interval**, and **theme** are stored in **`localStorage`** (`qualified_dash_ui_*` keys; exchanges as `qualified_dash_ui_exchanges_json`; volume floor as `qualified_dash_ui_vol_min_usd`) and restored on load.
 
-The header **search** is width-capped (similar to a typical desktop search bar) and matches **symbol**, **name**, and **venue label** substrings (case-insensitive, debounced).
-
-**Tier-A update alerts** (Settings → enable notifications + **Alert poll**) compare the **fully filtered view** between polls, including exchange and volume floor filters. The stored baseline is a JSON array of **row keys** `SYMBOL|exchangeId` (`qualified_dash_poll_filtered_rows_v2`), so duplicate symbols on different venues are tracked separately. A separate digest can fire a **“snapshot refreshed”** notification when the JSON body changes but the filtered row set does not.
+**Tier-A update alerts** (Settings → enable notifications + **Alert poll**) compare the **fully filtered view** between polls, including exchange and volume floor filters. The stored baseline is a JSON array of **row keys** `SYMBOL|exchangeId` (`qualified_dash_poll_filtered_rows_v2`), so duplicate symbols on different venues are tracked separately. Notifications fire only when that filtered row set **changes** (add/remove), not when the JSON body updates but your filtered table is unchanged.
 
 ## Logs and API budget
 
-- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, **`api_cost_panel`** (per-scan HTTP counts; CoinGecko/CMC **vendor credits** when keys allow `/key` fetches), and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
+- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, **`api_cost_panel`** (per-scan HTTP counts; CoinGecko/CMC **vendor credits** when keys allow `/key` fetches; CoinGecko Demo plans are often quoted at **10,000** monthly credits and **30** req/min), and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
 - **Settings** tab: duplicates the same **API usage & budget** panel when `api_cost_panel` is present, so meters are visible without opening Logs.
 
 ## GitHub Pages (Q6)
@@ -70,7 +68,7 @@ Implemented under `docs/dashboard/`:
 
 - **Manifest & icons:** `manifest.webmanifest`, PNG icons under `icons/`, optional **`icons/app-icon.svg`** as the primary **favicon** (`rel="icon"`). Regenerate PNGs with `python scripts/gen_dashboard_pwa_icons.py` if you change sizes or colors. **`launch_handler`** with **`client_mode: "navigate-existing"`** asks supporting browsers to reuse one desktop app window when possible.
 - **Service worker:** `sw.js` — static shell **cache-first**; same-origin `*.json` **network-only**. Cross-origin snapshot URLs (typical Render/GitHub setup) are **not** handled by this SW, so the qualified list is never served from an asset cache. After editing cached files, bump **`CACHE_VERSION`** inside `sw.js` so clients drop old caches.
-- **Tier-A alerts:** **Enable update alerts** requests notification permission, registers the SW, then polls the snapshot URL on the interval chosen in **Alert poll** — **1h, 2h, 3h, 4h, 6h, 8h, 12h, or 1D** (default **1h**). Stored as `qualified_dash_poll_interval_ms`. The tab also refetches when it becomes visible again (`visibilitychange`). Notifications use **`registration.showNotification`** with **absolute** `icon` / `badge` URLs (better on Android), optional vibration, filtered-row diff and/or body-digest “refresh” messaging, and `qualified_dash_last_poll_snapshot_digest` to avoid duplicate refresh toasts.
+- **Tier-A alerts:** **Enable update alerts** requests notification permission, registers the SW, then polls the snapshot URL on the interval chosen in **Alert poll** — **1h, 2h, 3h, 4h, 6h, 8h, 12h, or 1D** (default **1h**). Stored as `qualified_dash_poll_interval_ms`. The tab also refetches when it becomes visible again (`visibilitychange`). Notifications use **`registration.showNotification`** with **absolute** `icon` / `badge` URLs (better on Android), optional vibration, and **filtered-row add/remove** messaging. `qualified_dash_last_poll_snapshot_digest` tracks snapshot identity for internal use; there is no separate “snapshot refreshed” toast when only metadata changes.
 - **iOS Safari:** Web Notifications are limited; users often need **Add to Home Screen** and a user gesture. The dashboard shows a short hint if permission is not granted.
 
 ### Tier-B Web Push (Q21)

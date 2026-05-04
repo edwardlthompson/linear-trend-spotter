@@ -72,6 +72,7 @@ body {
 body.dashboard-body {
   display: flex;
   flex-direction: column;
+  align-items: center;
   box-sizing: border-box;
   min-height: 100dvh;
   max-height: 100dvh;
@@ -82,8 +83,20 @@ body.dashboard-body {
   padding: clamp(0.5rem, 1.25vw, 1.25rem);
 }
 
-.dashboard-body > .site-header-bar,
-.dashboard-body > .app-tab-bar {
+.dashboard-body > .dashboard-shell {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  max-width: min(100%, calc(100vw - 1.5rem));
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.dashboard-shell > .site-header-bar,
+.dashboard-shell > .app-tab-bar {
   flex-shrink: 0;
 }
 
@@ -91,9 +104,9 @@ body.dashboard-body {
   flex-shrink: 0;
 }
 
-.dashboard-body > .site-footer {
+.dashboard-shell > .site-footer {
   flex-shrink: 0;
-  margin-top: auto;
+  margin-top: 0.75rem;
 }
 
 .dashboard-main-stack {
@@ -167,9 +180,11 @@ h1 {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.45rem;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-width: 0;
+  margin-left: auto;
 }
 
 .app-tab-bar {
@@ -362,8 +377,14 @@ button.coin-alerts-feed-dismiss:hover {
 }
 
 .settings-panel {
-  width: 100%;
-  max-width: 100%;
+  width: auto;
+  max-width: min(40rem, 100%);
+  box-sizing: border-box;
+}
+
+.dashboard-shell .ops-panel {
+  width: auto;
+  max-width: min(40rem, 100%);
   box-sizing: border-box;
 }
 
@@ -1221,11 +1242,11 @@ table {
 }
 
 table.qualified-grid {
-  width: 100%;
+  width: auto;
   min-width: 0;
   max-width: 100%;
   border: 1px solid var(--color-border);
-  overflow: visible;
+  overflow: hidden;
   table-layout: auto;
 }
 
@@ -1263,10 +1284,16 @@ table.qualified-grid tbody td {
   justify-content: flex-end;
   gap: 0.35rem;
   flex-wrap: nowrap;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .spark-cell-chart {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 10.5rem;
+  overflow: hidden;
 }
 
 .spark-from-high {
@@ -1280,8 +1307,11 @@ table.qualified-grid tbody td {
 }
 
 .spark-td {
-  min-width: clamp(9rem, 22vw, 12.5rem);
+  max-width: 12rem;
   width: 1%;
+  overflow: hidden;
+  box-sizing: border-box;
+  vertical-align: middle;
 }
 
 table.qualified-grid thead th {
@@ -1408,8 +1438,10 @@ a {
 .spark-svg {
   display: block;
   color: var(--color-link);
-  max-width: min(168px, 100%);
+  width: 100%;
+  max-width: 168px;
   height: auto;
+  box-sizing: border-box;
 }
 
 .spark-svg .spark-line-main {
@@ -1678,10 +1710,6 @@ html[data-theme="light"] .spark-svg .spark-hilo-line {
 html[data-theme="dark"] .tab-badge--alert {
   background: #ea580c;
   color: #fff;
-}
-
-.ops-panel {
-  max-width: none;
 }
 
 .ops-panel-lead {

@@ -1,5 +1,5 @@
 /**
- * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter/search;
+ * Qualified-coin dashboard (Milestones Q4, Q7–Q19): snapshot JSON; sort/filter;
  * stale banner; theme (Q15); export CSV/JSON (Q16); deep links (Q17); a11y (Q18);
  * optional chart thumb (Q19); scan health strip (Q20); tier-A alerts; tier-B Web Push (Q21); Qualified / Watchlist / Logs / Settings tabs; coin bell popover; rolling 24h ops log. 7d/30d sparklines from `closes_1h` (7d only when ≥168 bars; 30d uses last 720 hourly bars). Watchlist pins are `SYMBOL|venue` row keys. Snapshot URL from ?api=… or window.__SNAPSHOT_URL__ in config.js (no URL field in UI).
  */
@@ -39,7 +39,6 @@
   const LS_UI_VOL_ACCEL = "qualified_dash_ui_vol_accel";
   /** Minimum 24h volume (USD) on the row’s venue; empty = no floor. */
   const LS_UI_VOL_MIN_USD = "qualified_dash_ui_vol_min_usd";
-  const LS_UI_SEARCH = "qualified_dash_ui_search";
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
   const LS_UI_EXCHANGES_JSON = "qualified_dash_ui_exchanges_json";
@@ -62,7 +61,6 @@
   /** Persisted qualified-list enter/exit lines for the bell dropdown (newest appended). */
   const LS_COIN_ALERT_FEED_JSON = "qualified_dash_coin_alert_feed_v1";
   const COIN_ALERT_FEED_MAX = 50;
-  const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
   /** Treat snapshot timestamps before this as invalid for age/stale (epoch placeholders, corrupt data). */
@@ -222,7 +220,6 @@
   const elOpsTabBadge = document.getElementById("opsTabBadge");
   const elNotify = document.getElementById("notifyBtn");
   const elPollInterval = document.getElementById("pollIntervalSelect");
-  const elSearch = document.getElementById("searchInput");
   const elThemeCycle = document.getElementById("themeCycleBtn");
   const elExportBtn = document.getElementById("exportBtn");
   const elExportFormatSelect = document.getElementById("exportFormatSelect");
@@ -251,8 +248,6 @@
   let filterVolAccel = "";
   /** @type {number | null} minimum 24h volume USD on the row’s venue */
   let filterVolMinUsd = null;
-  let searchQuery = "";
-  let searchDebounceTimer = null;
   /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
   /** @type {Set<string>} */
   let filterExchangeSet = new Set();
@@ -328,7 +323,6 @@
       else localStorage.setItem(LS_UI_VOL_ACCEL, filterVolAccel);
       if (filterVolMinUsd == null) localStorage.removeItem(LS_UI_VOL_MIN_USD);
       else localStorage.setItem(LS_UI_VOL_MIN_USD, String(filterVolMinUsd));
-      localStorage.setItem(LS_UI_SEARCH, searchQuery);
       if (filterExchangeSet.size === 0) {
         localStorage.removeItem(LS_UI_EXCHANGES_JSON);
         localStorage.removeItem(LS_UI_EXCHANGE);
@@ -375,8 +369,6 @@
         const vn = Number(vmin);
         if (Number.isFinite(vn) && VOL_MIN_FILTER_OPTIONS.some((o) => o.v === vn)) filterVolMinUsd = vn;
       }
-      const sq = localStorage.getItem(LS_UI_SEARCH);
-      if (sq != null) searchQuery = sq;
       filterExchangeSet = new Set();
       const exJson = localStorage.getItem(LS_UI_EXCHANGES_JSON);
       if (exJson) {
@@ -544,7 +536,6 @@
 
   populatePollIntervalSelect();
   restoreUiPreferences();
-  if (elSearch) elSearch.value = searchQuery;
   syncHealthMinSelect();
   syncUniformityMinSelect();
   syncVolAccelFilterSelect();
@@ -1110,11 +1101,9 @@
   function formatUsdVolDisplay(val) {
     if (val == null || val === "" || val === "N/A") return "—";
     if (typeof val === "number" && Number.isFinite(val)) {
-      const x = Math.abs(val);
-      if (x >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
-      if (x >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
-      if (x >= 1e3) return `$${(val / 1e3).toFixed(1)}k`;
-      return `$${val.toFixed(0)}`;
+      const rounded = Math.round(Math.abs(val));
+      const neg = val < 0 ? "-" : "";
+      return `${neg}$${rounded.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
     }
     return String(val);
   }
@@ -1156,20 +1145,8 @@
     return out;
   }
 
-  function rowSearchHaystack(r) {
-    const c = r.coin;
-    const sym = String(c.symbol || "").toLowerCase();
-    const nm = String(c.name || "").toLowerCase();
-    const exLabel = r.exchangeId ? String(EXCHANGE_LABELS[r.exchangeId] || r.exchangeId).toLowerCase() : "";
-    return `${sym} ${nm} ${exLabel}`;
-  }
-
   function applyFiltersToViewRows(viewRows) {
     let rows = viewRows.slice();
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      rows = rows.filter((r) => rowSearchHaystack(r).includes(q));
-    }
     if (filterHealthMin != null) {
       rows = rows.filter((r) => {
         if (r.coin._watchlist_only) return true;
@@ -1614,7 +1591,15 @@
       panel.note != null && String(panel.note).trim()
         ? `<p class="api-budget-note">${escapeHtml(String(panel.note))}</p>`
         : "";
-    const inner = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
+    const hasCoinGeckoSource = panel.sources.some((s) => {
+      const id = String(s.id || "").toLowerCase();
+      const nm = String(s.name || "").toLowerCase();
+      return id.includes("coingecko") || nm.includes("coingecko");
+    });
+    const cgDemoHint = hasCoinGeckoSource
+      ? `<p class="api-budget-note api-budget-note--cg-demo">CoinGecko <strong>Demo</strong> accounts are commonly quoted at about <strong>10,000</strong> monthly credits and <strong>30</strong> requests/minute; reset timing follows CoinGecko billing (compare with the live vendor credits line above).</p>`
+      : "";
+    const inner = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}${cgDemoHint}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
     setBudgetPanels(false, inner);
   }
 
@@ -2671,7 +2656,7 @@
   }
 
   /**
-   * Tier-A alerts: only when the **filtered** list (search, health, **exchanges**) changes vs last poll — same
+   * Tier-A alerts: only when the **filtered** list (health, **exchanges**, etc.) changes vs last poll — same
    * membership rule as the table (e.g. Kraken-only hides MEXC-only coins).
    * @returns {Promise<boolean>} true if a list-change notification was shown
    */
@@ -2836,26 +2821,8 @@
       render(data);
       const snapDigest = await digestHex(text);
       if (forNotify && notifyAlertsEnabled) {
-        const prevPollDigest = (() => {
-          try {
-            return localStorage.getItem(LS_LAST_POLL_SNAPSHOT_DIGEST) || "";
-          } catch {
-            return "";
-          }
-        })();
-        const snapshotBodyChanged = Boolean(prevPollDigest && prevPollDigest !== snapDigest);
-        const listNotified = await notifySnapshotChangedFiltered(data, snapDigest);
+        await notifySnapshotChangedFiltered(data, snapDigest);
         await notifyPinnedWatch(lastPinWatchDelta.entered, lastPinWatchDelta.left);
-        if (!listNotified && snapshotBodyChanged) {
-          const iso = data && data.updated_at ? String(data.updated_at) : "";
-          await showDashboardNotification({
-            title: "Qualified snapshot updated",
-            body: iso
-              ? `Snapshot refreshed (${iso}). Your filtered table is unchanged.`
-              : "Snapshot JSON refreshed. Your filtered table is unchanged.",
-            tag: "qualified-snapshot-refresh",
-          });
-        }
         try {
           localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
         } catch {
@@ -3046,19 +3013,6 @@
         renderCoinAlertsList();
         syncCoinBellBadge();
       }
-    });
-  }
-
-  if (elSearch) {
-    elSearch.addEventListener("input", () => {
-      window.clearTimeout(searchDebounceTimer);
-      searchDebounceTimer = window.setTimeout(() => {
-        searchQuery = elSearch.value || "";
-        applyTableView();
-        persistUiPreferences();
-        resetTierAPollBaselineIfAlerts();
-        void syncPushNotifyExchangesIfSubscribed();
-      }, SEARCH_DEBOUNCE_MS);
     });
   }
 

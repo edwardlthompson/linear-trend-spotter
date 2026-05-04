@@ -15,37 +15,10 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="dashboard-body">
-    <header class="site-header-bar" title="Page title, table search, and list notifications">
+    <div class="dashboard-shell">
+    <header class="site-header-bar" title="Page title and list notifications">
       <h1 id="mainHeading" title="Current view">Qualified list</h1>
       <div class="site-header-actions">
-        <label class="topbar-search topbar-search--toolbar" title="Filter rows by symbol or name (case-insensitive substring)">
-          <span class="visually-hidden">Search table</span>
-          <svg
-            class="topbar-search-icon"
-            xmlns="http://www.w3.org/2000/svg"
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.3-4.3"></path>
-          </svg>
-          <input
-            id="searchInput"
-            type="search"
-            class="topbar-search-input"
-            placeholder=""
-            autocomplete="off"
-            title="Filter by symbol or name; combines with column filters"
-          />
-        </label>
         <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
           <button
             type="button"
@@ -165,7 +138,7 @@
             Qualified or watchlist snapshot rows: one table row per coin per exchange venue when listings exist. Sort
             column headers; 7d and 30d split into percent columns and sparkline columns (distance from window high as %
             beside each chart). Star a symbol on Qualified to watch it. Use #symbol=BTC to highlight rows for that
-            symbol. Search and column filters refine the grid; Settings exports the current filtered view.
+            symbol. Column filters refine the grid; Settings exports the current filtered view.
           </caption>
           <thead>
             <tr>
@@ -433,6 +406,7 @@
         <p class="settings-section-hint">
           Per-vendor HTTP counts from the scanner metrics snapshot (<code>api_cost_panel</code>) and projected monthly caps when caps are set in config.
           Optional <code>SCAN_COSTS_ENABLED</code> only adds <code>scan_costs.json</code> on disk. The same panel appears on the Logs tab.
+          CoinGecko Demo tier is typically about 10,000 monthly credits and 30 requests per minute; exact usage resets on your vendor billing cycle (see the vendor credits line when your API key is wired).
         </p>
         <div
           id="apiBudgetPanelSettings"
@@ -445,7 +419,7 @@
       <section class="settings-section" aria-labelledby="settingsAlertsHeading">
         <h3 id="settingsAlertsHeading" class="settings-section-title">Tier-A update alerts</h3>
         <p class="settings-section-hint">
-          Browser notifications when your filtered Qualified table changes (column filters and search). Watchlist
+          Browser notifications when your filtered Qualified table changes (column filters). Watchlist
           in/out uses the full qualified set.
         </p>
         <label class="settings-field">
@@ -502,7 +476,7 @@
         <h3 id="settingsExportHeading" class="settings-section-title">Export</h3>
         <p class="settings-section-hint">
           Export uses the current tab and filters (including per-venue rows). CSV/JSON include <code>row_exchange</code> and
-          <code>row_vol_24h_usd</code> (or <code>dashboard_*</code> fields in JSON) plus chart distance-from-high columns. Use the header search to filter symbols, names, or venue labels.
+          <code>row_vol_24h_usd</code> (or <code>dashboard_*</code> fields in JSON) plus chart distance-from-high columns.
         </p>
         <p class="settings-actions">
           <span class="export-toolbar settings-export-toolbar" title="Download the current tab’s filtered rows">
@@ -524,24 +498,6 @@
       </section>
     </div>
     </div>
-
-    <dialog id="backtestModal" class="bt-modal">
-      <div class="bt-modal-box">
-        <header class="bt-modal-head">
-          <h2 id="backtestModalTitle" class="bt-modal-title">Backtest results</h2>
-          <button
-            type="button"
-            class="bt-modal-close"
-            id="backtestModalClose"
-            aria-label="Close"
-            title="Close backtest dialog"
-          >
-            ×
-          </button>
-        </header>
-        <div id="backtestModalBody" class="bt-modal-body"></div>
-      </div>
-    </dialog>
 
     <footer class="site-footer">
       <p class="site-footer-lead">If this dashboard helps you, consider donating:</p>
@@ -617,6 +573,25 @@
         </span>
       </p>
     </footer>
+    </div>
+
+    <dialog id="backtestModal" class="bt-modal">
+      <div class="bt-modal-box">
+        <header class="bt-modal-head">
+          <h2 id="backtestModalTitle" class="bt-modal-title">Backtest results</h2>
+          <button
+            type="button"
+            class="bt-modal-close"
+            id="backtestModalClose"
+            aria-label="Close"
+            title="Close backtest dialog"
+          >
+            ×
+          </button>
+        </header>
+        <div id="backtestModalBody" class="bt-modal-body"></div>
+      </div>
+    </dialog>
 
     <script src="./config.js"></script>
     <script src="./app.js"></script>
