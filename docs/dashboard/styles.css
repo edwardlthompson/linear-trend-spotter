@@ -89,7 +89,7 @@ body.dashboard-body {
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  width: min(80rem, calc(100vw - 1.5rem));
+  width: min(100rem, calc(100vw - 1.5rem));
   max-width: min(100%, calc(100vw - 1.5rem));
   box-sizing: border-box;
   overflow: hidden;

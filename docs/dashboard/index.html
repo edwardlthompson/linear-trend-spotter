@@ -399,7 +399,7 @@
         <p class="settings-section-hint">
           Per-vendor HTTP counts from the scanner metrics snapshot (<code>api_cost_panel</code>) and projected monthly caps when caps are set in config.
           Optional <code>SCAN_COSTS_ENABLED</code> only adds <code>scan_costs.json</code> on disk.
-          CoinGecko Demo credit totals below use dashboard constants in <code>app.js</code> (editable when your usage changes); reference rate limit <strong>30</strong> req/min.
+          CoinGecko Demo credits start from <strong>3,650</strong> (baseline in <code>app.js</code>); each <strong>new</strong> snapshot adds this scan’s CoinGecko HTTP count as estimated credits, stored in this browser. Reference rate limit <strong>30</strong> req/min.
         </p>
         <div
           id="apiBudgetPanelSettings"

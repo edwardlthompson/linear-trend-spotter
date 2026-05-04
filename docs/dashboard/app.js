@@ -61,10 +61,12 @@
   /** Persisted qualified-list enter/exit lines for the bell dropdown (newest appended). */
   const LS_COIN_ALERT_FEED_JSON = "qualified_dash_coin_alert_feed_v1";
   const COIN_ALERT_FEED_MAX = 50;
-  /** CoinGecko Demo credit meter in Settings (edit when your usage changes; live /key quota not required). */
-  const DASHBOARD_COINGECKO_DEMO_CREDITS_USED = 3561;
+  /** Starting point when no localStorage yet; raise here if you reset storage mid-cycle. */
+  const DASHBOARD_COINGECKO_DEMO_BASELINE = 3650;
   const DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY = 10000;
   const DASHBOARD_COINGECKO_DEMO_RPM = 30;
+  const LS_CG_CREDITS_USED = "qualified_dash_cg_credits_used_v2";
+  const LS_CG_LAST_SNAP_ISO = "qualified_dash_cg_last_snapshot_iso_v2";
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
   /** Treat snapshot timestamps before this as invalid for age/stale (epoch placeholders, corrupt data). */
@@ -1471,6 +1473,56 @@
     return lines;
   }
 
+  function getCgCreditsStoredOrBaseline() {
+    try {
+      const raw = localStorage.getItem(LS_CG_CREDITS_USED);
+      if (raw != null && raw !== "") {
+        const n = Math.round(Number(raw));
+        if (Number.isFinite(n)) {
+          return Math.min(DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY, Math.max(0, n));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return DASHBOARD_COINGECKO_DEMO_BASELINE;
+  }
+
+  /**
+   * First snapshot seen: store baseline (3650) and freeze to that file’s updated_at (no add — baseline is current total).
+   * Later snapshots with a new updated_at: add this scan’s CoinGecko HTTP count as estimated credits (1 HTTP ≈ 1 credit).
+   */
+  function syncCgCreditsForSnapshot(data, coingeckoHttpThisScan) {
+    const iso = data && data.updated_at != null ? String(data.updated_at).trim() : "";
+    if (!iso) return;
+    const cap = DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY;
+    let lastIso = "";
+    try {
+      lastIso = localStorage.getItem(LS_CG_LAST_SNAP_ISO) || "";
+    } catch {
+      /* ignore */
+    }
+    const add = Math.max(0, Math.round(Number(coingeckoHttpThisScan)) || 0);
+    if (lastIso === iso) return;
+    const usedBefore = getCgCreditsStoredOrBaseline();
+    if (lastIso === "") {
+      try {
+        localStorage.setItem(LS_CG_CREDITS_USED, String(Math.min(cap, usedBefore)));
+        localStorage.setItem(LS_CG_LAST_SNAP_ISO, iso);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    const next = Math.min(cap, usedBefore + add);
+    try {
+      localStorage.setItem(LS_CG_CREDITS_USED, String(next));
+      localStorage.setItem(LS_CG_LAST_SNAP_ISO, iso);
+    } catch {
+      /* ignore */
+    }
+  }
+
   function updateApiBudgetPanel(data) {
     if (!elApiBudgetPanelSettings) return;
     const setBudgetPanel = (hidden, html) => {
@@ -1485,6 +1537,16 @@
     if (!panel || !Array.isArray(panel.sources)) {
       setBudgetPanel(true, "");
       return;
+    }
+    const cgSourceForSync = panel.sources.find((s) => {
+      const id = String(s.id || "").toLowerCase();
+      const nm = String(s.name || "").toLowerCase();
+      return id.includes("coingecko") || nm.includes("coingecko");
+    });
+    if (cgSourceForSync) {
+      const rawN = Number(cgSourceForSync.this_scan_http);
+      const nSync = Number.isFinite(rawN) ? Math.round(rawN) : 0;
+      syncCgCreditsForSnapshot(data, nSync);
     }
     const secMonth = 30 * 86400;
     const scansPerMonth = secMonth / intervalSec;
@@ -1506,7 +1568,7 @@
       let vLim = vendorOk ? Math.round(Number(vq.limit) || 0) : 0;
       if (isCg) {
         vendorOk = true;
-        vUsed = DASHBOARD_COINGECKO_DEMO_CREDITS_USED;
+        vUsed = getCgCreditsStoredOrBaseline();
         vLim = DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY;
       }
       const vPct = vendorOk && vLim > 0 ? (vUsed / vLim) * 100 : 0;
@@ -1524,7 +1586,7 @@
         else if (vPct >= 85) riskClass = "budget-meter--warn";
         else riskClass = "budget-meter--ok";
         if (isCg) {
-          riskText = `CoinGecko Demo credits (dashboard estimate): ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} this billing month (${vPct.toFixed(1)}% used). Reference rate limit: ${DASHBOARD_COINGECKO_DEMO_RPM} req/min. This scan: ${n} HTTP.`;
+          riskText = `CoinGecko Demo credits (running estimate in this browser): ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} this billing month (${vPct.toFixed(1)}% used). Each new snapshot adds this scan’s HTTP total (${n}) as estimated credits (1 HTTP ≈ 1 credit). Rate limit reference: ${DASHBOARD_COINGECKO_DEMO_RPM} req/min.`;
           if (cap > 0 && Number.isFinite(cap)) {
             const perScanPct = (n / cap) * 100;
             const projectedPct = ((n * scansPerMonth) / cap) * 100;
