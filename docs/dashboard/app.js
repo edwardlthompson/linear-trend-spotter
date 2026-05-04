@@ -61,6 +61,10 @@
   /** Persisted qualified-list enter/exit lines for the bell dropdown (newest appended). */
   const LS_COIN_ALERT_FEED_JSON = "qualified_dash_coin_alert_feed_v1";
   const COIN_ALERT_FEED_MAX = 50;
+  /** CoinGecko Demo credit meter in Settings (edit when your usage changes; live /key quota not required). */
+  const DASHBOARD_COINGECKO_DEMO_CREDITS_USED = 3561;
+  const DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY = 10000;
+  const DASHBOARD_COINGECKO_DEMO_RPM = 30;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
   /** Treat snapshot timestamps before this as invalid for age/stale (epoch placeholders, corrupt data). */
@@ -189,7 +193,6 @@
 
   const elError = document.getElementById("error");
   const elMeta = document.getElementById("meta");
-  const elApiBudgetPanel = document.getElementById("apiBudgetPanel");
   const elApiBudgetPanelSettings = document.getElementById("apiBudgetPanelSettings");
   const elExchangeFilterDetails = document.getElementById("exchangeFilterDetails");
   const elExchangeFilterApply = document.getElementById("exchangeFilterApply");
@@ -786,11 +789,9 @@
       elWatchLeaveBanner.hidden = true;
       if (elWatchLeaveBannerText) elWatchLeaveBannerText.textContent = "";
     }
-    for (const el of [elApiBudgetPanel, elApiBudgetPanelSettings]) {
-      if (el) {
-        el.hidden = true;
-        el.innerHTML = "";
-      }
+    if (elApiBudgetPanelSettings) {
+      elApiBudgetPanelSettings.hidden = true;
+      elApiBudgetPanelSettings.innerHTML = "";
     }
     syncSnapshotTelemetryPanel();
     syncCoinBellBadge();
@@ -1471,13 +1472,10 @@
   }
 
   function updateApiBudgetPanel(data) {
-    const budgetTargets = [elApiBudgetPanel, elApiBudgetPanelSettings].filter(Boolean);
-    if (!budgetTargets.length) return;
-    const setBudgetPanels = (hidden, html) => {
-      for (const el of budgetTargets) {
-        el.hidden = hidden;
-        el.innerHTML = html;
-      }
+    if (!elApiBudgetPanelSettings) return;
+    const setBudgetPanel = (hidden, html) => {
+      elApiBudgetPanelSettings.hidden = hidden;
+      elApiBudgetPanelSettings.innerHTML = html;
     };
     const panel = data.api_cost_panel;
     const intervalSec =
@@ -1485,7 +1483,7 @@
         ? Math.max(60, data.scan_interval_seconds)
         : NOMINAL_SCAN_FALLBACK_SEC;
     if (!panel || !Array.isArray(panel.sources)) {
-      setBudgetPanels(true, "");
+      setBudgetPanel(true, "");
       return;
     }
     const secMonth = 30 * 86400;
@@ -1499,10 +1497,18 @@
       const cap = capRaw != null ? Number(capRaw) : 0;
       const name = escapeHtml(s.name != null ? String(s.name) : String(s.id || "API"));
       const pricing = String(s.pricing_url || "").trim();
+      const idLc = String(s.id || "").toLowerCase();
+      const nameLc = String(s.name || "").toLowerCase();
+      const isCg = idLc.includes("coingecko") || nameLc.includes("coingecko");
       const vq = s.vendor_quota && typeof s.vendor_quota === "object" ? s.vendor_quota : null;
-      const vendorOk = Boolean(vq && vq.ok === true && Number(vq.limit) > 0);
-      const vUsed = vendorOk ? Math.round(Number(vq.used) || 0) : 0;
-      const vLim = vendorOk ? Math.round(Number(vq.limit) || 0) : 0;
+      let vendorOk = Boolean(vq && vq.ok === true && Number(vq.limit) > 0);
+      let vUsed = vendorOk ? Math.round(Number(vq.used) || 0) : 0;
+      let vLim = vendorOk ? Math.round(Number(vq.limit) || 0) : 0;
+      if (isCg) {
+        vendorOk = true;
+        vUsed = DASHBOARD_COINGECKO_DEMO_CREDITS_USED;
+        vLim = DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY;
+      }
       const vPct = vendorOk && vLim > 0 ? (vUsed / vLim) * 100 : 0;
       let riskClass = "budget-meter--neutral";
       let riskText;
@@ -1517,20 +1523,30 @@
         if (vPct >= 100) riskClass = "budget-meter--danger";
         else if (vPct >= 85) riskClass = "budget-meter--warn";
         else riskClass = "budget-meter--ok";
-        const src = vq.source != null ? String(vq.source) : "vendor API";
-        riskText = `Account credits (from ${src}): ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} this billing month (${vPct.toFixed(2)}% of plan). This scan: ${n} HTTP.`;
-        if (cap > 0 && Number.isFinite(cap)) {
-          const perScanPct = (n / cap) * 100;
-          const projectedPct = ((n * scansPerMonth) / cap) * 100;
-          riskText += ` Configured HTTP cap projection: ~${projectedPct.toFixed(1)}% if every scan matches this load; this scan ${perScanPct.toFixed(2)}% of that cap (${n} / ${Math.round(cap)}).`;
+        if (isCg) {
+          riskText = `CoinGecko Demo credits (dashboard estimate): ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} this billing month (${vPct.toFixed(1)}% used). Reference rate limit: ${DASHBOARD_COINGECKO_DEMO_RPM} req/min. This scan: ${n} HTTP.`;
+          if (cap > 0 && Number.isFinite(cap)) {
+            const perScanPct = (n / cap) * 100;
+            const projectedPct = ((n * scansPerMonth) / cap) * 100;
+            riskText += ` Configured HTTP cap projection: ~${projectedPct.toFixed(1)}% if every scan matches this load; this scan ${perScanPct.toFixed(2)}% of that cap (${n} / ${Math.round(cap)}).`;
+          }
+          capLabel = `${n} HTTP this scan · ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} Demo credits (est.)`;
+        } else {
+          const src = vq && vq.source != null ? String(vq.source) : "vendor API";
+          riskText = `Account credits (from ${src}): ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} this billing month (${vPct.toFixed(2)}% of plan). This scan: ${n} HTTP.`;
+          if (cap > 0 && Number.isFinite(cap)) {
+            const perScanPct = (n / cap) * 100;
+            const projectedPct = ((n * scansPerMonth) / cap) * 100;
+            riskText += ` Configured HTTP cap projection: ~${projectedPct.toFixed(1)}% if every scan matches this load; this scan ${perScanPct.toFixed(2)}% of that cap (${n} / ${Math.round(cap)}).`;
+          }
+          capLabel = `${n} HTTP this scan · ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} vendor credits`;
         }
-        capLabel = `${n} HTTP this scan · ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} vendor credits`;
         ariaMax = vLim;
         ariaNow = Math.min(vUsed, vLim);
         overCap = vUsed > vLim;
         progressAttrs = !overCap
-          ? ` role="progressbar" aria-valuemin="0" aria-valuemax="${ariaMax}" aria-valuenow="${ariaNow}" aria-label="${escapeAttr(name)}: ${vUsed} of ${vLim} vendor credits this month"`
-          : ` role="img" aria-label="${escapeAttr(name)}: vendor credits over plan (${vUsed} / ${vLim})"`;
+          ? ` role="progressbar" aria-valuemin="0" aria-valuemax="${ariaMax}" aria-valuenow="${ariaNow}" aria-label="${escapeAttr(name)}: ${vUsed} of ${vLim} credits this month"`
+          : ` role="img" aria-label="${escapeAttr(name)}: credits over plan (${vUsed} / ${vLim})"`;
       } else if (cap > 0 && Number.isFinite(cap)) {
         const perScanPct = (n / cap) * 100;
         barPct = Math.min(100, perScanPct);
@@ -1584,23 +1600,15 @@
       items.push(li);
     }
     if (!items.length) {
-      setBudgetPanels(true, "");
+      setBudgetPanel(true, "");
       return;
     }
     const note =
       panel.note != null && String(panel.note).trim()
         ? `<p class="api-budget-note">${escapeHtml(String(panel.note))}</p>`
         : "";
-    const hasCoinGeckoSource = panel.sources.some((s) => {
-      const id = String(s.id || "").toLowerCase();
-      const nm = String(s.name || "").toLowerCase();
-      return id.includes("coingecko") || nm.includes("coingecko");
-    });
-    const cgDemoHint = hasCoinGeckoSource
-      ? `<p class="api-budget-note api-budget-note--cg-demo">CoinGecko <strong>Demo</strong> accounts are commonly quoted at about <strong>10,000</strong> monthly credits and <strong>30</strong> requests/minute; reset timing follows CoinGecko billing (compare with the live vendor credits line above).</p>`
-      : "";
-    const inner = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}${cgDemoHint}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
-    setBudgetPanels(false, inner);
+    const inner = `<h2 class="api-budget-heading" title="Per-vendor HTTP counts this scan and projected share of monthly caps">API usage &amp; budget</h2>${note}<ul class="api-budget-list" title="Hover each line for budget risk details">${items.join("")}</ul>`;
+    setBudgetPanel(false, inner);
   }
 
   function updateHealthStrip(data) {
@@ -1859,16 +1867,6 @@
     if (elRegimeStrip && !elRegimeStrip.hidden) bits.push((elRegimeStrip.textContent || "").trim());
     if (elStaleBanner && !elStaleBanner.hidden) bits.push((elStaleBanner.textContent || "").trim());
     if (elEmptyBanner && !elEmptyBanner.hidden) bits.push((elEmptyBanner.textContent || "").trim());
-    const apiBudgetEl =
-      elApiBudgetPanel && !elApiBudgetPanel.hidden
-        ? elApiBudgetPanel
-        : elApiBudgetPanelSettings && !elApiBudgetPanelSettings.hidden
-          ? elApiBudgetPanelSettings
-          : null;
-    if (apiBudgetEl) {
-      const t = (apiBudgetEl.textContent || "").trim().slice(0, 1200);
-      if (t) bits.push(`API / budget: ${t}`);
-    }
     return bits.join("\n\n");
   }
 

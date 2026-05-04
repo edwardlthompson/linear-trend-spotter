@@ -377,14 +377,16 @@ button.coin-alerts-feed-dismiss:hover {
 }
 
 .settings-panel {
-  width: auto;
-  max-width: min(40rem, 100%);
+  width: 100%;
+  max-width: min(80rem, 100%);
+  margin-inline: auto;
   box-sizing: border-box;
 }
 
 .dashboard-shell .ops-panel {
-  width: auto;
-  max-width: min(40rem, 100%);
+  width: 100%;
+  max-width: min(80rem, 100%);
+  margin-inline: auto;
   box-sizing: border-box;
 }
 
@@ -1284,15 +1286,14 @@ table.qualified-grid tbody td {
   justify-content: flex-end;
   gap: 0.35rem;
   flex-wrap: nowrap;
-  max-width: 100%;
-  min-width: 0;
   box-sizing: border-box;
 }
 
 .spark-cell-chart {
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 10.5rem;
+  flex: 0 0 auto;
+  width: 168px;
+  min-width: 168px;
+  max-width: 168px;
   overflow: hidden;
 }
 
@@ -1307,8 +1308,8 @@ table.qualified-grid tbody td {
 }
 
 .spark-td {
-  max-width: 12rem;
-  width: 1%;
+  min-width: 11.75rem;
+  max-width: 15rem;
   overflow: hidden;
   box-sizing: border-box;
   vertical-align: middle;
@@ -1438,9 +1439,9 @@ a {
 .spark-svg {
   display: block;
   color: var(--color-link);
-  width: 100%;
-  max-width: 168px;
-  height: auto;
+  width: 168px;
+  height: 44px;
+  max-width: min(168px, 100%);
   box-sizing: border-box;
 }
 

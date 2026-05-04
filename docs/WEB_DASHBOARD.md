@@ -43,8 +43,8 @@ Column sorts, **Health** / **Uniformity** / **Vol Δ%** / **24h vol** / **Exchan
 
 ## Logs and API budget
 
-- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, **`api_cost_panel`** (per-scan HTTP counts; CoinGecko/CMC **vendor credits** when keys allow `/key` fetches; CoinGecko Demo plans are often quoted at **10,000** monthly credits and **30** req/min), and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
-- **Settings** tab: duplicates the same **API usage & budget** panel when `api_cost_panel` is present, so meters are visible without opening Logs.
+- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
+- **Settings** tab: **API usage & budget** panel when `api_cost_panel` is present in the snapshot (CoinGecko Demo credit meter uses editable constants in **`app.js`** when the Coingecko source is listed).
 
 ## GitHub Pages (Q6)
 

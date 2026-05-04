@@ -108,7 +108,7 @@
           aria-selected="false"
           aria-controls="opsPanel"
           data-view="logs"
-          title="Scanner health, relay, regime, stale snapshot, API budget, and rolling log history"
+          title="Scanner health, relay, regime, stale snapshot, and rolling log history"
         >
           Logs
           <span id="opsTabBadge" class="tab-badge tab-badge--alert" hidden title="New log entries since you last opened Logs or marked read">0</span>
@@ -361,7 +361,7 @@
 
     <div id="opsPanel" role="tabpanel" aria-labelledby="tabLogs" class="ops-panel" hidden>
       <p class="ops-panel-lead" title="Scanner and relay messages are summarized here and in the log list">
-        Operational messages from the scanner run, relay, regime gate, snapshot age, and API usage. List changes (new
+        Operational messages from the scanner run, relay, regime gate, and snapshot age. List changes (new
         or dropped symbols) use the bell next to the tabs. Log history is kept in this browser (local storage), survives
         refresh, and entries older than 24 hours are removed automatically.
       </p>
@@ -385,13 +385,6 @@
       </div>
       <div id="staleBanner" class="stale-banner" role="status" hidden></div>
       <div id="emptyBanner" class="empty-banner" role="status" hidden></div>
-      <div
-        id="apiBudgetPanel"
-        class="api-budget-panel"
-        role="region"
-        aria-label="API usage and monthly budget estimate"
-        hidden
-      ></div>
       <section class="ops-feed-section" aria-labelledby="opsFeedHeading">
         <h2 id="opsFeedHeading" class="ops-feed-heading">Log history (24h)</h2>
         <p id="opsFeedEmpty" class="ops-feed-empty">New snapshot summaries and warnings will appear here after each load.</p>
@@ -405,8 +398,8 @@
         <h3 id="settingsApiBudgetHeading" class="settings-section-title">API usage &amp; budget</h3>
         <p class="settings-section-hint">
           Per-vendor HTTP counts from the scanner metrics snapshot (<code>api_cost_panel</code>) and projected monthly caps when caps are set in config.
-          Optional <code>SCAN_COSTS_ENABLED</code> only adds <code>scan_costs.json</code> on disk. The same panel appears on the Logs tab.
-          CoinGecko Demo tier is typically about 10,000 monthly credits and 30 requests per minute; exact usage resets on your vendor billing cycle (see the vendor credits line when your API key is wired).
+          Optional <code>SCAN_COSTS_ENABLED</code> only adds <code>scan_costs.json</code> on disk.
+          CoinGecko Demo credit totals below use dashboard constants in <code>app.js</code> (editable when your usage changes); reference rate limit <strong>30</strong> req/min.
         </p>
         <div
           id="apiBudgetPanelSettings"
