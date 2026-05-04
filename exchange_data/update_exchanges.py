@@ -17,12 +17,12 @@ from config.settings import settings
 def main():
     """Update all exchange listings"""
     print("=" * 50)
-    print("🔄 EXCHANGE LISTINGS UPDATER")
+    print("EXCHANGE LISTINGS UPDATER")
     print("=" * 50)
     
     # Use exchanges.db per settings.db_paths
     db_path = settings.db_paths['exchanges']
-    print(f"📁 Database: {db_path}")
+    print(f"Database: {db_path}")
     
     # Initialize database
     db = ExchangeDatabase(db_path)
@@ -33,7 +33,7 @@ def main():
     
     # Show stats
     stats = db.get_exchange_stats()
-    print("\n📊 Exchange Statistics:")
+    print("\nExchange Statistics:")
     print("-" * 40)
     for exchange, data in stats.items():
         print(f"   {exchange.title()}:")
@@ -42,7 +42,7 @@ def main():
         print(f"      Source: {data['source']}")
     
     db.close()
-    print("\n✅ Update complete!")
+    print("\nUpdate complete.")
 
 if __name__ == "__main__":
     main()

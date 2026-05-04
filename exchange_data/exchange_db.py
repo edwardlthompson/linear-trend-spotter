@@ -205,7 +205,7 @@ class ExchangeDatabase:
             
             conn.commit()
         
-        print(f"✅ Updated {exchange} listings: {len(listings)} pairs")
+        print(f"[OK] Updated {exchange} listings: {len(listings)} pairs")
     
     def get_exchange_stats(self) -> Dict[str, Dict]:
         """Get statistics for all exchanges"""

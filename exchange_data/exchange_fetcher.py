@@ -23,7 +23,7 @@ class ExchangeFetcher:
         Fetch listings from Coinbase using their public API
         Coinbase has a free public endpoint for available pairs
         """
-        print("📡 Fetching Coinbase listings...")
+        print("[INFO] Fetching Coinbase listings...")
         listings = []
         
         try:
@@ -44,13 +44,13 @@ class ExchangeFetcher:
                 
                 # Remove duplicates
                 unique = {l['symbol']: l for l in listings}.values()
-                print(f"   ✓ Found {len(unique)} unique assets on Coinbase")
+                print(f"   [OK] Found {len(unique)} unique assets on Coinbase")
                 return list(unique)
             else:
-                print(f"   ⚠️ Coinbase API error: {response.status_code}")
+                print(f"   [WARN] Coinbase API error: {response.status_code}")
                 
         except Exception as e:
-            print(f"   ⚠️ Error fetching Coinbase listings: {e}")
+            print(f"   [WARN] Error fetching Coinbase listings: {e}")
         
         # Fallback to hardcoded common listings if API fails
         return self._get_coinbase_fallback()
@@ -59,7 +59,7 @@ class ExchangeFetcher:
         """
         Fetch listings from Kraken using their public API
         """
-        print("📡 Fetching Kraken listings...")
+        print("[INFO] Fetching Kraken listings...")
         listings = []
         
         try:
@@ -84,13 +84,13 @@ class ExchangeFetcher:
                                 'source': 'kraken_api'
                             })
                     
-                    print(f"   ✓ Found {len(listings)} unique assets on Kraken")
+                    print(f"   [OK] Found {len(listings)} unique assets on Kraken")
                     return listings
             else:
-                print(f"   ⚠️ Kraken API error: {response.status_code}")
+                print(f"   [WARN] Kraken API error: {response.status_code}")
                 
         except Exception as e:
-            print(f"   ⚠️ Error fetching Kraken listings: {e}")
+            print(f"   [WARN] Error fetching Kraken listings: {e}")
         
         return self._get_kraken_fallback()
     
@@ -98,7 +98,7 @@ class ExchangeFetcher:
         """
         Fetch listings from MEXC using their public API
         """
-        print("📡 Fetching MEXC listings...")
+        print("[INFO] Fetching MEXC listings...")
         listings = []
         
         try:
@@ -126,13 +126,13 @@ class ExchangeFetcher:
                                 })
                             break
                 
-                print(f"   ✓ Found {len(listings)} unique assets on MEXC")
+                print(f"   [OK] Found {len(listings)} unique assets on MEXC")
                 return listings
             else:
-                print(f"   ⚠️ MEXC API error: {response.status_code}")
+                print(f"   [WARN] MEXC API error: {response.status_code}")
                 
         except Exception as e:
-            print(f"   ⚠️ Error fetching MEXC listings: {e}")
+            print(f"   [WARN] Error fetching MEXC listings: {e}")
         
         return self._get_mexc_fallback()
     
@@ -181,6 +181,6 @@ class ExchangeFetcher:
                         self.db.update_listings(exchange, listings, source='api')
                     time.sleep(2)  # Be nice to APIs
                 else:
-                    print(f"⏭️  {exchange} listings are up to date")
+                    print(f"[SKIP] {exchange} listings are up to date")
             except Exception as e:
-                print(f"⚠️ Error updating {exchange}: {e}")
+                print(f"[WARN] Error updating {exchange}: {e}")
