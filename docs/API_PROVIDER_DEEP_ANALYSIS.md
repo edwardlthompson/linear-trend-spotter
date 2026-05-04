@@ -2,7 +2,7 @@
 
 This document maps **which provider is strongest for each pipeline stage**, how **symbol / slug / id** conflicts show up, where **caching** helps or hurts, and a **phased redesign** path for better budget use, scan time, and end-user signal quality—without assuming another paid subscription beyond the free/demo tiers you already use.
 
-**Companion:** operational toggles and config keys live in [`COIN_API_CREDIT_STRATEGY.md`](./COIN_API_CREDIT_STRATEGY.md).
+**Companion:** operational toggles and config keys live in [`COIN_API_CREDIT_STRATEGY.md`](./COIN_API_CREDIT_STRATEGY.md). **Cross-site slugs/ids:** canonical model and phased hardening — [`CROSS_PROVIDER_IDENTITY.md`](./CROSS_PROVIDER_IDENTITY.md).
 
 ---
 

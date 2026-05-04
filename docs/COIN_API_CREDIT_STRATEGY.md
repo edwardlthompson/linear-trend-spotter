@@ -1,6 +1,6 @@
 # CoinGecko / CoinMarketCap credit strategy (no paid tier required)
 
-**Deep dive:** provider fit per pipeline stage, slug/id conflicts, caching tiers, and redesign phases — see [`API_PROVIDER_DEEP_ANALYSIS.md`](./API_PROVIDER_DEEP_ANALYSIS.md).
+**Deep dive:** provider fit per pipeline stage, slug/id conflicts, caching tiers, and redesign phases — see [`API_PROVIDER_DEEP_ANALYSIS.md`](./API_PROVIDER_DEEP_ANALYSIS.md). **Slug/id translation across CG/CMC/Polygon:** [`CROSS_PROVIDER_IDENTITY.md`](./CROSS_PROVIDER_IDENTITY.md).
 
 **Monthly usage math:** call-site formulas + scenario table — see [`API_MONTHLY_BUDGET_ESTIMATE.md`](./API_MONTHLY_BUDGET_ESTIMATE.md).
 
