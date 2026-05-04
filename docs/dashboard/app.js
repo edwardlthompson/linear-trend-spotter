@@ -1589,8 +1589,14 @@
 
       const fillStyle =
         vendorOk || (cap > 0 && Number.isFinite(cap)) ? `width:${barPct.toFixed(2)}%` : "width:0%";
+      const cgBarFill = `<div class="api-budget-bar-fill ${riskClass}" style="${fillStyle}"></div>`;
+      const cgOnBar =
+        isCg && vendorOk
+          ? `<span class="api-budget-cg-onbar">${vUsed.toLocaleString()} / ${vLim.toLocaleString()} est. · ${vPct.toFixed(1)}%</span>`
+          : "";
+      const barTrackClass = isCg && vendorOk ? " api-budget-bar-track--cg" : "";
       let li = `<li class="api-budget-item"><div class="api-budget-rowhead"><strong>${name}</strong><span class="api-budget-meta">${escapeHtml(capLabel)}</span></div>`;
-      li += `<div class="api-budget-bar-track"${progressAttrs}><div class="api-budget-bar-fill ${riskClass}" style="${fillStyle}"></div></div>`;
+      li += `<div class="api-budget-bar-track${barTrackClass}"${progressAttrs}>${cgBarFill}${cgOnBar}</div>`;
       li += `<p class="api-budget-risk ${riskClass}" title="${riskTitle}">${escapeHtml(riskText)}</p>`;
       li += breakdownHtml;
       if (pricing) {

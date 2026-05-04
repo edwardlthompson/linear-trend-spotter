@@ -84,12 +84,12 @@ body.dashboard-body {
 }
 
 .dashboard-body > .dashboard-shell {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
   min-height: 0;
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  width: fit-content;
+  width: min(80rem, calc(100vw - 1.5rem));
   max-width: min(100%, calc(100vw - 1.5rem));
   box-sizing: border-box;
   overflow: hidden;
@@ -98,6 +98,8 @@ body.dashboard-body {
 .dashboard-shell > .site-header-bar,
 .dashboard-shell > .app-tab-bar {
   flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-body > dialog {
@@ -107,11 +109,14 @@ body.dashboard-body {
 .dashboard-shell > .site-footer {
   flex-shrink: 0;
   margin-top: 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .dashboard-main-stack {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -127,7 +132,10 @@ body.dashboard-body {
   overflow: hidden;
 }
 
-#opsPanel:not([hidden]),
+#opsPanel:not([hidden]) {
+  overflow: hidden;
+}
+
 #settingsPanel:not([hidden]) {
   overflow-y: auto;
 }
@@ -378,15 +386,11 @@ button.coin-alerts-feed-dismiss:hover {
 
 .settings-panel {
   width: 100%;
-  max-width: min(80rem, 100%);
-  margin-inline: auto;
   box-sizing: border-box;
 }
 
 .dashboard-shell .ops-panel {
   width: 100%;
-  max-width: min(80rem, 100%);
-  margin-inline: auto;
   box-sizing: border-box;
 }
 
@@ -695,7 +699,7 @@ html[data-theme="dark"] tr.coin-row--watchlist-only td {
   border-radius: 8px;
   padding: 0.55rem 0.65rem;
   margin-bottom: 0.75rem;
-  max-width: 56rem;
+  max-width: 100%;
 }
 
 .api-budget-panel--settings {
@@ -788,6 +792,40 @@ html[data-theme="dark"] tr.coin-row--watchlist-only td {
 .api-budget-bar-fill--share {
   background-color: color-mix(in srgb, var(--color-accent, #ea580c) 75%, var(--color-muted));
   opacity: 0.9;
+}
+
+.api-budget-bar-track--cg {
+  position: relative;
+  height: 1.125rem;
+  overflow: hidden;
+}
+
+.api-budget-bar-track--cg .api-budget-bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  height: 100%;
+  border-radius: 5px;
+}
+
+.api-budget-cg-onbar {
+  position: absolute;
+  left: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+  text-shadow:
+    0 0 4px var(--color-bg),
+    0 0 8px var(--color-bg),
+    0 1px 2px color-mix(in srgb, var(--color-bg) 85%, transparent);
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .api-budget-breakdown {
@@ -1718,6 +1756,7 @@ html[data-theme="dark"] .tab-badge--alert {
   line-height: 1.45;
   color: var(--color-muted);
   margin: 0 0 0.75rem;
+  flex-shrink: 0;
 }
 
 .ops-panel-actions {
@@ -1726,9 +1765,21 @@ html[data-theme="dark"] .tab-badge--alert {
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 0.75rem;
+  flex-shrink: 0;
+}
+
+#opsPanel #snapshotTelemetryPanel,
+#opsPanel #staleBanner,
+#opsPanel #emptyBanner {
+  flex-shrink: 0;
 }
 
 .ops-feed-section {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   margin-top: 1.25rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--color-border);
@@ -1737,20 +1788,24 @@ html[data-theme="dark"] .tab-badge--alert {
 .ops-feed-heading {
   font-size: 1rem;
   margin: 0 0 0.35rem;
+  flex-shrink: 0;
 }
 
 .ops-feed-empty {
   font-size: 0.85rem;
   color: var(--color-muted);
   margin: 0 0 0.5rem;
+  flex-shrink: 0;
 }
 
 .ops-feed-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  max-height: min(50vh, 28rem);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .ops-feed-item {
