@@ -1,5 +1,7 @@
 # CoinGecko / CoinMarketCap credit strategy (no paid tier required)
 
+**Deep dive:** provider fit per pipeline stage, slug/id conflicts, caching tiers, and redesign phases — see [`API_PROVIDER_DEEP_ANALYSIS.md`](./API_PROVIDER_DEEP_ANALYSIS.md).
+
 The scanner can **split API load** between providers that already ship **free or demo** tiers. Nothing here removes features (filters, OHLCV uniformity, backtests, exchange volumes, dashboard fields): it only changes **which HTTP call runs first** or **which bulk endpoint builds the coin universe**.
 
 ## Where credits go today
