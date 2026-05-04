@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
+import stat
 import traceback
 import time
 import concurrent.futures
@@ -13,10 +15,49 @@ from typing import Any
 
 import requests
 
+PROGRESS_LOG_FILE = "benchmark_40_tuned_progress.log"
+ERROR_LOG_FILE = "benchmark_40_tuned_error.txt"
+
+# Patterns for data that must not be persisted in plaintext logs (URLs, headers, chain addresses).
+_RE_HEX_ADDR = re.compile(r"0x[a-fA-F0-9]{32,}")
+_RE_QUERY_SENSITIVE = re.compile(
+    r"(?i)([\?&])(apiKey|api_key|access_token|refresh_token|token|secret|password|auth)=([^&\s#\"']+)"
+)
+_RE_BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~-]{8,}\b")
+_RE_AUTH_HEADER = re.compile(r"(?i)(Authorization\s*:\s*)(.+)")
+_RE_CMC_HEADER = re.compile(r"(?i)\bX-CMC_PRO_API_KEY\s*:\s*\S+")
+
+
+def redact_log_message(message: str) -> str:
+    """Remove or mask values that must not be written to disk (API material, on-chain ids)."""
+    if not isinstance(message, str):
+        message = str(message)
+    s = _RE_HEX_ADDR.sub("0x…[REDACTED]", message)
+    s = _RE_QUERY_SENSITIVE.sub(lambda m: f"{m.group(1)}{m.group(2)}=[REDACTED]", s)
+    s = _RE_AUTH_HEADER.sub(lambda m: f"{m.group(1)}[REDACTED]", s)
+    s = _RE_BEARER.sub("Bearer [REDACTED]", s)
+    s = _RE_CMC_HEADER.sub("X-CMC_PRO_API_KEY: [REDACTED]", s)
+    return s
+
+
+def _restrict_log_file_permissions(path: str) -> None:
+    """Best-effort owner-only permissions (Unix). Windows ignores mode bits beyond read-only."""
+    if not path or not os.path.isfile(path):
+        return
+    try:
+        if os.name == "nt":
+            os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
+        else:
+            os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+
 
 def log_progress(message: str) -> None:
-    with open('benchmark_40_tuned_progress.log', 'a', encoding='utf-8') as progress:
-        progress.write(f"{time.strftime('%H:%M:%S')} {message}\n")
+    safe = redact_log_message(message)
+    with open(PROGRESS_LOG_FILE, "a", encoding="utf-8") as progress:
+        progress.write(f"{time.strftime('%H:%M:%S')} {safe}\n")
+    _restrict_log_file_permissions(PROGRESS_LOG_FILE)
 
 
 @dataclass
@@ -336,8 +377,9 @@ def run_snapshot_40(session: requests.Session, symbols: list[str]) -> list[dict[
 
 
 def main() -> None:
-    with open('benchmark_40_tuned_progress.log', 'w', encoding='utf-8') as progress:
-        progress.write('start\n')
+    with open(PROGRESS_LOG_FILE, "w", encoding="utf-8") as progress:
+        progress.write("start\n")
+    _restrict_log_file_permissions(PROGRESS_LOG_FILE)
 
     load_env()
     log_progress('env_loaded')
@@ -385,6 +427,7 @@ if __name__ == '__main__':
     try:
         main()
     except BaseException:
-        with open('benchmark_40_tuned_error.txt', 'w', encoding='utf-8') as err:
-            err.write(traceback.format_exc())
+        with open(ERROR_LOG_FILE, "w", encoding="utf-8") as err:
+            err.write(redact_log_message(traceback.format_exc()))
+        _restrict_log_file_permissions(ERROR_LOG_FILE)
         raise
