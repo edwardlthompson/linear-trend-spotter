@@ -5,9 +5,7 @@ Short checklist after pulling recent changes. Nothing here runs automatically on
 ## 1. Deploy the scanner (Render / worker / wherever it runs)
 
 1. Push or deploy the branch that includes the latest `main.py`, `utils/vendor_api_quota.py`, and `utils/scan_costs.py`.
-2. Confirm the service has the same env vars as before, especially:
-   - `COINGECKO_API_KEY` (Pro or `CG-…` demo) — needed for CoinGecko `/api/v3/key` usage when quota fetch is enabled.
-   - `CMC_API_KEY` — needed for CoinMarketCap `/v1/key/info` usage.
+2. **API keys:** if your Render worker **already** has `COINGECKO_API_KEY`, `CMC_API_KEY`, and the rest, you do **not** need to add new secrets. Vendor quota uses the **same** env vars the scanner already uses (`COINGECKO_API_KEY` for CoinGecko `/api/v3/key`, `CMC_API_KEY` for `/v1/key/info`). No separate “budget API key.”
 3. Wait for **one full scan** to finish so it writes `qualified_public_snapshot.json` again.
 
 ## 2. Optional: turn off vendor quota HTTP calls
@@ -34,6 +32,6 @@ Each scan performs up to **two** extra GETs (CoinGecko + CMC), not counted in yo
 
 ## 6. API budget bars
 
-- **Vendor credits (CoinGecko / CMC):** bars use **`vendor_quota`** from the snapshot when the worker could read `/key` usage and keys are set.
+- **Vendor credits (CoinGecko / CMC):** bars use **`vendor_quota`** from the snapshot when the worker could read `/key` usage (same keys already on Render).
 - **Configured HTTP caps:** still used when set (`SCAN_COST_PANEL_*` in config); if both vendor quota and a cap exist, the UI explains both.
 - **Polygon:** there is no documented public REST for monthly credits in this pipeline; Polygon still uses your configured cap + local `polygon_http_*` counts.
