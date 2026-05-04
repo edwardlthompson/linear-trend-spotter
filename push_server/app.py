@@ -20,10 +20,18 @@ from typing import Any
 from flask import Flask, jsonify, request
 from pywebpush import WebPushException, webpush
 
-from push_server.notify_filtering import (
-    filter_events_for_subscriber,
-    normalize_notify_exchange_ids,
-)
+try:
+    # Works when imported as package from repo root.
+    from push_server.notify_filtering import (
+        filter_events_for_subscriber,
+        normalize_notify_exchange_ids,
+    )
+except ModuleNotFoundError:
+    # Works when Render uses rootDir=push_server and imports app:app.
+    from notify_filtering import (  # type: ignore[no-redef]
+        filter_events_for_subscriber,
+        normalize_notify_exchange_ids,
+    )
 
 app = Flask(__name__)
 _logger = logging.getLogger("push_server")
