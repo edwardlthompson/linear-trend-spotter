@@ -41,6 +41,7 @@ def build_api_cost_panel_for_snapshot(
     coingecko_monthly_http_cap: int = 0,
     polygon_monthly_http_cap: int = 0,
     cmc_monthly_http_cap: int = 0,
+    vendor_quotas: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build read-only ``api_cost_panel`` for the public snapshot (dashboard health strip).
 
@@ -48,6 +49,10 @@ def build_api_cost_panel_for_snapshot(
     ``cmc_http_*``). Optional monthly caps are **operator-configured** limits (e.g. max REST calls
     per month on your paid tier); compare to vendor docs at each ``pricing_url``.
     When a cap > 0, ``pct_of_monthly_budget`` is ``this_scan_http / cap * 100`` (single-scan share).
+
+    When ``vendor_quotas`` includes a successful ``coingecko`` / ``coinmarketcap`` entry from
+    ``utils.vendor_api_quota`` (live vendor key endpoints), each matching ``sources[]`` row gets a
+    ``vendor_quota`` object the dashboard can use for account-wide credit bars.
     """
     counts = dict(metrics_summary.get("counts") or {})
 
@@ -82,16 +87,36 @@ def build_api_cost_panel_for_snapshot(
             {"suffix": key.removeprefix("cmc_http_"), "count": int(counts[key])},
         )
 
+    vq = dict(vendor_quotas) if isinstance(vendor_quotas, dict) else {}
+
+    def _with_vendor(src: dict[str, Any], vendor_key: str) -> dict[str, Any]:
+        row = dict(src)
+        slot = vq.get(vendor_key)
+        if isinstance(slot, dict):
+            row["vendor_quota"] = slot
+            if slot.get("ok") is True:
+                try:
+                    u = int(slot.get("used") or 0)
+                    lim = int(slot.get("limit") or 0)
+                    if lim > 0:
+                        row["vendor_pct_of_monthly_limit"] = round(100.0 * float(u) / float(lim), 5)
+                except (TypeError, ValueError, ZeroDivisionError):
+                    pass
+        return row
+
     sources: list[dict[str, Any]] = [
-        {
-            "id": "coingecko",
-            "name": "CoinGecko",
-            "pricing_url": COINGECKO_API_PRICING_URL,
-            "this_scan_http": cg_total,
-            "breakdown": cg_breakdown,
-            "monthly_budget_http": int(coingecko_monthly_http_cap) if coingecko_monthly_http_cap > 0 else None,
-            "pct_of_monthly_budget": pct(cg_total, int(coingecko_monthly_http_cap)),
-        },
+        _with_vendor(
+            {
+                "id": "coingecko",
+                "name": "CoinGecko",
+                "pricing_url": COINGECKO_API_PRICING_URL,
+                "this_scan_http": cg_total,
+                "breakdown": cg_breakdown,
+                "monthly_budget_http": int(coingecko_monthly_http_cap) if coingecko_monthly_http_cap > 0 else None,
+                "pct_of_monthly_budget": pct(cg_total, int(coingecko_monthly_http_cap)),
+            },
+            "coingecko",
+        ),
         {
             "id": "polygon",
             "name": "Polygon.io",
@@ -101,22 +126,26 @@ def build_api_cost_panel_for_snapshot(
             "monthly_budget_http": int(polygon_monthly_http_cap) if polygon_monthly_http_cap > 0 else None,
             "pct_of_monthly_budget": pct(poly_total, int(polygon_monthly_http_cap)),
         },
-        {
-            "id": "coinmarketcap",
-            "name": "CoinMarketCap",
-            "pricing_url": COINMARKETCAP_API_PRICING_URL,
-            "this_scan_http": cmc_total,
-            "breakdown": cmc_breakdown,
-            "monthly_budget_http": int(cmc_monthly_http_cap) if cmc_monthly_http_cap > 0 else None,
-            "pct_of_monthly_budget": pct(cmc_total, int(cmc_monthly_http_cap)),
-        },
+        _with_vendor(
+            {
+                "id": "coinmarketcap",
+                "name": "CoinMarketCap",
+                "pricing_url": COINMARKETCAP_API_PRICING_URL,
+                "this_scan_http": cmc_total,
+                "breakdown": cmc_breakdown,
+                "monthly_budget_http": int(cmc_monthly_http_cap) if cmc_monthly_http_cap > 0 else None,
+                "pct_of_monthly_budget": pct(cmc_total, int(cmc_monthly_http_cap)),
+            },
+            "coinmarketcap",
+        ),
     ]
 
     return {
         "schema_version": 1,
         "note": (
-            "Per-source HTTP request counts from this scan (metrics H0/J3); included in every public snapshot. "
-            "Optional monthly_budget_http is your configured cap; use pricing_url to map plans/credits."
+            "Per-source HTTP request counts from this scan (metrics H0/J3). "
+            "Optional monthly_budget_http is your configured cap. "
+            "When keys are set, CoinGecko and CoinMarketCap may include vendor_quota from their /key usage APIs."
         ),
         "sources": sources,
     }

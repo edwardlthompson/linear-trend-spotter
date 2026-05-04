@@ -62,6 +62,11 @@
               "this_scan_http": { "type": "integer" },
               "monthly_budget_http": { "type": ["integer", "null"] },
               "pct_of_monthly_budget": { "type": ["number", "null"] },
+              "vendor_pct_of_monthly_limit": { "type": ["number", "null"] },
+              "vendor_quota": {
+                "type": "object",
+                "description": "Optional live quota from vendor /key APIs (CoinGecko, CoinMarketCap)"
+              },
               "breakdown": { "type": "array" }
             }
           }

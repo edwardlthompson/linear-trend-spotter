@@ -2,6 +2,8 @@
 
 For **Telegram vs website-only delivery** (snapshots, env vars, Render), see **[DELIVERY_MODE.md](DELIVERY_MODE.md)**.
 
+**Deploy / refresh / API budget:** step-by-step checklist → **[MANUAL_DEPLOY_STEPS.md](MANUAL_DEPLOY_STEPS.md)**.
+
 ## Data source
 
 The static UI under `docs/dashboard/` loads **only** the JSON snapshot written by the Render worker (`PUBLIC_QUALIFIED_SNAPSHOT_ENABLED`, `PUBLIC_QUALIFIED_SNAPSHOT_FILE`). Browsers must **not** call market APIs.
@@ -43,7 +45,7 @@ The header **search** is width-capped (similar to a typical desktop search bar) 
 
 ## Logs and API budget
 
-- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, optional **`api_cost_panel`** block when the scanner runs with scan-cost reporting (`SCAN_COSTS_ENABLED` / snapshot `api_cost_panel`), and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
+- **Logs** tab: scan / relay / regime strips (session-dismissible), stale snapshot banner, **`api_cost_panel`** (per-scan HTTP counts; CoinGecko/CMC **vendor credits** when keys allow `/key` fetches), and a **rolling operational log** (24h) persisted in **`localStorage`** so it survives refresh.
 - **Settings** tab: duplicates the same **API usage & budget** panel when `api_cost_panel` is present, so meters are visible without opening Logs.
 
 ## GitHub Pages (Q6)

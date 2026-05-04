@@ -1472,6 +1472,10 @@
           : "";
       let line = `• ${name}: ${total} HTTP this scan`;
       if (sub) line += ` (${sub})`;
+      const vq = s.vendor_quota && typeof s.vendor_quota === "object" ? s.vendor_quota : null;
+      if (vq && vq.ok === true && Number(vq.limit) > 0) {
+        line += ` · vendor credits ${Number(vq.used) || 0} / ${Number(vq.limit) || 0} (${String(vq.source || "API")})`;
+      }
       const cap = s.monthly_budget_http;
       const pct = s.pct_of_monthly_budget;
       if (cap != null && Number(cap) > 0 && pct != null && Number.isFinite(Number(pct))) {
@@ -1512,10 +1516,39 @@
       const cap = capRaw != null ? Number(capRaw) : 0;
       const name = escapeHtml(s.name != null ? String(s.name) : String(s.id || "API"));
       const pricing = String(s.pricing_url || "").trim();
+      const vq = s.vendor_quota && typeof s.vendor_quota === "object" ? s.vendor_quota : null;
+      const vendorOk = Boolean(vq && vq.ok === true && Number(vq.limit) > 0);
+      const vUsed = vendorOk ? Math.round(Number(vq.used) || 0) : 0;
+      const vLim = vendorOk ? Math.round(Number(vq.limit) || 0) : 0;
+      const vPct = vendorOk && vLim > 0 ? (vUsed / vLim) * 100 : 0;
       let riskClass = "budget-meter--neutral";
       let riskText;
       let barPct = 0;
-      if (cap > 0 && Number.isFinite(cap)) {
+      let capLabel = "";
+      let ariaMax = 0;
+      let ariaNow = 0;
+      let overCap = false;
+      let progressAttrs = "";
+      if (vendorOk) {
+        barPct = Math.min(100, vPct);
+        if (vPct >= 100) riskClass = "budget-meter--danger";
+        else if (vPct >= 85) riskClass = "budget-meter--warn";
+        else riskClass = "budget-meter--ok";
+        const src = vq.source != null ? String(vq.source) : "vendor API";
+        riskText = `Account credits (from ${src}): ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} this billing month (${vPct.toFixed(2)}% of plan). This scan: ${n} HTTP.`;
+        if (cap > 0 && Number.isFinite(cap)) {
+          const perScanPct = (n / cap) * 100;
+          const projectedPct = ((n * scansPerMonth) / cap) * 100;
+          riskText += ` Configured HTTP cap projection: ~${projectedPct.toFixed(1)}% if every scan matches this load; this scan ${perScanPct.toFixed(2)}% of that cap (${n} / ${Math.round(cap)}).`;
+        }
+        capLabel = `${n} HTTP this scan · ${vUsed.toLocaleString()} / ${vLim.toLocaleString()} vendor credits`;
+        ariaMax = vLim;
+        ariaNow = Math.min(vUsed, vLim);
+        overCap = vUsed > vLim;
+        progressAttrs = !overCap
+          ? ` role="progressbar" aria-valuemin="0" aria-valuemax="${ariaMax}" aria-valuenow="${ariaNow}" aria-label="${escapeAttr(name)}: ${vUsed} of ${vLim} vendor credits this month"`
+          : ` role="img" aria-label="${escapeAttr(name)}: vendor credits over plan (${vUsed} / ${vLim})"`;
+      } else if (cap > 0 && Number.isFinite(cap)) {
         const perScanPct = (n / cap) * 100;
         barPct = Math.min(100, perScanPct);
         const projectedPct = ((n * scansPerMonth) / cap) * 100;
@@ -1523,24 +1556,22 @@
         else if (projectedPct >= 70) riskClass = "budget-meter--warn";
         else riskClass = "budget-meter--ok";
         riskText = `Projected ~${projectedPct.toFixed(1)}% of monthly cap if every scan matches this load (~${scansPerMonth.toFixed(0)} scans/mo at ${intervalMin}m interval). This scan: ${perScanPct.toFixed(2)}% of cap (${n} / ${Math.round(cap)} HTTP).`;
+        capLabel = `${n} HTTP this scan · monthly cap ${Math.round(cap)} HTTP`;
+        ariaMax = Math.round(cap);
+        overCap = ariaMax > 0 && n > ariaMax;
+        ariaNow = ariaMax > 0 ? Math.min(n, ariaMax) : 0;
+        progressAttrs = !overCap
+          ? ` role="progressbar" aria-valuemin="0" aria-valuemax="${ariaMax}" aria-valuenow="${ariaNow}" aria-label="${escapeAttr(name)}: ${n} of ${ariaMax} HTTP this scan"`
+          : ` role="img" aria-label="${escapeAttr(name)}: ${n} HTTP this scan, over monthly cap of ${ariaMax}"`;
       } else {
-        riskText =
-          "Configure monthly HTTP caps in the scanner (SCAN_COSTS + per-vendor cap settings) to see usage vs limit on the bar and green/yellow/red risk.";
+        const vErr = vq && vq.error != null ? String(vq.error) : "";
+        riskText = vErr
+          ? `Vendor quota not available (${vErr}). ${n} HTTP this scan (local metrics). Set SCAN_COST_PANEL_* caps or fix API keys to see a limit bar.`
+          : `Configure monthly HTTP caps in the scanner (SCAN_COST_PANEL_*), or set COINGECKO_API_KEY / CMC_API_KEY so the worker can read vendor usage from /key endpoints. This scan: ${n} HTTP.`;
+        capLabel = `${n} HTTP this scan · no vendor quota or monthly cap in snapshot`;
+        progressAttrs = ` role="img" aria-label="${escapeAttr(name)}: ${n} HTTP this scan (no vendor quota or cap)"`;
       }
       const riskTitle = escapeAttr(riskText);
-      const capLabel =
-        cap > 0 && Number.isFinite(cap)
-          ? `${n} HTTP this scan · monthly cap ${Math.round(cap)} HTTP`
-          : `${n} HTTP this scan · no monthly cap in snapshot`;
-      const ariaMax = cap > 0 && Number.isFinite(cap) ? Math.round(cap) : 0;
-      const overCap = ariaMax > 0 && n > ariaMax;
-      const ariaNow = ariaMax > 0 ? Math.min(n, ariaMax) : 0;
-      const progressAttrs =
-        cap > 0 && Number.isFinite(cap) && !overCap
-          ? ` role="progressbar" aria-valuemin="0" aria-valuemax="${ariaMax}" aria-valuenow="${ariaNow}" aria-label="${escapeAttr(name)}: ${n} of ${ariaMax} HTTP this scan"`
-          : cap > 0 && Number.isFinite(cap) && overCap
-            ? ` role="img" aria-label="${escapeAttr(name)}: ${n} HTTP this scan, over monthly cap of ${ariaMax}"`
-            : ` role="img" aria-label="${escapeAttr(name)}: ${n} HTTP this scan (set a monthly cap to show limit bar)"`;
 
       const breakdown = Array.isArray(s.breakdown) ? s.breakdown : [];
       let breakdownHtml = "";
@@ -1558,7 +1589,7 @@
       }
 
       const fillStyle =
-        cap > 0 && Number.isFinite(cap) ? `width:${barPct.toFixed(2)}%` : "width:0%";
+        vendorOk || (cap > 0 && Number.isFinite(cap)) ? `width:${barPct.toFixed(2)}%` : "width:0%";
       let li = `<li class="api-budget-item"><div class="api-budget-rowhead"><strong>${name}</strong><span class="api-budget-meta">${escapeHtml(capLabel)}</span></div>`;
       li += `<div class="api-budget-bar-track"${progressAttrs}><div class="api-budget-bar-fill ${riskClass}" style="${fillStyle}"></div></div>`;
       li += `<p class="api-budget-risk ${riskClass}" title="${riskTitle}">${escapeHtml(riskText)}</p>`;

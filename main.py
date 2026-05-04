@@ -38,6 +38,7 @@ from utils.scan_costs import (
     read_last_completed_coingecko_http_total,
     write_scan_costs_file,
 )
+from utils.vendor_api_quota import fetch_vendor_quotas
 from utils.watchlist_export import compute_watchlist_rows, write_watchlist_exports
 from utils.portfolio_multi import write_multi_portfolio_simulation
 from utils.alert_backtest_report import write_alert_backtest_report
@@ -834,11 +835,22 @@ def run_scanner():
                     err_total += int(v)
                 # Always embed HTTP usage counts from this scan (metrics H0/J3) so the dashboard
                 # can show per-vendor bars; SCAN_COSTS_ENABLED only gates the separate scan_costs.json artifact.
+                vendor_quotas = {}
+                try:
+                    vendor_quotas = fetch_vendor_quotas(
+                        coingecko_key=os.getenv("COINGECKO_API_KEY", "").strip(),
+                        cmc_key=settings.cmc_api_key.strip(),
+                        timeout=12.0,
+                        logger=app_logger,
+                    )
+                except Exception as vq_err:
+                    app_logger.warning("Vendor API quota fetch failed (snapshot still written): %s", vq_err)
                 api_cost_panel = build_api_cost_panel_for_snapshot(
                     metrics.get_summary(),
                     coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
                     polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
                     cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
+                    vendor_quotas=vendor_quotas or None,
                 )
                 write_public_qualified_snapshot(
                     settings.DATA_DIR,
