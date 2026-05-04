@@ -32,7 +32,7 @@ def redact_log_message(message: str) -> str:
     """Remove or mask values that must not be written to disk (API material, on-chain ids)."""
     if not isinstance(message, str):
         message = str(message)
-    s = _RE_HEX_ADDR.sub("0x…[REDACTED]", message)
+    s = _RE_HEX_ADDR.sub("0x...[REDACTED]", message)
     s = _RE_QUERY_SENSITIVE.sub(lambda m: f"{m.group(1)}{m.group(2)}=[REDACTED]", s)
     s = _RE_AUTH_HEADER.sub(lambda m: f"{m.group(1)}[REDACTED]", s)
     s = _RE_BEARER.sub("Bearer [REDACTED]", s)
