@@ -35,6 +35,8 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 | `docs/dashboard/` | Static PWA UI |
 | `snapshot_server/` | Small Flask relay for public GET + worker POST |
 | `push_server/` | Optional Web Push relay |
+| `scripts/check_snapshot_relay.py` | Operator tool: GET `/relay-health`, optional ingest smoke test (env `QUALIFIED_SNAPSHOT_RELAY_*`) |
+| `scripts/check_exchange_print_ascii.py` | CI guardrail: `exchange_data` `print()` lines must be ASCII (Windows console safety) |
 
 ## Docs index
 
@@ -53,7 +55,11 @@ Optional **`config.json`** keys include **`COINGECKO_CALLS_PER_MINUTE`**, **`CMC
 
 ## Contributing / CI
 
-`scripts/ci_verify.sh` matches Render’s build: lint, import checks, pytest subset. PRs should keep **`python scripts/check_github_ci.py`** green if you use that helper.
+`scripts/ci_verify.sh` is the same command Render’s **worker** runs at build time: **ruff**, **`python scripts/check_exchange_print_ascii.py`** (no non-ASCII on `print()` lines under `exchange_data/`), **mypy** on `config` + `notifications`, **`scripts/check_backtesting_imports.py`**, **`scripts/verify_backtest_env.py`**, **`compileall`**, **`pytest tests/`**, plus **`tests/test_render_rootdir_imports.py`** (imports `push_server` / `snapshot_server` `app` with Render-style `rootDir` cwd). Use **`requirements-ci.txt`** in CI and on fresh clones when mirroring the worker install.
+
+**Production diagnostics:** if the dashboard looks empty but the worker ran, check the snapshot relay (`scripts/check_snapshot_relay.py` from a shell that has relay env vars, or open `/relay-health` on the relay host). Worker logs may show **`EXCHANGE_UNIVERSE_FALLBACK`** when exchange listings never populated—often a failed listings refresh (see `exchange_data` logs).
+
+PRs should keep **`python scripts/check_github_ci.py`** green if you use that helper.
 
 ---
 

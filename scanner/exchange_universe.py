@@ -45,11 +45,21 @@ def load_exchange_symbol_universe(
         except Exception as refresh_error:
             app_logger.warning(f"   Exchange listings refresh failed: {refresh_error}")
 
+    used_minimal_fallback = False
     if not all_symbols:
         app_logger.warning("   No exchange data found after refresh - using default list")
         all_symbols = {"BTC", "ETH", "SOL", "XRP"}
+        used_minimal_fallback = True
 
     sym_set = set(all_symbols)
     sym_list = list(all_symbols)
+    if used_minimal_fallback:
+        app_logger.error(
+            "   EXCHANGE_UNIVERSE_FALLBACK: exchange_listings empty after refresh — "
+            "scanning only %s symbols. Qualified dashboard output may look empty. "
+            "If this persists after exchange refresh, check exchange_data logs (Windows: "
+            "non-ASCII print() can abort refresh on cp1252 consoles).",
+            sorted(sym_set),
+        )
     app_logger.info(f"   ✓ Scanning ALL {len(sym_list)} coins from exchange listings")
     return sym_list, sym_set
