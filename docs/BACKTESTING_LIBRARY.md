@@ -9,7 +9,7 @@ This folder is the **import-safe** quantitative layer for hourly/4h/daily backte
 | `BacktestDataLoader` | `backtesting/data_loader.py` — loads 1h OHLCV (CoinGecko → Polygon → CoinMarketCap), resamples to `1h` / `4h` / `1d`, validates frames, uses `PriceCache`. |
 | `LoadResult` | Dataclass returned by `BacktestDataLoader.load`. |
 | `run_backtests_for_final_results` | `backtesting/runner.py` — orchestrates vectorbt runs for qualified coins. |
-| `notification_rows_for_symbol` | `backtesting/report.py` — shapes strategy rows for Telegram text. |
+| `notification_rows_for_symbol` | `backtesting/report.py` — shapes strategy rows for snapshot/export text. |
 | `BacktestDataLoader.validate_ohlcv_frame` | Static validation helper. |
 | `BacktestLoaderParams` | `backtesting/params.py` — frozen knobs for `BacktestDataLoader` (CG rate limit, CMC key string, L1 OHLCV min-bar gates). |
 | `BacktestRunnerParams` | Same module — orchestration fields for `run_backtests_for_final_results` (includes nested `loader`). |
@@ -17,7 +17,7 @@ This folder is the **import-safe** quantitative layer for hourly/4h/daily backte
 
 ## Import boundaries (P3)
 
-CI runs `python scripts/check_backtesting_imports.py`, which AST-scans `backtesting/**/*.py` and fails on imports of `notifications`, `telegram_bot`, or top-level `main`.
+CI runs `python scripts/check_backtesting_imports.py`, which AST-scans `backtesting/**/*.py` and fails on imports of `notifications` or top-level `main`.
 
 ## Settings coupling (P2)
 

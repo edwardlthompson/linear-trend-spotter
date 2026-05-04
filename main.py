@@ -3,8 +3,6 @@
 import os
 import sys
 import json
-import io
-from html import escape as html_escape
 from dataclasses import replace
 from datetime import datetime, timezone
 
@@ -12,12 +10,6 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import settings
-from notifications.formatter import MessageFormatter
-from notifications.image_renderer import (
-    build_combined_notification_image,
-    build_exit_notification_image,
-    build_hourly_summary_image,
-)
 from backtesting.data_loader import BacktestDataLoader
 from backtesting.runner import run_backtests_for_final_results
 from backtesting.params import runner_params_from_settings
@@ -42,29 +34,14 @@ from utils.vendor_api_quota import fetch_vendor_quotas
 from utils.watchlist_export import compute_watchlist_rows, write_watchlist_exports
 from utils.portfolio_multi import write_multi_portfolio_simulation
 from utils.alert_backtest_report import write_alert_backtest_report
-from utils.backtest_strategy_diff import (
-    build_event_summary_backtest_diff_line,
-    load_top_strategy_state,
-    save_top_strategy_state,
-)
-from utils.quiet_hours import is_within_utc_quiet_window
-from utils.still_qualifying_notify import sync_still_qualifying_scan_message
+from utils.backtest_strategy_diff import save_top_strategy_state
 from utils.logger import app_logger, maybe_install_structured_json_handler
-from scanner.active_ranking import build_active_ranking_rows
 from scanner.coin_enrichment import (
     SPARKLINE_HOURLY_MAX_BARS,
     attach_hourly_sparkline_closes_for_snapshot,
     attach_rank_movement,
     attach_signal_age,
     attach_volume_acceleration,
-)
-from scanner.quiet_hours import telegram_quiet_active
-from scanner.top_coin_resolution import ensure_cmc_notify_urls
-from scanner.weekly_digest import (
-    build_weekly_digest_message,
-    iso_week_key,
-    load_weekly_digest_state,
-    save_weekly_digest_state,
 )
 from scanner.web_push_notify import maybe_notify_web_push_qualified_changes
 from scanner.snapshot_relay_notify import maybe_push_qualified_snapshot_relay
@@ -128,7 +105,6 @@ def run_scanner():
             gecko = runtime["gecko"]
             history_fallback = runtime["history_fallback"]
             cg_mapper = runtime["cg_mapper"]
-            telegram = runtime["telegram"]
             cmc_slug_resolver = runtime["cmc_slug_resolver"]
             exchange_db_path = settings.db_paths["exchanges"]
         
@@ -255,7 +231,7 @@ def run_scanner():
         # ============================================================
         # STEP 7–8: Uniformity scores (FILTER 2–3) + optional regime gate
         # ============================================================
-        all_processed, all_processed_map, anomaly_messages = compute_uniformities_from_ohlcv(
+        all_processed, all_processed_map, _anomaly_messages = compute_uniformities_from_ohlcv(
             coins_with_cg_ids,
             cache=cache,
             gecko=gecko,
@@ -317,14 +293,6 @@ def run_scanner():
 
         if skip_backtest:
             app_logger.warning("\n⏭️ Skipping backtests (J4 degrade): %s", skip_reason)
-            if telegram:
-                try:
-                    telegram.send_message(
-                        "<b>Degraded scan</b>\nBacktests skipped this run:\n"
-                        + html_escape(skip_reason[:500])
-                    )
-                except Exception as degrade_notify_err:
-                    app_logger.warning("   ⚠️ Could not send degrade notice: %s", degrade_notify_err)
 
         if settings.backtest_enabled and not skip_backtest:
             app_logger.info("\n🧪 Running backtests for final-stage qualified coins...")
@@ -425,15 +393,8 @@ def run_scanner():
             f"Blocked by cooldown: {len(blocked_by_cooldown)}"
         )
         app_logger.info(
-            "   Notification toggles: "
-            f"entry={settings.entry_notifications}, "
-            f"exit={settings.exit_notifications}, "
-            f"no_change={settings.no_change_notifications}"
+            "   List change signals: use the public snapshot + dashboard (optional Tier-A poll / Tier-B web push)."
         )
-        if not telegram:
-            app_logger.info("   Telegram status: disabled (missing TELEGRAM_BOT_TOKEN and/or TELEGRAM_CHAT_ID)")
-        else:
-            app_logger.info("   Telegram status: enabled")
 
         if entered:
             fallback_summary = backtest_summary
@@ -552,211 +513,9 @@ def run_scanner():
                 app_logger.warning("⚠️ Alert backtest report update failed: %s", report_err)
         
         # ============================================================
-        # STEP 10: Send Telegram notifications with chart images
+        # STEP 10: Outbound alerts are web-only (snapshot JSON + optional web push below).
         # ============================================================
-        quiet = telegram_quiet_active(
-            quiet_hours_enabled=settings.quiet_hours_enabled,
-            quiet_hours_start_hour_utc=settings.quiet_hours_start_hour_utc,
-            quiet_hours_end_hour_utc=settings.quiet_hours_end_hour_utc,
-            is_within_utc_quiet_window=is_within_utc_quiet_window,
-        )
-        if (
-            telegram
-            and regime_meta
-            and regime_meta.get("blocked")
-            and not (quiet and settings.quiet_hours_suppress_regime_gate)
-        ):
-            try:
-                rg = regime_meta
-                regime_msg = (
-                    "🌦️ <b>Regime filter</b> blocked qualifications (BTC 7d/30d gate). "
-                    f"BTC 7d: {float(rg['btc_7d_pct']):.2f}% (max |7d| {float(rg['btc_max_abs_7d_gain_pct']):.2f}%), "
-                    f"30d: {float(rg['btc_30d_pct']):.2f}% (min {float(rg['btc_min_30d_gain_pct']):.2f}%). "
-                    f"<i>{html_escape(str(rg.get('reason', ''))[:220])}</i>"
-                )
-                if telegram.send_message(regime_msg):
-                    metrics.increment("notifications_sent")
-            except Exception as regime_notify_err:
-                app_logger.warning("   ⚠️ Regime filter Telegram notice failed: %s", regime_notify_err)
 
-        if telegram and entered and settings.entry_notifications:
-            with timed_block('notifications'):
-                app_logger.info(f"\n📱 Sending entry notifications for {len(entered)} new coins...")
-                
-                for coin in entered:
-                    app_logger.info(f"   🟢 {coin['symbol']}")
-                    ensure_cmc_notify_urls(coin, cmc_slug_resolver)
-
-                    # Get chart image from Chart-IMG (external service)
-                    caption = MessageFormatter.format_entry(coin)
-                    entry_markup = telegram.coin_link_reply_markup(coin)
-                    
-                    combined_image = None
-                    try:
-                        combined_image = build_combined_notification_image(coin, settings.db_paths['scanner'])
-                    except Exception as e:
-                        app_logger.error(f"      ❌ Failed to build combined image for {coin['symbol']}: {e}")
-
-                    if combined_image:
-                        img_data = io.BytesIO(combined_image)
-                        message_id = telegram.send_photo(
-                            img_data,
-                            caption=caption,
-                            reply_markup=entry_markup,
-                        )
-                        if message_id:
-                            app_logger.info("      📤 Sent combined image notification")
-                        else:
-                            app_logger.error("      ❌ Failed to send combined image notification, falling back to text")
-                            telegram.send_message(caption, reply_markup=entry_markup)
-
-                    else:
-                        message_id = telegram.send_message(caption, reply_markup=entry_markup)
-                        if message_id:
-                            app_logger.info("      📤 Sent text-only notification")
-                        else:
-                            app_logger.error("      ❌ Failed to send text-only notification")
-                    
-                    metrics.increment('notifications_sent')
-        
-        if telegram and exited and settings.exit_notifications:
-            app_logger.info(f"\n📱 Sending exit notifications for {len(exited)} coins...")
-            for coin in exited:
-                app_logger.info(f"   🔴 Exit: {coin['symbol']}")
-                ensure_cmc_notify_urls(coin, cmc_slug_resolver)
-                message = MessageFormatter.format_exit(coin)
-                exit_markup = telegram.coin_link_reply_markup(coin)
-                try:
-                    exit_image = build_exit_notification_image(coin, settings.db_paths['scanner'])
-                except Exception as e:
-                    app_logger.error(f"      ❌ Failed to build exit image for {coin['symbol']}: {e}")
-                    exit_image = None
-
-                if exit_image:
-                    sent = telegram.send_photo(
-                        io.BytesIO(exit_image),
-                        caption=message,
-                        reply_markup=exit_markup,
-                    )
-                    if not sent:
-                        app_logger.warning(f"      ⚠️ Failed to send exit image for {coin['symbol']}, falling back to text")
-                        telegram.send_message(message, reply_markup=exit_markup)
-                else:
-                    telegram.send_message(message, reply_markup=exit_markup)
-
-                metrics.increment('notifications_sent')
-
-        if (
-            telegram
-            and settings.anomaly_alerts_enabled
-            and anomaly_messages
-            and not (quiet and settings.quiet_hours_suppress_anomaly)
-        ):
-            anomaly_text = "⚠️ <b>Scanner Anomaly Detector</b>\n" + "\n".join(f"• {m}" for m in anomaly_messages)
-            telegram.send_message(anomaly_text)
-            metrics.increment('notifications_sent')
-
-        if (
-            telegram
-            and settings.weekly_digest_enabled
-            and not (quiet and settings.quiet_hours_suppress_weekly_digest)
-        ):
-            now_utc = datetime.now(timezone.utc)
-            state = load_weekly_digest_state()
-            current_week_key = iso_week_key(now_utc)
-            already_sent = str(state.get('last_sent_week', '')) == current_week_key
-            is_due_slot = (
-                now_utc.weekday() == settings.weekly_digest_weekday_utc
-                and now_utc.hour >= settings.weekly_digest_hour_utc
-            )
-            if is_due_slot and not already_sent:
-                digest_message = build_weekly_digest_message(history_db, active_db)
-                digest_message_id = telegram.send_message(digest_message)
-                if digest_message_id:
-                    save_weekly_digest_state(
-                        {
-                            'last_sent_week': current_week_key,
-                            'last_sent_at': now_utc.isoformat(),
-                            'last_message_id': digest_message_id,
-                        }
-                    )
-                    metrics.increment('notifications_sent')
-
-        if (
-            telegram
-            and (entered or exited)
-            and not (quiet and settings.quiet_hours_suppress_event_summary)
-        ):
-            app_logger.info("\n📱 Sending scanner event summary notification...")
-            active_ranking_rows = build_active_ranking_rows(
-                final_results,
-                active_after_update,
-            )
-            still_qualified_for_bt_diff = (
-                {str(k).upper() for k in active_before_update}
-                & {str(k).upper() for k in active_after_update}
-                & final_symbol_set
-            )
-            prev_bt_top = load_top_strategy_state(bt_top_state_path)
-            backtest_diff_plain = build_event_summary_backtest_diff_line(
-                previous_by_symbol=prev_bt_top,
-                final_results=final_results,
-                still_qualified_symbols=still_qualified_for_bt_diff,
-            )
-            if backtest_diff_plain:
-                app_logger.info("   %s", backtest_diff_plain.replace("\n", " ")[:500])
-            sent_summary_count = 0
-            summary_image = build_hourly_summary_image(
-                active_rows=active_ranking_rows,
-            )
-            if summary_image:
-                summary_msg_id = telegram.send_photo(
-                    io.BytesIO(summary_image),
-                    caption=MessageFormatter.format_summary_caption(
-                        active_count=len(active_ranking_rows),
-                        backtest_diff_plain=backtest_diff_plain,
-                    ),
-                )
-                if summary_msg_id:
-                    sent_summary_count = 1
-                    metrics.increment('notifications_sent')
-
-            if sent_summary_count == 0:
-                fallback_summary = (
-                    "🖼️ <b>Scanner Event Dashboard</b>\n"
-                    f"Entries: {len(entered)} | Exits: {len(exited)} | Cooldown blocked: {len(blocked_by_cooldown)}\n"
-                    f"Active: {len(active_ranking_rows)} | Watchlist: {len(watchlist_rows)}"
-                )
-                if backtest_diff_plain:
-                    fallback_summary += (
-                        "\n📉 <b>BT top Δ</b> "
-                        + html_escape(backtest_diff_plain, quote=False)
-                    )
-                fallback_msg_id = telegram.send_message(fallback_summary)
-                if fallback_msg_id:
-                    sent_summary_count = 1
-                    metrics.increment('notifications_sent')
-            app_logger.info(
-                "📌 EVENT_SUMMARY_SENT "
-                f"messages={sent_summary_count}/1 "
-                f"active_coins={len(active_ranking_rows)}"
-            )
-
-        if telegram and sync_still_qualifying_scan_message(
-            telegram,
-            state_path=settings.still_qualifying_state_path,
-            final_results=final_results,
-            entered_len=len(entered),
-            exited_len=len(exited),
-            enabled=settings.still_qualifying_edit_enabled,
-            no_change_notifications=settings.no_change_notifications,
-            quiet_suppress=quiet and settings.quiet_hours_suppress_still_qualifying,
-        ):
-            metrics.increment('notifications_sent')
-
-        if not telegram and (entered or exited):
-            app_logger.warning("⚠️ Entry/exit events detected but Telegram is disabled")
-        
         # Save results
         if final_results:
             history_db.save_scan(final_results)

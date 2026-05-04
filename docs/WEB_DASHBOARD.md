@@ -1,6 +1,6 @@
 # Public qualified-coin dashboard (Milestone Q)
 
-For **Telegram vs website-only delivery** (snapshots, env vars, Render), see **[DELIVERY_MODE.md](DELIVERY_MODE.md)**.
+For **how snapshots reach this UI** (relay, env vars, Render), see **[DELIVERY_MODE.md](DELIVERY_MODE.md)**.
 
 **Deploy / refresh / API budget:** step-by-step checklist → **[MANUAL_DEPLOY_STEPS.md](MANUAL_DEPLOY_STEPS.md)**.
 
@@ -33,7 +33,7 @@ The **Qualified** and **Watchlist** tabs render a **single logical table** with 
 
 Snapshot **`field_set: full`** should include `listed_on`, `exchange_volumes`, `closes_1h`, gains, health, uniformity, and acceleration fields where you want charts and filters populated — built in `utils/scan_artifacts.build_public_qualified_snapshot`.
 
-See [`DASHBOARD_ROADMAP.md`](DASHBOARD_ROADMAP.md) for longer-term ideas; it may lag the live UI.
+Future dashboard milestones are tracked in [`EXECUTION_PLAN.md`](EXECUTION_PLAN.md) (Milestone **Q**).
 
 ## Sort, filters, and persistence (refresh-safe)
 
@@ -75,7 +75,7 @@ Implemented under `docs/dashboard/`:
 
 ### Tier-B Web Push (Q21)
 
-Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere), **not** the scanner worker. When `WEB_PUSH_NOTIFY_URL` and `WEB_PUSH_INTERNAL_SECRET` are set, the worker does **at most one** `POST` per completed scan **only if** at least one coin **entered** or **exited** the qualified active list (same churn as Telegram entry/exit). The relay endpoint is still `/internal/notify-scan`. The push **title/body** are short human-readable lines (which symbols moved) plus **`WEB_PUSH_DASHBOARD_URL`** on click — **no** OHLCV or other market payloads.
+Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere), **not** the scanner worker. When `WEB_PUSH_NOTIFY_URL` and `WEB_PUSH_INTERNAL_SECRET` are set, the worker does **at most one** `POST` per completed scan **only if** at least one coin **entered** or **exited** the qualified active list. The relay endpoint is still `/internal/notify-scan`. The push **title/body** are short human-readable lines (which symbols moved) plus **`WEB_PUSH_DASHBOARD_URL`** on click — **no** OHLCV or other market payloads.
 
 **Relay service**
 

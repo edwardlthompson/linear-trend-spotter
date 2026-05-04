@@ -10,10 +10,6 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
-      - key: TELEGRAM_ENABLED
-        value: "false"
-      - key: DELIVERY_MODE
-        value: "web"
       - key: DATA_DIR
         value: /var/data
       - key: SCAN_INTERVAL_SECONDS
@@ -27,10 +23,6 @@ services:
       - key: COINAPI_API_KEY
         sync: false
       - key: COINGECKO_API_KEY
-        sync: false
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_CHAT_ID
         sync: false
       - key: CHART_IMG_API_KEY
         sync: false

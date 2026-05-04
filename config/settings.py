@@ -128,7 +128,7 @@ class Settings:
             'REGIME_FILTER_BTC_MIN_30D_GAIN': 0.0,
             'REGIME_FILTER_BTC_MAX_ABS_7D_GAIN': 25.0,
             'SCANNER_INSIGHTS_FILE': 'scanner_insights.json',
-            'WEEKLY_DIGEST_ENABLED': True,
+            'WEEKLY_DIGEST_ENABLED': False,
             'WEEKLY_DIGEST_WEEKDAY_UTC': 0,
             'WEEKLY_DIGEST_HOUR_UTC': 12,
             'WEEKLY_DIGEST_STATE_FILE': 'weekly_digest_state.json',
@@ -143,30 +143,12 @@ class Settings:
             'SCAN_COST_PANEL_COINGECKO_MONTHLY_HTTP_CAP': 0,
             'SCAN_COST_PANEL_POLYGON_MONTHLY_HTTP_CAP': 0,
             'SCAN_COST_PANEL_CMC_MONTHLY_HTTP_CAP': 0,
-            'DELIVERY_MODE': 'web',
-            'TELEGRAM_ENABLED': False,
-            'TELEGRAM_BOT_MODE': 'polling',
-            'TELEGRAM_WEBHOOK_PORT': 8080,
-            'TELEGRAM_WEBHOOK_PATH': '/telegram/webhook',
-            'TELEGRAM_WEBHOOK_URL': '',
-            'TELEGRAM_WEBHOOK_SECRET_TOKEN': '',
             'DEGRADE_SKIP_BACKTEST_ENABLED': False,
             'DEGRADE_PRIOR_CG_HTTP_SKIP_GE': 0,
             'CMC_SLUG_MAP_ENABLED': True,
             'CMC_SLUG_MAP_MAX_AGE_HOURS': 72,
             'CMC_SLUG_MAP_CACHE_FILE': 'cmc_cryptocurrency_map_cache.json',
             'CMC_SLUG_LEARN_FILE': 'gecko_id_to_cmc_slug.json',
-            'SCANNER_DIAG_COMMANDS_ENABLED': False,
-            'QUIET_HOURS_ENABLED': False,
-            'QUIET_HOURS_START_HOUR_UTC': 22,
-            'QUIET_HOURS_END_HOUR_UTC': 6,
-            'QUIET_HOURS_SUPPRESS_ANOMALY': True,
-            'QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST': True,
-            'QUIET_HOURS_SUPPRESS_EVENT_SUMMARY': True,
-            'QUIET_HOURS_SUPPRESS_STILL_QUALIFYING': True,
-            'QUIET_HOURS_SUPPRESS_REGIME_GATE': True,
-            'STILL_QUALIFYING_EDIT_ENABLED': False,
-            'STILL_QUALIFYING_STATE_FILE': 'still_qualifying_telegram.json',
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -243,19 +225,10 @@ class Settings:
             'WEEKLY_DIGEST_ENABLED',
             'SCAN_HEARTBEAT_ENABLED',
             'PUBLIC_QUALIFIED_SNAPSHOT_ENABLED',
-            'TELEGRAM_ENABLED',
             'SCAN_COSTS_ENABLED',
             'DEGRADE_SKIP_BACKTEST_ENABLED',
             'BACKTEST_AB_SHADOW_ENABLED',
             'CMC_SLUG_MAP_ENABLED',
-            'SCANNER_DIAG_COMMANDS_ENABLED',
-            'QUIET_HOURS_ENABLED',
-            'QUIET_HOURS_SUPPRESS_ANOMALY',
-            'QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST',
-            'QUIET_HOURS_SUPPRESS_EVENT_SUMMARY',
-            'QUIET_HOURS_SUPPRESS_STILL_QUALIFYING',
-            'QUIET_HOURS_SUPPRESS_REGIME_GATE',
-            'STILL_QUALIFYING_EDIT_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -297,9 +270,6 @@ class Settings:
             ('DEGRADE_PRIOR_CG_HTTP_SKIP_GE', 0, 10_000_000),
             ('CMC_SLUG_MAP_MAX_AGE_HOURS', 1, 8760),
             ('SCAN_INTERVAL_SECONDS', 60, 604800),
-            ('QUIET_HOURS_START_HOUR_UTC', 0, 23),
-            ('QUIET_HOURS_END_HOUR_UTC', 0, 23),
-            ('TELEGRAM_WEBHOOK_PORT', 1, 65535),
             ('ALERT_BACKTEST_REPORT_TOP_N', 1, 200),
             ('SCAN_COST_PANEL_COINGECKO_MONTHLY_HTTP_CAP', 0, 100_000_000),
             ('SCAN_COST_PANEL_POLYGON_MONTHLY_HTTP_CAP', 0, 100_000_000),
@@ -406,26 +376,6 @@ class Settings:
             else:
                 normalized['BACKTEST_TIMEFRAMES'] = normalized_tfs
 
-        bot_mode = str(normalized.get('TELEGRAM_BOT_MODE', 'polling')).strip().lower()
-        if bot_mode not in {'polling', 'webhook'}:
-            errors.append('TELEGRAM_BOT_MODE supports only: polling, webhook')
-        else:
-            normalized['TELEGRAM_BOT_MODE'] = bot_mode
-
-        webhook_path = str(normalized.get('TELEGRAM_WEBHOOK_PATH', '/telegram/webhook')).strip()
-        if not webhook_path:
-            errors.append('TELEGRAM_WEBHOOK_PATH cannot be empty')
-        elif not webhook_path.startswith('/'):
-            errors.append('TELEGRAM_WEBHOOK_PATH must start with "/"')
-        else:
-            normalized['TELEGRAM_WEBHOOK_PATH'] = webhook_path
-
-        delivery_mode = str(normalized.get('DELIVERY_MODE', 'telegram')).strip().lower()
-        if delivery_mode not in {'telegram', 'web'}:
-            errors.append('DELIVERY_MODE must be one of: telegram, web')
-        else:
-            normalized['DELIVERY_MODE'] = delivery_mode
-
         indicators = normalized.get('BACKTEST_INDICATORS', [])
         if not isinstance(indicators, list):
             errors.append('BACKTEST_INDICATORS must be a list')
@@ -450,7 +400,6 @@ class Settings:
             'SCAN_COSTS_FILE',
             'CMC_SLUG_MAP_CACHE_FILE',
             'CMC_SLUG_LEARN_FILE',
-            'STILL_QUALIFYING_STATE_FILE',
             'WATCHLIST_EXPORT_CSV_FILE',
             'WATCHLIST_EXPORT_JSON_FILE',
         ]:
@@ -505,116 +454,6 @@ class Settings:
         """FILTER 1: 30d gain must be strictly greater than this value (percent)."""
         return float(self._config.get('GAIN_FILTER_MIN_30D_PERCENT', 30.0))
 
-    @property
-    def scanner_diag_commands_enabled(self) -> bool:
-        """When True, ``telegram_bot`` handles /health, /last, /cost (Milestone K1)."""
-        return bool(self._config.get('SCANNER_DIAG_COMMANDS_ENABLED', False))
-
-    @property
-    def quiet_hours_enabled(self) -> bool:
-        return bool(self._config.get('QUIET_HOURS_ENABLED', False))
-
-    @property
-    def quiet_hours_start_hour_utc(self) -> int:
-        return int(self._config.get('QUIET_HOURS_START_HOUR_UTC', 22))
-
-    @property
-    def quiet_hours_end_hour_utc(self) -> int:
-        return int(self._config.get('QUIET_HOURS_END_HOUR_UTC', 6))
-
-    @property
-    def quiet_hours_suppress_anomaly(self) -> bool:
-        return bool(self._config.get('QUIET_HOURS_SUPPRESS_ANOMALY', True))
-
-    @property
-    def quiet_hours_suppress_weekly_digest(self) -> bool:
-        return bool(self._config.get('QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST', True))
-
-    @property
-    def quiet_hours_suppress_event_summary(self) -> bool:
-        return bool(self._config.get('QUIET_HOURS_SUPPRESS_EVENT_SUMMARY', True))
-
-    @property
-    def quiet_hours_suppress_still_qualifying(self) -> bool:
-        return bool(self._config.get('QUIET_HOURS_SUPPRESS_STILL_QUALIFYING', True))
-
-    @property
-    def quiet_hours_suppress_regime_gate(self) -> bool:
-        """When True and quiet hours are active, skip the regime-gate Telegram one-liner."""
-        return bool(self._config.get('QUIET_HOURS_SUPPRESS_REGIME_GATE', True))
-
-    @property
-    def still_qualifying_edit_enabled(self) -> bool:
-        return bool(self._config.get('STILL_QUALIFYING_EDIT_ENABLED', False))
-
-    @property
-    def still_qualifying_state_path(self) -> Path:
-        raw = str(self._config.get('STILL_QUALIFYING_STATE_FILE', 'still_qualifying_telegram.json')).strip()
-        name = raw or 'still_qualifying_telegram.json'
-        return self.DATA_DIR / name
-
-    @property
-    def delivery_mode(self) -> str:
-        """Where alerts and summaries go: ``telegram`` or ``web`` (dashboard/snapshot only).
-
-        Environment ``DELIVERY_MODE`` overrides config when set to ``web`` or ``telegram``.
-        See ``docs/DELIVERY_MODE.md``.
-        """
-        env_m = os.getenv('DELIVERY_MODE', '').strip().lower()
-        if env_m in ('web', 'telegram'):
-            return env_m
-        raw = str(self._config.get('DELIVERY_MODE', 'telegram')).strip().lower()
-        return raw if raw in ('web', 'telegram') else 'telegram'
-
-    @property
-    def telegram_enabled(self) -> bool:
-        """Telegram client + notifications + bot process.
-
-        False when ``delivery_mode`` is ``web``, or when ``TELEGRAM_ENABLED`` is off via
-        config/environment (see ``docs/DELIVERY_MODE.md``).
-        """
-        if self.delivery_mode == 'web':
-            return False
-        env_raw = os.getenv('TELEGRAM_ENABLED', '').strip().lower()
-        if env_raw in ('0', 'false', 'no', 'off'):
-            return False
-        if env_raw in ('1', 'true', 'yes', 'on'):
-            return True
-        return bool(self._config.get('TELEGRAM_ENABLED', True))
-
-    @property
-    def telegram(self) -> Optional[Dict[str, str]]:
-        """Telegram credentials from environment"""
-        bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '')
-        chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
-        if bot_token and chat_id:
-            return {
-                'bot_token': bot_token,
-                'chat_id': chat_id
-            }
-        return None
-
-    @property
-    def telegram_bot_mode(self) -> str:
-        return str(self._config.get('TELEGRAM_BOT_MODE', 'polling')).strip().lower() or 'polling'
-
-    @property
-    def telegram_webhook_port(self) -> int:
-        return int(self._config.get('TELEGRAM_WEBHOOK_PORT', 8080))
-
-    @property
-    def telegram_webhook_path(self) -> str:
-        raw = str(self._config.get('TELEGRAM_WEBHOOK_PATH', '/telegram/webhook')).strip()
-        return raw if raw.startswith('/') else f"/{raw}"
-
-    @property
-    def telegram_webhook_url(self) -> str:
-        return str(self._config.get('TELEGRAM_WEBHOOK_URL', '')).strip()
-
-    @property
-    def telegram_webhook_secret_token(self) -> str:
-        return str(self._config.get('TELEGRAM_WEBHOOK_SECRET_TOKEN', '')).strip()
-    
     @property
     def chart_img_api_key(self) -> str:
         """Chart-IMG API key from environment"""

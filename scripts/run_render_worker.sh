@@ -15,14 +15,6 @@ echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Render worker started" | tee -a "$LOG_F
 echo "PROJECT_DIR=$PROJECT_DIR DATA_DIR=$DATA_DIR INTERVAL=${SCAN_INTERVAL_SECONDS}s" | tee -a "$LOG_FILE"
 echo "RENDER_GIT_BRANCH=${RENDER_GIT_BRANCH:-unknown} RENDER_GIT_COMMIT=${RENDER_GIT_COMMIT:-unknown}" | tee -a "$LOG_FILE"
 
-# Optional Telegram command listener (disable: DELIVERY_MODE=web or TELEGRAM_ENABLED=false)
-if [ "${DELIVERY_MODE:-}" = "web" ] || [ "${TELEGRAM_ENABLED:-true}" = "false" ] || [ "${TELEGRAM_ENABLED:-}" = "0" ]; then
-  echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Skipping Telegram bot (DELIVERY_MODE=${DELIVERY_MODE:-unset} TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-unset})" | tee -a "$LOG_FILE"
-else
-  echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting Telegram bot listener..." | tee -a "$LOG_FILE"
-  python3 -u telegram_bot.py >> "$LOG_DIR/telegram_bot.log" 2>&1 &
-fi
-
 while true; do
   started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "[$started] Starting scheduled scan" | tee -a "$LOG_FILE"

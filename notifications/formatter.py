@@ -15,7 +15,7 @@ class MessageFormatter:
 
     @staticmethod
     def _tg_html_text(value: object) -> str:
-        """Escape dynamic text for Telegram HTML parse mode (body text, not href)."""
+        """Escape dynamic text for compact HTML-style captions (body text, not href)."""
         return html.escape(str(value or ""), quote=False)
 
     @staticmethod
@@ -73,7 +73,7 @@ class MessageFormatter:
 
     @staticmethod
     def primary_market_url(coin: Dict) -> str:
-        """Deep link shown in Telegram: CMC when available, else non-Gecko source_url, else CoinGecko."""
+        """Deep link for listings: CMC when available, else non-Gecko source_url, else CoinGecko."""
         url = MessageFormatter._build_cmc_url(coin)
         if url:
             return url
@@ -130,7 +130,7 @@ class MessageFormatter:
 
     @staticmethod
     def _symbol_quality_line_html(coin: Dict) -> str:
-        """Optional Telegram HTML line: reliability, OHLCV provider, signal age (Milestone L2)."""
+        """Optional HTML line: reliability, OHLCV provider, signal age (Milestone L2)."""
         if not settings.notification_symbol_quality_line:
             return ""
         parts: list[str] = []
@@ -198,7 +198,7 @@ class MessageFormatter:
     def format_entry(coin: Dict) -> str:
         """
         Format entry notification per spec §10.1
-        Returns HTML-formatted caption for Telegram photo
+        Returns HTML-formatted caption for rich notification-style blocks
         """
         header_url = MessageFormatter.primary_market_url(coin)
 

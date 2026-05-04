@@ -128,6 +128,18 @@ def hydrate_exchange_volumes_from_coingecko(
             merged.extend(batch)
             if len(batch) < 100:
                 break
+        # If exchange_ids filter yields nothing (identifier mismatch upstream), fall back to one
+        # unfiltered page sorted by volume so process_tickers can still pick target venues.
+        if not merged:
+            fb = gecko.get_tickers(gid_key, page=1, order="volume_desc")
+            if fb and isinstance(fb.get("tickers"), list) and fb["tickers"]:
+                merged = fb["tickers"][:400]
+                app_logger.info(
+                    "      ↪️ exchange_ids filter returned 0 ticker rows; using unfiltered page 1 "
+                    "(trimmed to %s) for cg_id=%s",
+                    len(merged),
+                    gid_key,
+                )
         tickers = {"tickers": merged} if merged else None
         if tickers:
             volumes = process_tickers(tickers, target_exchanges)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Milestone P3: AST scan — backtesting must not import Telegram / main / notifications."""
+"""Milestone P3: AST scan — backtesting must not import main or the notifications package."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import ast
 import sys
 from pathlib import Path
 
-FORBIDDEN_TOP = frozenset({"notifications", "telegram_bot", "main"})
+FORBIDDEN_TOP = frozenset({"notifications", "main"})
 
 
 def _violations_in_file(path: Path) -> list[str]:

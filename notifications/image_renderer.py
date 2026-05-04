@@ -1,4 +1,4 @@
-"""Image rendering utilities for Telegram notifications."""
+"""Image rendering utilities for combined chart/caption tiles (legacy snapshot tooling)."""
 
 from __future__ import annotations
 
@@ -773,7 +773,7 @@ def build_combined_notification_image(coin: Dict, db_path: Path) -> Optional[byt
 def build_hourly_summary_image(
     active_rows: List[Dict],
 ) -> Optional[bytes]:
-    """Render a compact event dashboard image for Telegram summary sends."""
+    """Render a compact event dashboard image for summary tiles (legacy artifact path)."""
     try:
         top_active = list(active_rows[:15])
 

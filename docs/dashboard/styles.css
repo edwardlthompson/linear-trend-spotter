@@ -1,4 +1,5 @@
 html {
+  overflow-x: clip;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   --color-text: #0f172a;
   --color-bg: #f8fafc;
@@ -76,8 +77,8 @@ body.dashboard-body {
   max-height: 100dvh;
   overflow: hidden;
   width: 100%;
-  max-width: min(1920px, 100vw);
-  margin-inline: auto;
+  max-width: 100%;
+  margin-inline: 0;
   padding: clamp(0.5rem, 1.25vw, 1.25rem);
 }
 
@@ -126,6 +127,7 @@ body.dashboard-body {
 #mainDataPanel:not([hidden]) .table-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
   overflow: auto;
   margin: 0;
   padding: 0;
@@ -204,7 +206,7 @@ h1 {
 .topbar-search--toolbar {
   flex: 1 1 0;
   min-width: 0;
-  max-width: min(36rem, 100%);
+  max-width: 100%;
 }
 
 .site-header-actions .topbar-search-input {
@@ -360,7 +362,9 @@ button.coin-alerts-feed-dismiss:hover {
 }
 
 .settings-panel {
-  max-width: min(40rem, 100%);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .settings-panel-title {
@@ -1217,11 +1221,12 @@ table {
 }
 
 table.qualified-grid {
-  width: max-content;
-  min-width: 100%;
-  max-width: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--color-border);
   overflow: visible;
+  table-layout: auto;
 }
 
 table.qualified-grid th,
@@ -1275,7 +1280,8 @@ table.qualified-grid tbody td {
 }
 
 .spark-td {
-  min-width: 13.5rem;
+  min-width: clamp(9rem, 22vw, 12.5rem);
+  width: 1%;
 }
 
 table.qualified-grid thead th {
@@ -1402,6 +1408,8 @@ a {
 .spark-svg {
   display: block;
   color: var(--color-link);
+  max-width: min(168px, 100%);
+  height: auto;
 }
 
 .spark-svg .spark-line-main {

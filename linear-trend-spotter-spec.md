@@ -2,10 +2,10 @@
 
 - **Project:** Linear Trend Spotter (`linear-trend-spotter`)
 - **Repository:** [github.com/edwardlthompson/linear-trend-spotter](https://github.com/edwardlthompson/linear-trend-spotter)
-- **Production Host:** [PythonAnywhere](https://www.pythonanywhere.com/) (paid tier, always-on)
+- **Production Host:** **Render** (worker + optional `snapshot_server` / `push_server`), or any Linux host that runs `scheduler.py` / `main.py` on a schedule with a writable **`DATA_DIR`**.
 - **Version:** 1.0.0
 - **Contributors:** [Edward Thompson](https://github.com/edwardlthompson) (project owner), [h8rt3rmin8r](https://github.com/h8rt3rmin8r) (major contributor)
-- **Date:** 2026-02-28
+- **Date:** 2026-05-03
 - **Status:** DRAFT
 - **Audience:** AI-first, Human-second
 
@@ -54,7 +54,7 @@
   - [7.1. CoinMarketCap](#71-coinmarketcap)
   - [7.2. CoinGecko](#72-coingecko)
   - [7.3. Chart-IMG](#73-chart-img)
-  - [7.4. Telegram Bot API](#74-telegram-bot-api)
+  - [7.4. Public Snapshot & Dashboard](#74-public-snapshot--dashboard)
   - [7.5. Rate Limit Strategy](#75-rate-limit-strategy)
 - [8. Database Schema](#8-database-schema)
   - [8.1. Primary Database — `scanner.db`](#81-primary-database--scannerdb)
@@ -68,12 +68,12 @@
 - [10. Notification System](#10-notification-system)
   - [10.1. Entry Notifications](#101-entry-notifications)
   - [10.2. Exit Notifications](#102-exit-notifications)
-  - [10.3. Telegram Bot Commands](#103-telegram-bot-commands)
+  - [10.3. Dashboard & Tier-A/B Alerts](#103-dashboard--tier-ab-alerts)
 - [11. Scheduling and Process Management](#11-scheduling-and-process-management)
   - [11.1. Scheduled Tasks](#111-scheduled-tasks)
   - [11.2. Scan Locking](#112-scan-locking)
-  - [11.3. Telegram Bot Process](#113-telegram-bot-process)
-  - [11.4. Watchdog](#114-watchdog)
+  - [11.3. Companion Services (Relay / Push)](#113-companion-services-relay--push)
+  - [11.4. Static Dashboard Hosting](#114-static-dashboard-hosting)
 - [12. Logging and Diagnostics](#12-logging-and-diagnostics)
   - [12.1. Logging Architecture](#121-logging-architecture)
   - [12.2. Log Files](#122-log-files)
@@ -97,7 +97,7 @@
 
 ### 1.1. Purpose and Audience
 
-This document is the authoritative technical specification for Linear Trend Spotter, an automated cryptocurrency trend detection system that continuously scans exchange-listed coins, applies a multi-stage filtering pipeline, and delivers qualified alerts with chart images to a Telegram group.
+This document is the authoritative technical specification for Linear Trend Spotter, an automated cryptocurrency trend detection system that continuously scans exchange-listed coins, applies a multi-stage filtering pipeline, and exposes qualified results through **artifacts** (logs, SQLite history), a **`qualified_public_snapshot.json`** consumed by the **static web dashboard** (`docs/dashboard/`), and optional **snapshot relay** (`snapshot_server/`) plus **Tier-B web push** (`push_server/`).
 
 This specification serves as the single source of truth for the system's behavioral contract, architecture, data flow, and operational requirements. It defines the system as it **should exist** in its ideal state — not as a snapshot of the current implementation. Differences between this specification and the live codebase represent work to be done.
 
@@ -107,20 +107,20 @@ The specification is written for an **AI-first, Human-second** audience. Its pri
 
 #### In Scope
 
-- The complete scan pipeline: data acquisition, filtering, scoring, entry/exit detection, and notification delivery.
-- All external API integrations: CoinMarketCap, CoinGecko, Chart-IMG, and Telegram.
+- The complete scan pipeline: data acquisition, filtering, scoring, entry/exit detection, and serialized outputs (snapshot JSON, optional chart URLs).
+- All external API integrations: CoinMarketCap, CoinGecko, Chart-IMG, plus hosting endpoints used only for **relay/push** (not market data).
 - The database schema for scan history, active coin tracking, exchange listings, symbol mappings, and caching.
 - The configuration system covering secrets, tunable parameters, and operational settings.
-- The scheduling, process management, and watchdog infrastructure.
-- The Telegram bot command interface.
+- The scheduling / worker model on Render (or cron elsewhere).
+- The **static dashboard** contract (`docs/WEB_DASHBOARD.md`, schema under `docs/qualified_public_snapshot.schema.json`).
 - Logging, metrics, and error handling.
 
 #### Out of Scope
 
 - Trading logic, portfolio management, or position sizing. This system identifies trends — it does not execute trades.
-- Mobile applications or web dashboards. The sole delivery interface is Telegram.
-- Historical backtesting or performance analytics beyond basic scan metrics.
-- Multi-user authentication or access control. The system serves a single Telegram group.
+- Standalone native mobile apps (the **`docs/dashboard/` PWA** is in scope).
+- Historical backtesting or performance analytics beyond basic scan metrics (integrated **`backtesting/`** exists but exhaustive analytics UX is out of scope).
+- Multi-user authentication or access control on the public dashboard URL unless explicitly deployed behind your own gate—**default posture is unauthenticated read of public JSON**.
 
 ### 1.3. Document Maintenance
 
@@ -177,12 +177,11 @@ This specification uses [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) keywo
 |-------|-------|
 | Project Name | Linear Trend Spotter |
 | Project Slug | `linear-trend-spotter` |
-| Language | Python 3.10 |
+| Language | Python 3.11 (CI / Render); 3.10+ acceptable locally |
 | Repository | [github.com/edwardlthompson/linear-trend-spotter](https://github.com/edwardlthompson/linear-trend-spotter) |
-| Production host | [PythonAnywhere](https://www.pythonanywhere.com/) (paid tier, always-on) |
+| Production host | **Render** (typical) or any Linux host with cron/systemd/timer invoking the worker |
 | Database | SQLite 3 (local files) |
-| Delivery | [Telegram Bot API](https://core.telegram.org/bots/api) |
-| Telegram Group | [Join Link](https://t.me/+pmZewVhuEFJjYTIx) |
+| Delivery | Static **`docs/dashboard/`** UI + **`qualified_public_snapshot.json`** (optional **`snapshot_server/`** GET/POST relay; optional **`push_server/`** Tier-B web push). See [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md). |
 
 ### 2.2. What This Tool Does
 
@@ -190,7 +189,7 @@ Linear Trend Spotter is a 24/7 automated scanner that identifies cryptocurrency 
 
 The system scans every coin listed on Coinbase, Kraken, and MEXC once per hour through a 10-stage filtering pipeline that progressively narrows ~2,500 coins down to ~15–25 qualified results. The core differentiator is the **Uniformity Score** algorithm (see [§6](#6-core-algorithm--uniformity-score)), which measures how evenly a coin's gains are distributed across a 30-day window — filtering out "hockey stick" charts where most gains cluster at one end.
 
-When a coin first qualifies, the system sends a Telegram notification with a TradingView-style chart image, gain percentages, the uniformity score, and per-exchange volume data. When a coin falls out of the qualified set, a single exit notification is sent. No repeated alerts, no spam.
+When a coin first qualifies, the worker records the event in SQLite, may attach an optional Chart-IMG URL for dashboard display, and includes the coin in the **next** serialized **`qualified_public_snapshot.json`** (and relay POST when configured). When a coin exits the qualified set, that change appears on the next snapshot—there is no duplicate “spam” row across scans; the dashboard compares snapshots client-side for badges and Tier-A alerts.
 
 ### 2.3. Design Goals and Non-Goals
 
@@ -202,9 +201,9 @@ When a coin first qualifies, the system sends a Telegram notification with a Tra
 
 **G3 — Minimal API cost.** The pipeline is ordered so that the cheapest, most selective filters run first. CoinMarketCap provides bulk gain data in a single API call. CoinGecko's per-coin endpoints are reached only by the ~100 coins that survive the first three filter stages. Aggressive caching reduces redundant calls.
 
-**G4 — Resilient unattended operation.** The system MUST run continuously without human intervention. Rate limits, API failures, network timeouts, and process crashes are handled automatically through backoff, retry, caching, and watchdog restart.
+**G4 — Resilient unattended operation.** The worker MUST tolerate unattended schedules: rate limits, API failures, network timeouts, and transient process crashes are handled through backoff, retry, caching, and platform-level restarts (cron / Render).
 
-**G5 — Clean separation of concerns.** API clients, filter logic, database operations, notification formatting, and orchestration are isolated into distinct modules. The main scanner orchestrator (`main.py`) delegates all domain logic to purpose-built modules.
+**G5 — Clean separation of concerns.** API clients, filter logic, database operations, **message formatting** (`MessageFormatter`), and orchestration are isolated into distinct modules. The main scanner orchestrator (`main.py`) delegates domain logic to **`scanner/`** stages and utilities.
 
 **G6 — AI-agent implementability.** This specification provides sufficient detail for an AI agent to implement or modify any component in a single session without interactive clarification.
 
@@ -212,9 +211,9 @@ When a coin first qualifies, the system sends a Telegram notification with a Tra
 
 **NG1 — Trading execution.** The system identifies trends. It does not place orders, manage positions, or calculate risk.
 
-**NG2 — Web UI or dashboard.** Telegram is the sole delivery interface.
+**NG2 — Third-party chat as the primary UI.** Delivery is the web dashboard + JSON snapshot; no chat-bot transport.
 
-**NG3 — Multi-tenancy.** The system serves one Telegram group with one configuration.
+**NG3 — Multi-tenancy.** Default deployment is **single-tenant** (one operator config / one public snapshot surface). Hosting many isolated customers would require productized auth and data partitioning—out of scope here.
 
 **NG4 — Real-time streaming.** Scans run on an hourly schedule, not in response to live price feeds.
 
@@ -222,8 +221,8 @@ When a coin first qualifies, the system sends a Telegram notification with a Tra
 
 | Requirement | Value |
 |-------------|-------|
-| Python version | 3.10 |
-| Operating system | Linux (PythonAnywhere runs Ubuntu) |
+| Python version | 3.11 (recommended; CI uses 3.11) |
+| Operating system | Linux (worker images are typically Ubuntu-based) |
 | Network | Outbound HTTPS to all external APIs |
 | Disk | <100 MB total for databases, logs, and lock files |
 | RAM | <256 MB per scan process |
@@ -236,57 +235,27 @@ When a coin first qualifies, the system sends a Telegram notification with a Tra
 
 ```
 linear-trend-spotter/
-├── .github/
-│   └── copilot-instructions.md
-├── .archive/
-│   └── (archived files — see §3.3 for naming convention)
-├── api/
-│   ├── __init__.py
-│   ├── coinmarketcap.py
-│   ├── coingecko.py
-│   ├── coingecko_mapper.py
-│   ├── chart_img.py
-│   └── tradingview_mapper.py
+├── .github/               # CI workflows
+├── api/                   # Market-data & chart HTTP clients
+├── backtesting/           # Import-safe library (see docs/BACKTESTING_LIBRARY.md)
 ├── config/
-│   ├── __init__.py
-│   ├── settings.py
-│   └── constants.py
 ├── database/
-│   ├── __init__.py
-│   ├── models.py
-│   └── cache.py
+├── docs/
+│   └── dashboard/         # Static PWA UI (GitHub Pages–friendly)
 ├── exchange_data/
-│   ├── __init__.py
-│   ├── exchange_db.py
-│   └── exchange_fetcher.py
-├── notifications/
-│   ├── __init__.py
-│   ├── telegram.py
-│   └── formatter.py
-├── processors/
-│   ├── __init__.py
-│   ├── gain_filter.py
-│   └── uniformity_filter.py
+├── notifications/         # MessageFormatter, optional image rendering — no chat transport
+├── processors/            # Pure filter/score helpers
+├── push_server/           # Optional Tier-B web push relay (Flask)
+├── scanner/               # Pipeline stages extracted from main orchestration
+├── scripts/
+├── snapshot_server/       # Optional public GET + worker POST for snapshot JSON
 ├── utils/
-│   ├── __init__.py
-│   ├── logger.py
-│   ├── metrics.py
-│   └── rate_limiter.py
 ├── main.py
 ├── scheduler.py
-├── telegram_bot.py
-├── manage_bot.py
-├── bot_watchdog.py
 ├── update_exchanges.py
 ├── update_mappings.py
-├── .env
-├── .env.example
-├── .gitignore
-├── config.json
-├── config_json.example
-├── 3rd-party-map.json
+├── render.yaml            # Blueprint (worker + optional web services)
 ├── requirements.txt
-├── linear-trend-spotter-spec.md
 └── README.md
 ```
 
@@ -298,27 +267,24 @@ linear-trend-spotter/
 | `config/` | Configuration management. `settings.py` is the centralized settings loader; `constants.py` contains static lookup tables (stablecoin lists, exchange emoji maps, etc.). See [§9](#9-configuration). |
 | `database/` | Database models and caching layer. `models.py` defines `HistoryDatabase` and `ActiveCoinsDatabase`; `cache.py` provides `PriceCache` for CoinGecko price/uniformity data. See [§8](#8-database-schema). |
 | `exchange_data/` | Exchange listing database and fetcher. `exchange_db.py` manages the SQLite listing store; `exchange_fetcher.py` pulls current listings from Coinbase, Kraken, and MEXC public APIs. |
-| `notifications/` | Telegram notification client and message formatting. |
+| `notifications/` | HTML-oriented **`MessageFormatter`** and optional **`image_renderer`** for chart tiles—not a standalone outbound chat client. |
 | `processors/` | Pure filtering and scoring logic. No API calls, no database access — functions take data in and return results. |
 | `utils/` | Cross-cutting utilities: logging, metrics collection, and rate limiting with exponential backoff. |
 | `main.py` | Scanner orchestrator. Contains `run_scanner()` which executes the full 10-stage pipeline. The only file that imports from every package. See [§4](#4-architecture). |
 | `scheduler.py` | Cron entry point. Acquires a file lock, runs `main.run_scanner()`, and records stats. See [§11](#11-scheduling-and-process-management). |
-| `telegram_bot.py` | Long-running Telegram bot process. Polls for commands and dispatches responses. See [§10.3](#103-telegram-bot-commands). |
-| `manage_bot.py` | Bot process lifecycle manager (start/stop/restart/status). |
-| `bot_watchdog.py` | Cron-driven watchdog that restarts the bot if it crashes. |
 | `update_exchanges.py` | Standalone script that refreshes exchange listing data. Run weekly via cron. |
 | `update_mappings.py` | Standalone script that refreshes CoinGecko symbol→ID mappings. Run monthly via cron. |
-| `.env` | Secrets (API keys, Telegram tokens). Gitignored. |
+| `.env` | Secrets (API keys, relay HMAC secrets, optional web-push secrets). Gitignored. |
 | `.env.example` | Template showing required environment variables. Committed to repo. |
 | `config.json` | Non-secret tunable parameters. Gitignored (contains per-environment values). |
 | `config_json.example` | Template showing all config keys with defaults. Committed to repo. |
 | `requirements.txt` | Pinned Python dependencies. |
 | `linear-trend-spotter-spec.md` | This specification. |
-| `README.md` | Public project overview and Telegram invite link. |
+| `README.md` | Public project overview and quick start. |
 
 ### 3.2. Source Package Layout
 
-The project uses a **flat script layout** (not a `src/` package layout) because it runs as a set of cron-invoked scripts on PythonAnywhere, not as an installable package. The top-level scripts (`main.py`, `scheduler.py`, etc.) add their own directory to `sys.path` at startup to enable imports from the sub-packages.
+The project uses a **flat script layout** (not only `src/`) because the worker is launched as **`python scheduler.py`** / **`python main.py`** from the repo root; `pyproject.toml` still supports **`pip install -e .`** for packages such as **`backtesting/`**.
 
 Each sub-package is responsible for a single domain:
 
@@ -328,7 +294,7 @@ Each sub-package is responsible for a single domain:
 | `config/` | Settings and constants | `settings` (singleton), `STABLECOINS`, `EXCHANGE_EMOJIS` |
 | `database/` | Persistence and caching | `HistoryDatabase`, `ActiveCoinsDatabase`, `PriceCache` |
 | `exchange_data/` | Exchange listing management | `ExchangeDatabase`, `ExchangeFetcher` |
-| `notifications/` | Telegram delivery | `TelegramClient`, `MessageFormatter` |
+| `notifications/` | Formatting & tiles | `MessageFormatter`, optional `image_renderer` |
 | `processors/` | Pure filter/score logic | `GainFilter`, `UniformityFilter` |
 | `utils/` | Cross-cutting infrastructure | `setup_logger`, `app_logger`, `RateLimiter`, `CircuitBreaker`, `MetricsCollector` |
 
@@ -399,8 +365,7 @@ The following files are created at runtime and MUST be gitignored:
 | `scan_stats.json` | `scheduler.py` | Last 100 scan durations and timestamps. |
 | `metrics.json` | `utils/metrics.py` | Per-scan performance counters. |
 | `trend_scanner.log` | `utils/logger.py` | Primary application log (rotated, 10 MB × 5 backups). |
-| `bot_output.log` | `manage_bot.py` | Telegram bot process stdout/stderr. |
-| `*.pid` | `manage_bot.py` | Bot process ID file. |
+| `qualified_public_snapshot.json` | `utils/scan_artifacts.py` (via `main.py`) | Public dashboard payload; may be served by `snapshot_server` or copied to static hosting. |
 
 **Database consolidation.** The system uses four SQLite database files. While a single database would be simpler, the separation is deliberate: `exchanges.db` and `mappings.db` are refreshed on independent schedules (weekly and monthly) via destructive rebuild, while `scanner.db` is append-only during scans. `tv_mappings.db` is a lookup cache that can be regenerated at any time. Separating them prevents a weekly exchange refresh from locking the primary scan database.
 
@@ -424,7 +389,7 @@ Every scan follows the same linear 10-stage pipeline. The pipeline is orchestrat
                 → Stage 7:  Uniformity Calculation    (CoinGecko API, cached)
                 → Stage 8:  Uniformity Filter         (in-memory)
                 → Stage 9:  Entry/Exit Detection      (local DB)
-                → Stage 10: Notification Delivery     (Chart-IMG + Telegram API)
+                → Stage 10: Snapshot & Artifacts      (Chart-IMG URLs optional + JSON snapshot + metrics)
             → release lock
 ```
 
@@ -440,19 +405,20 @@ scheduler.py ──────────────────────�
               ┌──────────────────────┘  │  │  │  └──────────────────┐
               ▼                         ▼  │  ▼                     ▼
     api/coinmarketcap.py    api/coingecko.py │  api/chart_img.py    notifications/
-              │              api/coingecko_mapper.py                 ├── telegram.py
-              │                            │                        └── formatter.py
+              │              api/coingecko_mapper.py                 (MessageFormatter, image_renderer)
               ▼                            ▼
     processors/gain_filter.py    processors/uniformity_filter.py
-                                           │
-              ┌────────────────────────────┘
-              ▼
+              │                            │
+              └──────────────┬─────────────┘
+                             ▼
     database/models.py    database/cache.py    exchange_data/exchange_db.py
+                             │
+             scanner/* pipeline modules, utils/scan_artifacts (public JSON)
 ```
 
 **Key structural rules:**
 
-**Rule 1 — `main.py` is the sole orchestrator.** It is the only module that imports from every package. It wires API clients to processors, processors to databases, and results to notifications. No other module has this breadth of visibility.
+**Rule 1 — `main.py` is the sole orchestrator.** It is the only module that imports from every package. It wires API clients to processors, processors to databases, **`scanner/`** stages, and output serialization (`utils/scan_artifacts`, metrics). No other module has this breadth of visibility.
 
 **Rule 2 — Processors are pure logic.** `processors/gain_filter.py` and `processors/uniformity_filter.py` contain no API calls, no database access, and no side effects. They take data in as arguments and return filtered/scored results. This makes them trivially testable.
 
@@ -485,15 +451,15 @@ There is no formal schema class for these intermediate dictionaries. This is a d
 
 ### 4.4. Process Model
 
-The system runs as three independent processes managed by PythonAnywhere's scheduler:
+**Reference deployment (Render):** a **worker** runs `main.py` on a schedule and exits. Optional **companion** web services serve infrastructure only:
 
-| Process | Lifecycle | Triggered By |
-|---------|-----------|-------------|
-| Scanner | Short-lived (10–15 min) | Cron, hourly via `scheduler.py` |
-| Telegram bot | Long-running (daemon) | `manage_bot.py start`, restarted by watchdog |
-| Watchdog | Short-lived (<1 sec) | Cron, every 5 minutes via `bot_watchdog.py` |
+| Process / service | Lifecycle | Role |
+|-------------------|-----------|------|
+| Scanner worker | Short-lived (minutes) | Scheduled `main.run_scanner()`; writes DB + `qualified_public_snapshot.json` + metrics |
+| `snapshot_server` (optional) | Long-lived HTTP | Public GET of snapshot + authenticated POST from worker |
+| `push_server` (optional) | Long-lived HTTP | Tier-B Web Push subscription store + notify hook |
 
-The scanner and the Telegram bot MUST NOT run in the same process. The scanner is a batch job that runs for 10–15 minutes and exits. The bot is a long-polling daemon that must stay alive between scans to respond to user commands. They share data exclusively through the SQLite databases.
+**Cron / worker loop:** **one** batch scanner invocation per scheduled tick; no separate long-lived market-data daemon.
 
 ---
 
@@ -512,7 +478,7 @@ The scanner and the Telegram bot MUST NOT run in the same process. The scanner i
 | 7 | Uniformity Calculation | CoinGecko API | ~20–40 | ~90 (scoring only) |
 | 8 | Uniformity Filter | In-memory | 0 | ~20 |
 | 9 | Entry/Exit Detection | Local DB | 0 | — |
-| 10 | Notification Delivery | Chart-IMG + Telegram | ~5–10 | — |
+| 10 | Snapshot & optional chart tiles | Chart-IMG (entries) + serialization | ~5–10 | — |
 
 Total API calls per scan: ~150–250, dominated by CoinGecko.
 
@@ -602,9 +568,9 @@ Coins MUST meet **both** of the following criteria:
 
 The current qualified set is compared against the `active_coins` table:
 
-- **Entered** = qualified now AND NOT in `active_coins` → insert into `active_coins`, queue entry notification.
-- **Exited** = in `active_coins` AND NOT qualified now → remove from `active_coins`, queue exit notification.
-- **Unchanged** = in both sets → update `last_seen_date`, no notification.
+- **Entered** = qualified now AND NOT in `active_coins` → insert into `active_coins`, include on next snapshot as new.
+- **Exited** = in `active_coins` AND NOT qualified now → remove from `active_coins`, omitted from next qualified snapshot.
+- **Unchanged** = in both sets → update `last_seen_date`, still listed on snapshot while qualified.
 
 This is a simple set-difference operation: `entered = current - active`, `exited = active - current`.
 
@@ -612,23 +578,19 @@ This is a simple set-difference operation: `entered = current - active`, `exited
 **Output:** Lists of entered and exited coins.  
 **API calls:** 0.
 
-### 5.11. Stage 10 — Notification Delivery
+### 5.11. Stage 10 — Snapshot, chart tiles & artifacts
 
-For each **entered** coin:
+For each **entered** coin (config permitting):
 
 1. Resolve the TradingView symbol using `TradingViewMapper` (local DB, exchange-priority: MEXC → Kraken → Coinbase).
-2. Request a chart image from Chart-IMG using the TradingView symbol (1 API call per coin, rate-limited to 1/second).
-3. Format the notification message using `MessageFormatter.format_entry()`.
-4. Send via `TelegramClient.send_photo()` with the chart as an inline image and the formatted message as the caption.
+2. Optionally request a chart image from Chart-IMG (1 API call per new entry when enabled, rate-limited).
+3. Build HTML-oriented copy via `MessageFormatter` and attach any chart URL to the in-memory row for serialization.
 
-For each **exited** coin:
+**Exits** update DB state; formatted exit copy may be logged or embedded only in derived artifacts.
 
-1. Format the exit message using `MessageFormatter.format_exit()`.
-2. Send via `TelegramClient.send_message()`.
+The **qualified public snapshot** (`utils/scan_artifacts.build_public_qualified_snapshot`) runs after the scan pipeline and writes **one JSON file** the dashboard consumes. **No market-data provider** is called from the browser.
 
-All coins in the qualified set (entered + unchanged) are saved to `scan_history`.
-
-**API calls:** 1 Chart-IMG + 1 Telegram per entered coin; 1 Telegram per exited coin.
+**API calls (typical):** up to **1 Chart-IMG** per newly entered coin when chart tiles are enabled; **0** additional calls for the JSON write beyond work already done in the scan.
 
 ---
 
@@ -739,16 +701,17 @@ Chart-IMG generates TradingView-style chart images from TradingView symbol strin
 
 Exchange priority for chart generation: MEXC → Kraken → Coinbase (MEXC has the broadest listing coverage).
 
-### 7.4. Telegram Bot API
+### 7.4. Public Snapshot & Dashboard
 
 | Property | Value |
 |----------|-------|
-| Base URL | `https://api.telegram.org/bot{token}/` |
-| Auth | Bot token in URL path |
-| Methods used | `sendMessage`, `sendPhoto`, `getUpdates` |
-| Calls per scan | ~5–15 (only for entries and exits) |
+| Primary artifact | `qualified_public_snapshot.json` (path controlled by `PUBLIC_QUALIFIED_SNAPSHOT_FILE` / `DATA_DIR`) |
+| Consumer | Static site in `docs/dashboard/` (`app.js` fetches JSON; `?api=` for cross-origin URL) |
+| Optional relay | `snapshot_server/` — `GET` for browsers, `POST` from worker with shared secret |
+| Optional push | `push_server/` + `WEB_PUSH_*` env — **no** market data in push body |
+| Extra market API calls from users | **None** — browsers only request your snapshot URL |
 
-Entry notifications use `sendPhoto` with the chart image as inline media and the formatted message as the HTML caption. Exit notifications use `sendMessage` with HTML formatting.
+Authoritative behavior, CORS, and cache headers are documented in [`docs/WEB_DASHBOARD.md`](docs/WEB_DASHBOARD.md) and [`docs/DELIVERY_MODE.md`](docs/DELIVERY_MODE.md).
 
 ### 7.5. Rate Limit Strategy
 
@@ -918,30 +881,22 @@ The `Settings` class in `config/settings.py` is the single point of access for a
 
 Secrets are stored in a `.env` file (gitignored) and loaded by `python-dotenv` at startup.
 
-**Required environment variables:**
+**Required / common environment variables** (see committed **`.env.example`** for the live list):
 
-| Variable | Source | Purpose |
-|----------|--------|---------|
-| `CMC_API_KEY` | [CoinMarketCap Pro](https://pro.coinmarketcap.com/account) | Authenticates CMC API requests. |
-| `TELEGRAM_BOT_TOKEN` | [BotFather](https://core.telegram.org/bots#6-botfather) | Authenticates Telegram Bot API requests. |
-| `TELEGRAM_CHAT_ID` | Telegram group settings | Target group for notifications. |
-| `CHART_IMG_API_KEY` | [Chart-IMG](https://chart-img.com/account/api) | Authenticates chart image generation. |
+| Variable | Purpose |
+|----------|---------|
+| `CMC_API_KEY` | CoinMarketCap Pro API. |
+| `CHART_IMG_API_KEY` | Chart-IMG advanced charts (optional chart tiles). |
 
-**Optional environment variables:**
+**Optional (dashboard / relay / push):**
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `COINGECKO_API_KEY` | *(none)* | CoinGecko demo API key for higher rate limits. Not required for free tier. |
+| Variable | Purpose |
+|----------|---------|
+| `COINGECKO_API_KEY` | Higher CoinGecko rate limits. |
+| `QUALIFIED_SNAPSHOT_RELAY_URL` + `QUALIFIED_SNAPSHOT_RELAY_SECRET` | Worker POST to `snapshot_server` after each scan. |
+| `WEB_PUSH_NOTIFY_URL`, `WEB_PUSH_INTERNAL_SECRET`, `WEB_PUSH_DASHBOARD_URL` | Tier-B web push via `push_server`. |
 
-**`.env.example` template:**
-
-```
-CMC_API_KEY=your_key_here
-TELEGRAM_BOT_TOKEN=your_token_here
-TELEGRAM_CHAT_ID=your_chat_id_here
-CHART_IMG_API_KEY=your_key_here
-# COINGECKO_API_KEY=optional_demo_key
-```
+**`.env.example` in the repository** is the source of truth for names and comments—do not hand-edit outdated blocks in this spec without mirroring that file.
 
 ### 9.3. Tunable Parameters
 
@@ -985,54 +940,25 @@ All tunable parameters have hardcoded defaults in `Settings._get_default_config(
 
 ---
 
-## 10. Notification System
+## 10. User-Facing Output (Snapshot & Copy)
 
-### 10.1. Entry Notifications
+### 10.1. Entry rows (qualified list)
 
-Entry notifications are sent as Telegram photos with an HTML caption. The chart image is generated by Chart-IMG and attached inline.
+Each qualified coin row in **`qualified_public_snapshot.json`** carries the same conceptual fields an entry “card” would: symbol, name, CMC link, gains, uniformity, optional exchange volumes, optional chart image URL, and backtest summary fields per schema.
 
-**Caption format:**
+**Formatter reference (`MessageFormatter`):** HTML snippets remain useful for optional captions, exports, and parity tests—the dashboard renders JSON fields with its own styling.
 
-```
-🟢 <a href='{cmc_url}'>{SYMBOL} ({Name})</a>
+### 10.2. Exits
 
-📊 Gains:
-   7d: +{gain_7d:.1f}%
-   30d: +{gain_30d:.1f}%
+When a coin leaves the qualified set it **disappears** from the next snapshot’s `coins` array; clients infer exits by diffing snapshots (see dashboard **New / dropped** UX).
 
-📈 Uniformity Score: {score}/100
+### 10.3. Dashboard & Tier-A/B alerts
 
-💰 Exchange Volumes:
-🟦 Coinbase: ${vol:,.0f}
-🐙 Kraken: ${vol:,.0f}
-🟪 MEXC: ${vol:,.0f}
-```
+- **Primary UI:** `docs/dashboard/` — sortable table, filters, PWA install, Tier-A **tab-open** notifications when the snapshot changes (poll-only; **no** exchange APIs).
+- **Relay:** deploy `snapshot_server` when the dashboard cannot read `file://` JSON; configure `QUALIFIED_SNAPSHOT_RELAY_*` on the worker.
+- **Tier-B:** optional `push_server` for Web Push when the tab is closed—see **`docs/WEB_DASHBOARD.md`**.
 
-The `cmc_url` links to the coin's CoinMarketCap page: `https://coinmarketcap.com/currencies/{slug}/`.
-
-Exchange volume lines SHOULD show `No volume` instead of `$0` or `N/A` when a coin is not traded on a particular exchange.
-
-### 10.2. Exit Notifications
-
-Exit notifications are plain text messages:
-
-```
-🔴 {SYMBOL} ({Name})
-🔗 {cmc_url}
-has left the qualified list
-```
-
-### 10.3. Telegram Bot Commands
-
-The Telegram bot runs as a long-polling daemon (`telegram_bot.py`) and responds to these commands within the group:
-
-| Command | Response |
-|---------|----------|
-| `/status` | Current number of active coins, last scan time, scan duration. |
-| `/list` | List of all currently qualified coins with their uniformity scores. |
-| `/help` | List of available commands. |
-
-Bot commands are read-only. They query the database but never modify it or trigger scans.
+Operational health is observed via **`metrics.json`**, optional **`scan_heartbeat.json`**, **`scan_costs.json`**, and worker logs—not chat commands.
 
 ---
 
@@ -1040,14 +966,15 @@ Bot commands are read-only. They query the database but never modify it or trigg
 
 ### 11.1. Scheduled Tasks
 
-All scheduled tasks are configured in PythonAnywhere's task scheduler (cron equivalent):
+Scheduled tasks may use **cron**, **systemd timers**, **Render**’s worker loop (`scripts/run_render_worker.sh`), or any orchestrator that invokes `scheduler.py` / `main.py` on a fixed cadence:
 
 | Schedule | Script | Purpose |
 |----------|--------|---------|
-| `55 * * * *` | `scheduler.py` | Hourly scan at :55 past the hour. |
+| `55 * * * *` | `scheduler.py` | Hourly scan at :55 past the hour (example cron). |
 | `0 0 * * 0` | `update_exchanges.py` | Weekly exchange listing refresh (Sunday midnight). |
 | `0 0 1 * *` | `update_mappings.py` | Monthly CoinGecko mapping refresh (1st of month). |
-| `*/5 * * * *` | `bot_watchdog.py` | Bot health check every 5 minutes. |
+
+On **Render**, **`render.yaml`** defines the worker service and env; entrypoints are unchanged (`scheduler.py`, `main.run_scanner`).
 
 The scanner runs at :55 rather than :00 to avoid overlap with the weekly and monthly maintenance jobs.
 
@@ -1057,13 +984,16 @@ The scanner runs at :55 rather than :00 to avoid overlap with the weekly and mon
 
 The lock file contains the PID of the lock holder for debugging. The lock is released in a `__exit__` handler that also unlinks the file.
 
-### 11.3. Telegram Bot Process
+### 11.3. Companion Services (Relay / Push)
 
-The bot is managed by `manage_bot.py`, which provides `start`, `stop`, `restart`, and `status` subcommands. It writes the bot's PID to a `.pid` file and redirects stdout/stderr to `bot_output.log`.
+- **`snapshot_server`:** hosts the latest JSON for **`GET`** (browser) and accepts **`POST`** updates from the worker using a shared secret (`QUALIFIED_SNAPSHOT_RELAY_*`).
+- **`push_server`:** stores Web Push subscriptions and receives notify hooks from the worker (`WEB_PUSH_*`).
 
-### 11.4. Watchdog
+Neither service queries CoinGecko/CMC/Polygon for market data.
 
-`bot_watchdog.py` runs every 5 minutes via cron. It reads the PID file, checks if the process is alive, and calls `manage_bot.py start` if not. This ensures the bot recovers automatically from crashes within 5 minutes.
+### 11.4. Static Dashboard Hosting
+
+The UI under **`docs/dashboard/`** can be served by **GitHub Pages**, any static host, or `python -m http.server` locally. It loads data exclusively from the snapshot URL configured at deploy time (`?api=` or `config.js`).
 
 ---
 
@@ -1083,9 +1013,8 @@ The `utils/logger.py` module provides `setup_logger(name, log_file)` and a pre-c
 | File | Writer | Content |
 |------|--------|---------|
 | `trend_scanner.log` | `app_logger` (main scanner) | Full scan pipeline progress, filter results, API call outcomes, errors. |
-| `bot_output.log` | `manage_bot.py` (redirected stdout/stderr) | Telegram bot command handling, polling status. |
 
-Log files are local to the PythonAnywhere working directory. They are NOT committed to the repository.
+Log files live under **`DATA_DIR`/logs** (or the repo root when `DATA_DIR` is unset). They are NOT committed to the repository.
 
 ### 12.3. Scan Metrics
 
@@ -1098,7 +1027,7 @@ Log files are local to the PythonAnywhere working directory. They are NOT commit
 - Wall-clock time per pipeline stage.
 - Total scan duration.
 
-Metrics are written to `metrics.json` after each scan and are available via the `/status` bot command.
+Metrics are written to `metrics.json` after each scan and can be read by operators or surfaced in optional heartbeat/cost artifacts.
 
 ---
 
@@ -1125,7 +1054,7 @@ All database writes use `with conn:` context managers for automatic rollback on 
 
 If the scanner process crashes mid-scan, the file lock is released automatically (the OS closes the file descriptor). The next cron invocation starts a clean scan.
 
-If the bot process crashes, the watchdog detects it within 5 minutes and restarts it.
+Companion Flask services (`snapshot_server`, `push_server`) should be restarted by the platform (Render, systemd, etc.) if they exit— they do not share the scanner process.
 
 ---
 
@@ -1179,17 +1108,17 @@ Cache effectiveness after first scan: 60–80% hit rate.
 
 Standard library modules used extensively: `sqlite3`, `json`, `logging`, `time`, `os`, `sys`, `math`, `fcntl`, `pathlib`, `datetime`, `io`.
 
-The dependency footprint is intentionally minimal. The system runs on PythonAnywhere where package installation is straightforward but excessive dependencies complicate deployment.
+The dependency footprint is intentionally minimal so worker disks stay small and installs stay predictable on hosts like Render’s Python runtime.
 
 ### 15.2. External Services
 
 | Service | Tier | Monthly Cost | Required |
 |---------|------|-------------|----------|
-| PythonAnywhere | Hacker ($5) or higher | ~$5–10 | Yes |
+| Render / static host | Worker + optional web | varies | Yes (typical) |
 | CoinMarketCap Pro API | Basic | Free (10,000 calls/month) | Yes |
 | CoinGecko API | Free / Demo | Free | Yes |
 | Chart-IMG | Paid | ~$10 | Yes (for chart images) |
-| Telegram Bot API | Free | Free | Yes |
+| GitHub Pages | Free tier | Free | Yes (dashboard static assets) |
 
 ---
 
@@ -1200,6 +1129,5 @@ The following items are potential enhancements that are explicitly out of scope 
 - **Additional exchanges.** The `TARGET_EXCHANGES` config and exchange fetcher architecture support adding new exchanges without pipeline changes. Binance and KuCoin are natural candidates.
 - **Configurable gain windows.** The 7-day and 30-day gain thresholds are currently hardcoded in `GainFilter`. These could be promoted to `config.json` parameters.
 - **14-day gain filter.** A `USE_14D_FILTER` flag exists in the config template but is not implemented. If enabled, it would add a 14-day gain threshold (>14%) as an additional filter stage.
-- **Historical trend analysis.** The `scan_history` table accumulates data over time. A future `/history {symbol}` bot command could show when a coin entered and exited the qualified list and how its score evolved.
-- **Web dashboard.** A lightweight read-only dashboard pulling from the scan databases. Low priority given the Telegram-first design.
-- **Notification preferences.** Allowing users to filter notifications by exchange, minimum score, or minimum gain.
+- **Historical trend analysis.** The `scan_history` table accumulates data over time. A future dashboard panel could visualize enter/exit timelines per symbol.
+- **In-dashboard preferences.** Per-user filters already exist client-side; server-side saved prefs would need auth.

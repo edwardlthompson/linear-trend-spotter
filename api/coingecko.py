@@ -11,24 +11,40 @@ import logging
 
 from utils.coingecko_usage import record_coingecko_http
 
-# CoinGecko `/coins/*/tickers` `exchange_ids` uses exchange **identifier** strings.
+# CoinGecko `/coins/*/tickers` `exchange_ids` uses identifiers from `/exchanges/list`.
 # Map config `TARGET_EXCHANGES` tokens to CG identifiers when they differ.
 _COINGECKO_TICKER_EXCHANGE_IDS: dict[str, str] = {
-    # CoinGecko still uses the legacy exchange id "gdax" for Coinbase Exchange.
-    # Passing "coinbase" as exchange_ids does not filter tickers (returns mixed venues).
+    # Primary filter id for Coinbase Exchange is still often `gdax`; responses may also use `coinbase`.
     "coinbase": "gdax",
     "mexc": "mxc",
 }
 
 
 def coingecko_ticker_exchange_ids_csv(target_exchanges: List[str]) -> Optional[str]:
-    """Comma-separated CoinGecko exchange identifiers for ticker filtering."""
+    """Comma-separated CoinGecko exchange identifiers for ticker filtering.
+
+    Coinbase may appear under ``gdax`` and/or ``coinbase`` in ``market.identifier``; request both so
+    ``exchange_ids`` returns rows we can match in ``process_tickers``.
+    """
     parts: List[str] = []
+    seen: set[str] = set()
+
+    def add(cid: str) -> None:
+        x = str(cid or "").strip().lower()
+        if x and x not in seen:
+            seen.add(x)
+            parts.append(x)
+
     for raw in target_exchanges or []:
         key = str(raw or "").strip().lower()
         if not key:
             continue
-        parts.append(_COINGECKO_TICKER_EXCHANGE_IDS.get(key, key))
+        mapped = _COINGECKO_TICKER_EXCHANGE_IDS.get(key, key)
+        if key == "coinbase":
+            add(mapped)
+            add("coinbase")
+        else:
+            add(mapped)
     if not parts:
         return None
     return ",".join(parts)

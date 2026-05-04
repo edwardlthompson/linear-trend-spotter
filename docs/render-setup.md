@@ -8,7 +8,6 @@ This repo now supports Render deployment via `render.yaml` and a disk-backed wor
 - Added `scripts/run_render_worker.sh` (continuous hourly scheduler loop)
 - Added `DATA_DIR` support in `config/settings.py` for DB/log/artifact persistence
 - Updated `scheduler.py` to use settings-managed paths
-- Disabled automatic PythonAnywhere sync on push (`.github/workflows/sync-pythonanywhere.yml` now manual only)
 
 ## Manual setup in Render (very simple)
 
@@ -16,7 +15,7 @@ This repo now supports Render deployment via `render.yaml` and a disk-backed wor
 2. In Render Dashboard, click **New +** → **Blueprint**.
 3. Select this GitHub repo and branch (`main`).
 4. Render will detect `render.yaml` and create `linear-trend-spotter-worker`.
-5. Enter secret values when prompted (`CMC_API_KEY`, `TELEGRAM_BOT_TOKEN`, etc.).
+5. Enter secret values when prompted (see **`.env.example`**: `CMC_API_KEY`, `CHART_IMG_API_KEY`, optional relay/push vars, etc.).
 6. Create the service.
 7. After first deploy, check logs for:
    - `Render worker started`

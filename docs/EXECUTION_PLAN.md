@@ -1,8 +1,8 @@
 # Linear Trend Spotter — Execution Plan
 
-**Purpose:** Single reference for engineering milestones (code quality, Render pipeline, Telegram links, API cost reduction, modular backtesting for a future web app, public qualified-coin dashboard + PWA + client-side UX).  
+**Purpose:** Single reference for engineering milestones (code quality, Render pipeline, API cost reduction, modular backtesting, public qualified-coin dashboard + PWA + client-side UX).  
 **Living document:** Checkboxes are updated as work completes.  
-**Last reviewed:** 2026-05-01
+**Last reviewed:** 2026-05-03
 
 ---
 
@@ -57,10 +57,10 @@ Follow this order unless a task explicitly allows parallel work. **Prerequisite:
 
 | Phase | Milestones | Purpose |
 |-------|------------|---------|
-| **1 — CI & core hardening** | **A → B → C → D → E → F** | Automated checks, exceptions, Telegram HTTP safety, pins/ruff, cross-platform dev, logging. **A2** CI should exist before broad refactors (**I2**, **M1**). After phase 1, keep **`main` CI green** before each later milestone (`python scripts/check_github_ci.py` + required checks). |
-| **2 — Product-facing scanner** | **G → H** | CMC links in Telegram, then CoinGecko measurement (**H0** first) and savings / OHLCV alignment **without** shrinking universe or interval. |
+| **1 — CI & core hardening** | **A → B → C → D → E → F** | Automated checks, exceptions, outbound HTTP safety, pins/ruff, cross-platform dev, logging. **A2** CI should exist before broad refactors (**I2**, **M1**). After phase 1, keep **`main` CI green** before each later milestone (`python scripts/check_github_ci.py` + required checks). |
+| **2 — Product-facing scanner** | **G → H** | CMC links in user-facing payloads (formatter / snapshot), then CoinGecko measurement (**H0** first) and savings / OHLCV alignment **without** shrinking universe or interval. |
 | **3 — Maintainability** | **I** | DB docs / `main.py` split; can start late in phase 2 if careful, but prefer after **F**. |
-| **4 — Extended ops & features** | **J → K → L → M → N → O** | Observability, Telegram extras, data/strategy, pytest/pre-commit/docker, security, research flags (all additive defaults). |
+| **4 — Extended ops & features** | **J → K → L → M → N → O** | Observability, formatter/snapshot deep links, data/strategy, pytest/pre-commit/docker, security, research flags (all additive defaults). |
 | **5 — Web surface** | **P → Q** | Backtest library boundaries, then dashboard **Q1–Q6 → Q7–Q9 → Q10–Q21**. |
 
 **Within Milestone Q:** **Q1–Q3** (schema, writer, redaction) → **Q4–Q6** (UI shell, CORS, Pages) → **Q7–Q9** (PWA + tier-A notifications) → **Q10–Q21** (client-only dashboard UX). **Q19–Q20** may require optional fields in the snapshot JSON agreed in **Q1/Q2**; implement UI to **gracefully omit** when fields absent.
@@ -105,11 +105,11 @@ Any new price/OHLCV feature must follow this chain unless explicitly exempted in
 |----------|-------------------------|------------------------------|------------|
 | **CoinGecko** | Demo/free tier: monthly **credits** + RPM caps; public base: low RPM, no credits | **Primary OHLCV** (`api/coingecko.py`, `backtesting/data_loader.py`, uniformity in `main.py`), tickers, IDs | Many **1 call per coin** patterns add up fast |
 | **Polygon** | Free tier with key; rate/throughput limits | **Second** after CG in `data_loader`; intraday aggregates | Symbol coverage; mapping; not a full “top coins” universe API alone |
-| **CoinMarketCap** | Basic: ~**10k calls/month**, ~**30 RPM** (verify on [CMC pricing](https://coinmarketcap.com/api/pricing)) | Listings/quotes in bulk; **tertiary** OHLCV where endpoints allow; Telegram URLs (Milestone G) | **Historical OHLCV** on the lowest tier may be **thin vs CG**—treat as last resort, not primary |
+| **CoinMarketCap** | Basic: ~**10k calls/month**, ~**30 RPM** (verify on [CMC pricing](https://coinmarketcap.com/api/pricing)) | Listings/quotes in bulk; **tertiary** OHLCV where endpoints allow; CMC coin-page URLs for links (Milestone G) | **Historical OHLCV** on the lowest tier may be **thin vs CG**—treat as last resort, not primary |
 
 **Conclusion for “free only” and ~50% CoinGecko reduction (without violating OHLCV order or non-regression guardrails):**
 
-1. **Telegram links → CoinMarketCap** (Milestone G): Prefer **`/currencies/{slug}/`**. With **`TOP_COINS_PROVIDER=cmc`**, listings supply CMC slugs directly. With **`TOP_COINS_PROVIDER=coingecko`**, use **G8**: cached **`/v1/cryptocurrency/map`** + **`gecko_id_to_cmc_slug`** learn file (`CMC_SLUG_MAP_*` config) to set **`cmc_slug`** / `source_url`—bounded CMC map refresh credits, not per-notification HTTP.
+1. **User-facing links → CoinMarketCap** (Milestone G): Prefer **`/currencies/{slug}/`**. With **`TOP_COINS_PROVIDER=cmc`**, listings supply CMC slugs directly. With **`TOP_COINS_PROVIDER=coingecko`**, use **G8**: cached **`/v1/cryptocurrency/map`** + **`gecko_id_to_cmc_slug`** learn file (`CMC_SLUG_MAP_*` config) to set **`cmc_slug`** / `source_url`—bounded CMC map refresh credits, not per-row HTTP at serve time.
 2. **Operational (within guardrails):** Tune **caches** (`CACHE_PRICE_HOURS`, `CACHE_GECKO_ID_DAYS`) only where staleness remains acceptable **and** qualification outputs match baseline runs; **do not** reduce `TOP_COINS_LIMIT` or scan interval for savings (see Non-regression section).
 3. **Architecture:** Prefer **bulk** CoinGecko endpoints where one call returns many coins instead of per-coin calls; ensure SQLite OHLCV cache (`database/cache.py`) is checked **before** repeating the same CG request.
 4. **Do not** use “Polygon-first” or “CMC-first” for OHLCV to save credits; use **cache hits**, **bulk endpoints**, **mapper/list cadence**, and optional **`TOP_COINS_PROVIDER=cmc`** for **universe/listing** metadata only (same universe size)—keeping **CG → Polygon → CMC** for bars.
@@ -144,23 +144,19 @@ Re-verify quotas on official docs before large refactors.
 
 - [x] **B1.** `scheduler.py`: replace bare `except:` on lock unlink with `except OSError:`; log if useful.  
   - **Verification:** `python -m compileall scheduler.py`; on Linux/WSL, run scheduler lock path smoke test if available.
-- [x] **B2.** `manage_bot.py`: replace bare `except:` with specific types (`ValueError`, `OSError`, `ProcessLookupError`, etc.).  
-  - **Verification:** `python -m compileall manage_bot.py`.
-- [x] **B3.** Review `bot_watchdog.py` for same patterns.  
-  - **Verification:** `compileall` + quick manual run of entrypoint if applicable.
+- [x] **B2.** *(Historical)* `manage_bot.py`: bare `except:` replaced with specific exception types. **File removed 2026-05** when long-running helper scripts were retired; no verification needed on current tree.
+- [x] **B3.** *(Historical)* Review `bot_watchdog.py` for bare `except`. **File removed 2026-05** (obsolete bot watchdog).
 
 ---
 
-## Milestone C — Telegram HTTP & HTML safety
+## Milestone C — Outbound HTTP safety & HTML-safe formatting
 
 ### Tasks
 
-- [x] **C1.** `telegram_bot.py` `get_updates`: check HTTP status / `response.ok` before `json()`; handle `JSONDecodeError`.  
-  - **Verification:** `compileall`; optional `scripts/verify_telegram.py` with test creds.
-- [x] **C2.** `notifications/telegram.py`: harden `_request` / `send_photo` similarly.  
-  - **Verification:** `compileall`.
-- [x] **C3.** Escape user/API-derived strings for Telegram **HTML** (`html.escape` or equivalent) in `MessageFormatter` and any raw HTML assembly in `main.py` / `telegram.py`.  
-  - **Verification:** Unit test or small script with `<`, `>`, `&` in symbol/name; message still valid.
+- [x] **C1.** *(Historical)* Long-polling command client: check HTTP status / `response.ok` before `json()`; handle `JSONDecodeError`. **Implementation removed (2026-05).**
+- [x] **C2.** *(Historical)* Dedicated notification transport client: harden `_request` / binary uploads. **Module removed;** remaining outbound HTTP uses shared patterns in API clients (`api/*`).
+- [x] **C3.** Escape user/API-derived strings wherever HTML fragments are built (`MessageFormatter`, snapshot/caption-shaped output).  
+  - **Verification:** Unit tests / formatter golden files with `<`, `>`, `&` in symbol/name.
 
 ---
 
@@ -184,10 +180,8 @@ Re-verify quotas on official docs before large refactors.
 
 - [x] **E1.** `scheduler.py`: replace or guard `fcntl` (e.g. `portalocker` fallback on Windows) so import works on Windows dev machines.  
   - **Verification:** `python -c "import scheduler"` on Windows **and** Linux/WSL or CI.
-- [x] **E2.** `manage_bot.py`: replace `tail` with Python tail; use `sys.executable` instead of `python3` for subprocess.  
-  - **Verification:** Run `status` / `start` / `stop` smoke on target OS (or document Linux-only).
-- [x] **E3.** `bot_watchdog.py`: `sys.executable` instead of `python3`.  
-  - **Verification:** `compileall`.
+- [x] **E2.** *(Historical)* `manage_bot.py`: replace `tail` with Python tail; use `sys.executable` instead of `python3` for subprocess. **File removed 2026-05.**
+- [x] **E3.** *(Historical)* `bot_watchdog.py`: `sys.executable` instead of `python3`. **File removed 2026-05.**
 
 ---
 
@@ -202,9 +196,9 @@ Re-verify quotas on official docs before large refactors.
 
 ---
 
-## Milestone G — Telegram: CoinMarketCap links (not CoinGecko)
+## Milestone G — CoinMarketCap links (not CoinGecko)
 
-**Goal:** User-facing links in Telegram notifications and keyboards prefer **CoinMarketCap** coin pages.
+**Goal:** User-facing links in formatted output and the public snapshot prefer **CoinMarketCap** coin pages.
 
 ### Tasks
 
@@ -214,15 +208,15 @@ Re-verify quotas on official docs before large refactors.
   - **Verification:** Generated HTML caption shows `coinmarketcap.com` link.
 - [x] **G3.** `format_exit`: replace `gecko_url` / `_build_coingecko_url` with CMC-first link line.  
   - **Verification:** Exit message contains CMC URL when slug present.
-- [x] **G4.** `notifications/telegram.py` (`_build_context_keyboard`, `send_exit_alert`): use CMC URL builder instead of `_build_coingecko_url` for “Analyze Coin” / source links.  
-  - **Verification:** Keyboard URL opens CMC in browser.
-- [x] **G5.** `database/models.py` `_build_source_url`: reorder or adjust so **CMC slug URL** is preferred over CoinGecko when `slug` is available (consistent DB-derived links with Telegram).  
+- [x] **G4.** Context/deep-link builders use CMC URL builder instead of `_build_coingecko_url` for “Analyze Coin” / source links (historically shared with keyboard markup).  
+  - **Verification:** URLs resolve to `coinmarketcap.com/currencies/…` when slug known.
+- [x] **G5.** `database/models.py` `_build_source_url`: reorder or adjust so **CMC slug URL** is preferred over CoinGecko when `slug` is available (consistent DB-derived links with formatter/snapshot).  
   - **Verification:** History insert path produces `cmc_url`/stored URL matching policy; no regression on coins without slug.
 - [x] **G6.** `main.py` / `api/coingecko.py` `source_url` assignments: when slug exists from CMC path, set **`https://coinmarketcap.com/currencies/{slug}/`** instead of CoinGecko coin page for notification-facing `source_url`.  
   - **Verification:** End-to-end scan with `TOP_COINS_PROVIDER=cmc` produces CMC `source_url` on sample coin.
 - [x] **G7.** Update `linear-trend-spotter-spec.md` or README notification section if spec still mandates CoinGecko links.  
   - **Verification:** Doc grep shows CMC as primary user link.
-- [x] **G8.** When `TOP_COINS_PROVIDER=coingecko`, resolve **real CoinMarketCap currency slugs** for Telegram (avoid `coinmarketcap.com/search/?q=` when a confident match exists): cache **CMC `/v1/cryptocurrency/map`** under `DATA_DIR` (`CMC_SLUG_MAP_*` keys), index by **symbol** with **name** disambiguation, persist **`gecko_id → cmc_slug`** learn file across scans; set `cmc_slug` / `cmc_url` / `source_url` on qualified coins.  
+- [x] **G8.** When `TOP_COINS_PROVIDER=coingecko`, resolve **real CoinMarketCap currency slugs** for links (avoid `coinmarketcap.com/search/?q=` when a confident match exists): cache **CMC `/v1/cryptocurrency/map`** under `DATA_DIR` (`CMC_SLUG_MAP_*` keys), index by **symbol** with **name** disambiguation, persist **`gecko_id → cmc_slug`** learn file across scans; set `cmc_slug` / `cmc_url` / `source_url` on qualified coins.  
   - **Verification:** With `CMC_API_KEY` + map cache populated, a CG-top run yields `/currencies/{slug}/` links for common symbols; ambiguous symbols still fall back to search.  
   - **Notes:** `utils/cmc_slug_resolver.py`, `CoinMarketCapClient.fetch_cryptocurrency_map_page`, `MessageFormatter` / `_build_source_url` honor **`cmc_slug`**. Refresh is credit-bounded (paginated `limit=5000`); tune **`CMC_SLUG_MAP_MAX_AGE_HOURS`** (default 72). Disable with **`CMC_SLUG_MAP_ENABLED`: false**.
 
@@ -285,7 +279,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Notes:** `database/models.py`: class/method docstrings for `execute()` autocommit semantics; `get_connection()` enables **WAL** on `Database` subclasses (`PriceCache` already used WAL).
 - [x] **I2.** Split `main.py` into modules (pipeline stages) in incremental PRs.  
   - **Verification:** CI + import smoke tests pass; behavior unchanged with default config (non-regression).
-  - **Notes:** Pipeline helpers live under `scanner/` (see appendix row **I2 / pipeline**). **2026-05-01 (batch 3):** OHLCV uniformity + anomaly summary + uniformity/regime gate → `scanner/uniformity_stages.py` (`compute_uniformities_from_ohlcv`, `apply_uniformity_pass_and_regime`); exit reasons + `register_exit` → `scanner/exit_pipeline.py` (`attach_exit_reasons_and_register`). Remaining `main.py` body is orchestration (backtests, enrichment, Telegram, artifacts, metrics)—acceptable thin-shell entrypoint per Milestone I intent.
+  - **Notes:** Pipeline helpers live under `scanner/` (see appendix row **I2 / pipeline**). **2026-05-01 (batch 3):** OHLCV uniformity + anomaly summary + uniformity/regime gate → `scanner/uniformity_stages.py` (`compute_uniformities_from_ohlcv`, `apply_uniformity_pass_and_regime`); exit reasons + `register_exit` → `scanner/exit_pipeline.py` (`attach_exit_reasons_and_register`). Remaining `main.py` body is orchestration (backtests, enrichment, public snapshot / artifacts, metrics)—acceptable thin-shell entrypoint per Milestone I intent.
 
 ---
 
@@ -307,33 +301,27 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Artifact valid JSON; scan completes; counts non-decreasing for same work (no dropped coins).
   - **Notes:** `SCAN_COSTS_ENABLED` / `SCAN_COSTS_FILE` (default **false** / `scan_costs.json`). `utils/scan_costs.write_scan_costs_file` after `metrics.save`. Polygon/CMC HTTP tallies via `utils/provider_http_usage.py` from `api/price_history_fallback.py` and `api/coinmarketcap.py` (H0 CoinGecko counters unchanged).
 
-- [x] **J4.** **Graceful degradation (opt-in only):** env flag e.g. `DEGRADE_SKIP_BACKTEST_ON_CG_CREDITS=0` default; when enabled and credits below threshold, skip backtest with explicit Telegram notice. **Default must preserve full pipeline.**  
+- [x] **J4.** **Graceful degradation (opt-in only):** when enabled and credits below threshold, skip backtest with explicit **log / metrics** notice (no third-party chat). **Default must preserve full pipeline.**  
   - **Verification:** Default off → identical stages vs baseline; on → documented behavior only.
-  - **Notes:** `DEGRADE_SKIP_BACKTEST_ENABLED` + `DEGRADE_PRIOR_CG_HTTP_SKIP_GE` in `config.json`. If enabled and `SKIP_GE` **≤ 0**, every run skips backtests (emergency). If `SKIP_GE` **> 0**, skip when **prior** `metrics.json` last entry `coingecko_http_total` ≥ threshold; else run backtests. Telegram HTML notice when skipped (if bot enabled).
+  - **Notes:** `DEGRADE_SKIP_BACKTEST_ENABLED` + `DEGRADE_PRIOR_CG_HTTP_SKIP_GE` in `config.json`. If enabled and `SKIP_GE` **≤ 0**, every run skips backtests (emergency). If `SKIP_GE` **> 0**, skip when **prior** `metrics.json` last entry `coingecko_http_total` ≥ threshold; else run backtests. Skips are visible in worker logs and optional structured logging.
 
 ---
 
-## Milestone K — Telegram & UX enhancements
+## Milestone K — Deep links, diagnostics & retired chat UX
 
-*Promoted from former backlog (“Telegram & UX”). All bot additions must be **additive**; default polling/commands unchanged when disabled.*
+*Promoted from former backlog. Operations surfaces are **additive**; defaults preserve prior scan behavior.*
 
 ### Tasks
 
-- [x] **K1.** **`/health`**, **`/last`**, **`/cost`** (or similar) read-only commands in `telegram_bot.py` reading persisted metrics/heartbeat; feature flag default **off** or commands no-op until enabled.  
-  - **Verification:** Flag off: no behavior change for existing flows; flag on: commands return expected text.
-  - **Notes:** **`SCANNER_DIAG_COMMANDS_ENABLED`** (default **false**). **`/health`**: `SCAN_HEARTBEAT_FILE` + last `metrics.json` **`coins_processed`**. **`/last`**: last metrics row timestamp/duration. **`/cost`**: **`coingecko_http_*`** slice + Polygon/CMC totals + note if **`scan_costs.json`** exists. Commands parsed with **`/cmd@BotName`** stripping.
+- [x] **K1.** **Diagnostics without a chat bot:** persisted **`SCAN_HEARTBEAT_FILE`**, **`metrics.json`**, optional **`scan_costs.json`**, and dashboard/docs describe how to read health and cost—replacing read-only **`/health`**, **`/last`**, **`/cost`**-style commands that lived on the retired long-running bot (**removed 2026-05**).
 
-- [x] **K2.** **Quiet hours:** config window (UTC) suppressing non-critical alerts; **entries/critical unchanged** when disabled; default = no quiet hours.  
-  - **Verification:** Default config sends same alerts as today; quiet window suppresses only configured classes.
-  - **Notes:** **`QUIET_HOURS_ENABLED`** (default **false**). **`QUIET_HOURS_START_HOUR_UTC`** / **`QUIET_HOURS_END_HOUR_UTC`** (default **22**→**6**, wrap). Per-class toggles: **`QUIET_HOURS_SUPPRESS_ANOMALY`**, **`QUIET_HOURS_SUPPRESS_WEEKLY_DIGEST`**, **`QUIET_HOURS_SUPPRESS_EVENT_SUMMARY`**, **`QUIET_HOURS_SUPPRESS_STILL_QUALIFYING`** (defaults **true** when quiet). Entry/exit/degrade Telegram paths are **not** gated.
+- [x] **K2.** **Per-exchange deep links** in formatter output (Coinbase/Kraken/MEXC) **in addition to** CMC link; surfaced in **`MessageFormatter`** and carried into the public snapshot for the dashboard.  
+  - **Verification:** Snapshot/dashboard rows show working exchange URLs when present.
+  - **Notes:** **`MessageFormatter.exchange_url_buttons`** builds URL rows consumed by serialization—not by a separate chat transport.
 
-- [x] **K3.** **Per-exchange deep links** in formatter/keyboard (Coinbase/Kraken/MEXC) **in addition to** CMC link; no removal of existing buttons.  
-  - **Verification:** Manual Telegram check; links resolve.
-  - **Notes:** **`MessageFormatter.exchange_url_buttons`** + **`TelegramClient.coin_link_reply_markup`**; entry/exit **`send_photo`/`send_message`** in **`main.py`** use that markup (Chart / Analyze + per-exchange URL rows).
+- [x] **K3.** *(Retired 2026-05)* **Still-qualifying roster message edits** via external chat API. **Removed** with bot pipeline (`still_qualifying_notify` and related transport).
 
-- [x] **K4.** **Message edit** path for “still qualifying” (optional): use `editMessageText` only when config enabled; default off.  
-  - **Verification:** Default off: message volume unchanged vs baseline.
-  - **Notes:** **`STILL_QUALIFYING_EDIT_ENABLED`** (default **false**) + **`NO_CHANGE_NOTIFICATIONS`**. One roster message per chat; **`STILL_QUALIFYING_STATE_FILE`** stores **`message_id`** under **`DATA_DIR`**; cleared on any entry/exit. **`utils/still_qualifying_notify.py`**.
+- *(Removed 2026-05)* **Quiet hours** (`QUIET_HOURS_*` config) — feature deleted from codebase; no UTC suppression window.
 
 ---
 
@@ -359,9 +347,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** Export file valid; scan unaffected.
   - **Notes:** **`WATCHLIST_EXPORT_ENABLED`** (default **false**); **`WATCHLIST_EXPORT_CSV_FILE`** / **`WATCHLIST_EXPORT_JSON_FILE`**. Near-miss rows from **`compute_watchlist_rows`** (uniformity buffer band + non-positive 30d return with passing score). **`scripts/export_watchlist.py`** prints path/row count.
 
-- [x] **L4.** **Backtest A/B shadow:** second profile on subset, logs only, **no Telegram** unless opt-in; default off.  
-  - **Verification:** Off → no extra runtime; on → logs only, same primary alerts.
-  - **Notes:** `main.py` runs optional shadow pass after primary backtests only when **`BACKTEST_AB_SHADOW_ENABLED`** is true. Uses `runner_params_from_settings()` + `dataclasses.replace(...)` to run on a subset with separate artifacts (**`BACKTEST_AB_SHADOW_RESULTS_FILE`**, **`BACKTEST_AB_SHADOW_CHECKPOINT_FILE`**, **`BACKTEST_AB_SHADOW_TELEMETRY_FILE`**), and logs summary only (no Telegram sends). New config knobs in `config/settings.py`: **`BACKTEST_AB_SHADOW_MAX_COINS`**, **`BACKTEST_AB_SHADOW_MAX_PARAM_COMBOS`**, **`BACKTEST_AB_SHADOW_TRAILING_STOP_MIN/MAX/STEP`**.
+- [x] **L4.** **Backtest A/B shadow:** second profile on subset, logs only, **no extra outbound notifications**; default off.  
+  - **Verification:** Off → no extra runtime; on → logs only, same primary snapshot/alerts path.
+  - **Notes:** `main.py` runs optional shadow pass after primary backtests only when **`BACKTEST_AB_SHADOW_ENABLED`** is true. Uses `runner_params_from_settings()` + `dataclasses.replace(...)` to run on a subset with separate artifacts (**`BACKTEST_AB_SHADOW_RESULTS_FILE`**, **`BACKTEST_AB_SHADOW_CHECKPOINT_FILE`**, **`BACKTEST_AB_SHADOW_TELEMETRY_FILE`**), and logs summary only. New config knobs in `config/settings.py`: **`BACKTEST_AB_SHADOW_MAX_COINS`**, **`BACKTEST_AB_SHADOW_MAX_PARAM_COMBOS`**, **`BACKTEST_AB_SHADOW_TRAILING_STOP_MIN/MAX/STEP`**.
 
 ---
 
@@ -395,9 +383,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** CI job passes on clean repo; documented false positives.
   - **Notes:** `.github/workflows/ci.yml` job **`gitleaks`** (`gitleaks/gitleaks-action@v2`, `fetch-depth: 0`). **Push protection** for secrets is still **repo/org admin** in GitHub **Settings → Code security** (not automatable from this repo).
 
-- [x] **N2.** **Telegram webhook mode (optional):** config to use webhook instead of long polling; **default remains long polling** (Render-compatible).  
-  - **Verification:** Default: existing worker behavior; webhook path documented separately if not used on Render.
-  - **Notes:** `telegram_bot.py` supports `TELEGRAM_BOT_MODE` = `polling` (default) or `webhook`; webhook mode sets Telegram webhook on startup, serves `POST` updates via built-in `ThreadingHTTPServer`, and checks optional `X-Telegram-Bot-Api-Secret-Token`. Added config keys in `config/settings.py` + `config.json.example`: `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_PATH`, `TELEGRAM_WEBHOOK_PORT`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`. Polling mode explicitly clears webhook to preserve previous behavior.
+- [x] **N2.** *(Retired 2026-05)* **Optional webhook mode** for the removed long-running bot client—not applicable to the current web-first worker. **N1** (secret scanning) remains the active security milestone for this row.
 
 ---
 
@@ -409,26 +395,26 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 - [x] **O1.** **Multi-portfolio simulation** in insights layer (additional metrics file); default off.  
   - **Verification:** Off → no extra IO; on → file written; scan interval/universe unchanged.
-  - **Notes:** Added optional artifact writer `utils/portfolio_multi.py` (`write_multi_portfolio_simulation`) driven by the existing `scanner_insights` portfolio simulation growth factor. New config in `config/settings.py` + `config.json.example`: `PORTFOLIO_MULTI_SIM_ENABLED` (default false), `PORTFOLIO_MULTI_SIM_FILE`, `PORTFOLIO_MULTI_SIM_CAPITALS`. `main.py` writes the additional file only when enabled; no Telegram side effects.
+  - **Notes:** Added optional artifact writer `utils/portfolio_multi.py` (`write_multi_portfolio_simulation`) driven by the existing `scanner_insights` portfolio simulation growth factor. New config in `config/settings.py` + `config.json.example`: `PORTFOLIO_MULTI_SIM_ENABLED` (default false), `PORTFOLIO_MULTI_SIM_FILE`, `PORTFOLIO_MULTI_SIM_CAPITALS`. `main.py` writes the additional file only when enabled.
 
 - [x] **O2.** **Regime filter** (e.g. BTC dominance / vol) as **optional** qualification gate; `config` default **false**.  
   - **Verification:** Default false → bit-for-bit same qualification as baseline on sample run.
   - **Notes:** Added optional BTC-based regime gate (`scanner/regime_filter.py`, `evaluate_regime_gate`) evaluated after uniformity pass and before ranking. Default-off config in `config/settings.py` + `config.json.example`: `REGIME_FILTER_ENABLED`, `REGIME_FILTER_BTC_MIN_30D_GAIN`, `REGIME_FILTER_BTC_MAX_ABS_7D_GAIN`. No extra provider HTTP calls; uses already-fetched top-coin dataset.
 
-- [x] **O3.** **Alert backtesting** report: hypothetical PnL for top-N alerted coins; offline or scheduled; **no change** to live alerts unless opt-in.  
-  - **Verification:** Live Telegram unchanged with default settings.
-  - **Notes:** Added optional artifact writer `utils/alert_backtest_report.py` (`write_alert_backtest_report`) with top-N hypothetical PnL rows for current alerts plus recent exits; default-off config in `config/settings.py` + `config.json.example`: `ALERT_BACKTEST_REPORT_ENABLED`, `ALERT_BACKTEST_REPORT_FILE`, `ALERT_BACKTEST_REPORT_TOP_N`. `main.py` writes the report only when enabled and never sends Telegram messages from this path.
+- [x] **O3.** **Alert backtesting** report: hypothetical PnL for top-N alerted coins; offline or scheduled; **no change** to live snapshot/push unless opt-in.  
+  - **Verification:** Default settings: report path unchanged vs baseline when disabled.
+  - **Notes:** Added optional artifact writer `utils/alert_backtest_report.py` (`write_alert_backtest_report`) with top-N hypothetical PnL rows for current alerts plus recent exits; default-off config in `config/settings.py` + `config.json.example`: `ALERT_BACKTEST_REPORT_ENABLED`, `ALERT_BACKTEST_REPORT_FILE`, `ALERT_BACKTEST_REPORT_TOP_N`. `main.py` writes the report only when enabled.
 
 ---
 
 ## Milestone P — Backtesting modularization (reuse in web / second repo)
 
-**Goal:** Make `backtesting/` (and tightly related data loading) a **clear, import-safe library surface** so a future **public web app** can depend on it via git submodule, `pip install git+…`, or a shared package—**without** pulling `main.py`, Telegram, or notification image code into backtest-only workflows.
+**Goal:** Make `backtesting/` (and tightly related data loading) a **clear, import-safe library surface** so a **public web app** or second repo can depend on it via git submodule, `pip install git+…`, or a shared package—**without** pulling `main.py` or **`notifications/`** image/formatting code into backtest-only workflows.
 
 ### Design rules
 
 - **Allowed imports (library tier):** `pandas`/`numpy`/`vectorbt` as today; prefer **`BacktestLoaderParams` / `BacktestRunnerParams`** from the host instead of `config.settings` (optional `*_from_settings()` helpers for the integrated worker).
-- **Forbidden in library tier:** `notifications/*`, `telegram_bot.py`, `main.run_scanner` circular paths. Add a CI guard (import smoke or `ruff`/custom script) that fails if violated.
+- **Forbidden in library tier:** `notifications/*`, `main` (scanner entrypoint). Add a CI guard (import smoke or `ruff`/custom script) that fails if violated.
 - **Outputs:** Typed or documented dicts / dataclasses consumable by HTTP layer later; optional thin `to_public_dict()` for API stability.
 
 ### Tasks
@@ -440,7 +426,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
   - **Verification:** `tests/test_backtesting_params.py` (params import + subprocess smoke; injected OHLCV gates with `pytest.importorskip("pandas")`); scanner call sites unchanged when `params` / `loader_params` omitted; `python -m ruff check .` + `scripts/check_backtesting_imports.py`.
   - **Notes:** `backtesting/params.py` — `BacktestLoaderParams`, `BacktestRunnerParams`, `loader_params_from_settings`, `runner_params_from_settings`; `BacktestDataLoader(..., loader_params=…)`; `run_backtests_for_final_results(..., params=…)`; lazy `backtesting/__getattr__` so `import backtesting` avoids pulling `pandas` until heavy symbols are used.
 
-- [x] **P3.** **CI import guard:** script or test that imports `backtesting` package subtree and asserts no transitive import of `notifications`, `telegram_bot`, `main`.  
+- [x] **P3.** **CI import guard:** script or test that imports `backtesting` package subtree and asserts no transitive import of `notifications` or `main`.  
   - **Verification:** CI job fails if a forbidden import is introduced.
   - **Notes:** `scripts/check_backtesting_imports.py` (AST scan); invoked from `scripts/ci_verify.sh`.
 
@@ -452,14 +438,14 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 
 ## Milestone Q — Public qualified-coin dashboard (hourly; **zero extra provider API load**)
 
-**Goal:** A **mobile-friendly** static page (e.g. **GitHub Pages** or any static host) shows coins that **reached the same stage as notification-ready** results, with **field parity** to Telegram notifications. Rows **disappear** when the next hourly snapshot omits them (no separate “delete” API). Includes an **installable PWA**, **tier-A browser notifications** (**Q7–Q9**), and **client-side UX** (**Q10–Q21**)—all without extra market API calls from browsers.
+**Goal:** A **mobile-friendly** static page (e.g. **GitHub Pages** or any static host) shows coins that **reached the same stage as notification-ready** scan results, with **field parity** to formatted scanner output (`MessageFormatter` / public snapshot). Rows **disappear** when the next hourly snapshot omits them (no separate “delete” API). Includes an **installable PWA**, **tier-A browser notifications** (**Q7–Q9**), and **client-side UX** (**Q10–Q21**)—all without extra market API calls from browsers.
 
 ### Architecture — least taxing on CoinGecko / CMC / Polygon
 
 | Bad pattern | Good pattern (this milestone) |
 |-------------|----------------------------------|
 | Browser or Pages site polls **market APIs** every visit | Site **only** `fetch()`es a **pre-built JSON snapshot** produced by the **existing scan** |
-| Extra “dashboard sync” job that re-queries providers | **Write snapshot once** at end of a scan using **data already in memory** (same objects passed to `MessageFormatter` / image path)—**no additional provider HTTP calls** beyond what that scan already made |
+| Extra “dashboard sync” job that re-queries providers | **Write snapshot once** at end of a scan using **data already in memory** (same objects passed to `MessageFormatter` / chart image path)—**no additional provider HTTP calls** beyond what that scan already made |
 | Refreshing more often than scans | Snapshot version bumps **only when `main`/worker completes a scan** (aligned with `SCAN_INTERVAL_SECONDS`, e.g. hourly)—static `Cache-Control` / ETag reduces bandwidth, not API usage |
 
 **Recommended hosting split:**
@@ -478,7 +464,7 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 ### Tasks
 
 - [x] **Q1.** **JSON schema** (`docs/qualified_public_snapshot.schema.json` or markdown table): fields matching notification captions (symbol, name, gains, uniformity, health, rank fields, exchange volumes, provider volume, top backtest rows summary, `source_url`, timestamps, `schema_version`).  
-  - **Verification:** Sample file hand-reviewed against one real Telegram payload.
+  - **Verification:** Sample file hand-reviewed against one real scan row / formatter output.
 
 - [x] **Q2.** **Snapshot writer** in scanner completion path: build list from the **same** structure used for alerts; write atomically (`tmp` then rename); env e.g. `PUBLIC_QUALIFIED_SNAPSHOT=1`.  
   - **Verification:** With flag on, one scan produces valid JSON; with flag off, no file or no write; **provider call counts** (H0) unchanged vs baseline for same config.
@@ -539,7 +525,7 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
   - **Verification:** Large list remains responsive; snapshot fetched once per poll cycle only.
   - **Notes:** **`#searchInput`** debounced **250ms**; filters client-side list only.
 
-- [x] **Q13.** **Expandable row / drawer:** tap row to expand full backtest strategy table / fields from JSON (Telegram caption parity in data, not necessarily HTML).  
+- [x] **Q13.** **Expandable row / drawer:** tap row to expand full backtest strategy table / fields from JSON (parity with formatted caption data, not necessarily identical HTML).  
   - **Verification:** Collapsed by default; expand/collapse keyboard-accessible.
   - **Notes:** `docs/dashboard/app.js` — `tr.coin-row` + detail row; `field_set` **full** snapshot includes `backtest_top_strategies` / `backtest_buy_hold` from `utils/scan_artifacts.py`; SW **`CACHE_VERSION`** bumped with static assets.
 
@@ -613,7 +599,7 @@ Until steps 2–4 exist in writing, **H6 remains “measurement pending”** eve
 **Follow-ups**
 
 - **Disk:** both files live under **`DATA_DIR`** (Render: `/var/data`). Ensure disk budget and **artifact hygiene** (`ARTIFACT_*`) remain sufficient if you add large snapshots.
-- **Secrets:** snapshot builder **must not** embed API keys or Telegram tokens; today’s payload is **notification-shaped fields only**—re-audit when extending schema (**Q3**).
+- **Secrets:** snapshot builder **must not** embed API keys or relay secrets; today’s payload is **notification-shaped fields only**—re-audit when extending schema (**Q3**).
 - **Provider load:** snapshot write is **serialization only** (no extra market HTTP); if a future host adds **dynamic** fields, re-check **Non-regression guardrail 7**.
 
 ### 6.4 Public snapshot exposure (Q2 / Q3)
@@ -644,18 +630,18 @@ Milestone **A4** (branch protection) is complete. Use this section for **risks a
 |-----------|--------|--------|
 | A | CI + Render guardrails | **A1–A4** complete (branch protection + required **Verify** check) |
 | B | Exceptions | Complete |
-| C | Telegram robustness | Complete |
+| C | HTTP / HTML-safe formatting | Complete |
 | D | Pins + Ruff/Mypy | Complete (**D3** mypy on `config/` + `notifications/`) |
 | E | Cross-platform | Complete |
 | F | Logging | Complete |
-| G | CMC links in Telegram | Complete (**G8** CG→CMC slug map + cache) |
+| G | CMC links in user-facing output | Complete (**G8** CG→CMC slug map + cache) |
 | H | CoinGecko usage reduction | **H0–H6** complete (H6 % proof measurement pending) |
 | I | DB docs / main split | **I1–I2** done (`main.py` orchestration + `scanner/` pipeline modules) |
 | J | Observability & operations | **J1–J4** done (costs + degrade opt-in; JSON logs env-gated) |
-| K | Telegram & UX | **K1–K4** done (quiet hours, exchange keyboard links, optional still-qualifying edit) |
+| K | Deep links & diagnostics | **K1–K2** done; **K3** retired (chat); quiet hours removed |
 | L | Data & strategy | **L0–L4** done |
 | M | Engineering quality | **M1** pytest, **M2** pre-commit, **M3** compose smoke |
-| N | Security & compliance | **N1–N2** done (**push protection** still admin) |
+| N | Security & compliance | **N1** done; **N2** webhook row retired (**push protection** still admin) |
 | O | Product & research | **O1–O3** done |
 | P | Backtesting modularization (web reuse) | **P1–P4** done |
 | Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
@@ -678,8 +664,8 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | OHLCV min bars (L1) | `OHLCV_MIN_*` in `config/settings.py`; `backtesting/data_loader.py` |
 | Symbol quality line (L2) | **`NOTIFICATION_SYMBOL_QUALITY_LINE`**; `notifications/formatter.py` |
 | Watchlist export (L3) | **`WATCHLIST_EXPORT_*`**; `utils/watchlist_export.py`; `main.py`; `scripts/export_watchlist.py` |
-| Telegram diagnostics (K1) | `telegram_bot.py`; **`SCANNER_DIAG_COMMANDS_ENABLED`** in `config.json` |
-| Telegram URLs | `notifications/formatter.py`, `notifications/telegram.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
+| Health / cost artifacts (K1) | `SCAN_HEARTBEAT_FILE`, `metrics.json`, optional `scan_costs.json`; **`docs/WEB_DASHBOARD.md`** |
+| User-facing & CMC URLs | `notifications/formatter.py`, `database/models.py`, `main.py`, `api/coingecko.py`, `utils/cmc_slug_resolver.py`, `api/coinmarketcap.py` (CMC map) |
 | OHLCV chain (CG → Polygon → CMC) | `api/coingecko.py`, `backtesting/data_loader.py`, `api/price_history_fallback.py`, `scanner/uniformity_stages.py` (scanner uniformity OHLCV path), `database/cache.py` |
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
@@ -690,5 +676,5 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | Multi-portfolio simulation (O1) | `utils/portfolio_multi.py`, `main.py`, `PORTFOLIO_MULTI_SIM_*` in `config/settings.py` |
 | Regime filter (O2) | `scanner/regime_filter.py`, `main.py`, `REGIME_FILTER_*` in `config/settings.py` |
 | Alert backtest report (O3) | `utils/alert_backtest_report.py`, `main.py`, `ALERT_BACKTEST_REPORT_*` in `config/settings.py` |
-| CMC resolve + web push + early pipeline + uniformity + exits + active ranking + weekly digest + anomaly + enrichment + market/quiet/runtime init (I2) | `scanner/cmc_resolve.py`, `scanner/top_coins_stage.py`, `scanner/exchange_universe.py`, `scanner/coingecko_alias_prefetch.py`, `scanner/gain_volume_filter.py`, `scanner/listings_and_volumes.py`, `scanner/uniformity_stages.py`, `scanner/exit_pipeline.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py`, `scanner/weekly_digest.py`, `scanner/anomaly_alerts.py`, `scanner/top_coin_resolution.py`, `scanner/coin_enrichment.py`, `scanner/market_processing.py`, `scanner/quiet_hours.py`, `scanner/runtime_init.py` |
+| CMC resolve + web push + early pipeline + uniformity + exits + active ranking + weekly digest + anomaly + enrichment + market/runtime init (I2) | `scanner/cmc_resolve.py`, `scanner/top_coins_stage.py`, `scanner/exchange_universe.py`, `scanner/coingecko_alias_prefetch.py`, `scanner/gain_volume_filter.py`, `scanner/listings_and_volumes.py`, `scanner/uniformity_stages.py`, `scanner/exit_pipeline.py`, `scanner/web_push_notify.py`, `scanner/active_ranking.py`, `scanner/weekly_digest.py`, `scanner/anomaly_alerts.py`, `scanner/top_coin_resolution.py`, `scanner/coin_enrichment.py`, `scanner/market_processing.py`, `scanner/runtime_init.py` |
 | Risks & ops (H0 proof, CMC tier, artifacts, A4) | **Section 6** in this file |

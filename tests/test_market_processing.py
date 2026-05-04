@@ -4,9 +4,9 @@ from api.coingecko import coingecko_ticker_exchange_ids_csv
 from scanner.market_processing import process_tickers
 
 
-def test_coingecko_csv_maps_coinbase_to_gdax():
+def test_coingecko_csv_maps_coinbase_to_gdax_and_coinbase_ids():
     csv = coingecko_ticker_exchange_ids_csv(["coinbase", "kraken", "mexc"])
-    assert csv == "gdax,kraken,mxc"
+    assert csv == "gdax,coinbase,kraken,mxc"
 
 
 def test_process_tickers_matches_gdax_identifier_for_coinbase():

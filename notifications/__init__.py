@@ -1,11 +1,5 @@
-"""
-Notifications package
-"""
+"""Snapshot-oriented formatting helpers (HTML-ish text for dashboard-derived flows)."""
 
-from .telegram import TelegramClient
 from .formatter import MessageFormatter
 
-__all__ = [
-    'TelegramClient',
-    'MessageFormatter'
-]
+__all__ = ["MessageFormatter"]

@@ -14,7 +14,6 @@ from api.tradingview_mapper import TradingViewMapper
 from database.cache import PriceCache
 from database.models import ActiveCoinsDatabase, HistoryDatabase
 from exchange_data.exchange_db import ExchangeDatabase
-from notifications.telegram import TelegramClient
 from utils.logger import app_logger
 
 
@@ -61,21 +60,6 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
     else:
         app_logger.warning("⚠️ No Chart-IMG API key - charts disabled")
 
-    telegram = None
-    if settings.telegram_enabled and settings.telegram:
-        telegram = TelegramClient(
-            settings.telegram["bot_token"],
-            settings.telegram["chat_id"],
-        )
-        app_logger.info("✅ Telegram client initialized")
-    elif not settings.telegram_enabled:
-        app_logger.debug(
-            "Skipping Telegram client (delivery_mode=%s)",
-            settings.delivery_mode,
-        )
-    else:
-        app_logger.warning("⚠️ Telegram credentials missing - notifications disabled")
-
     cmc_slug_resolver = None
     if settings.cmc_slug_map_enabled and settings.cmc_api_key and str(settings.cmc_api_key).strip():
         from utils.cmc_slug_resolver import CmcSlugResolver
@@ -116,6 +100,5 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
         "gecko": gecko,
         "history_fallback": history_fallback,
         "cg_mapper": cg_mapper,
-        "telegram": telegram,
         "cmc_slug_resolver": cmc_slug_resolver,
     }

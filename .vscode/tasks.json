@@ -247,7 +247,7 @@
 			"type": "shell",
 			"command": "C:/Users/edwar/Desktop/linear-trend-spotter/linear-trend-spotter/.venv/Scripts/python.exe",
 			"args": [
-				"scripts/run_full_noresume_watchdog.py"
+				"scripts/run_full_noresume_scan.py"
 			],
 			"isBackground": false
 		}

@@ -14,7 +14,7 @@
     "field_set": {
       "type": "string",
       "enum": ["full", "minimal"],
-      "description": "Q3: full rows match Telegram-oriented fields; minimal omits per-exchange volumes and ohlcv_source"
+      "description": "Q3: full rows match dashboard-oriented fields; minimal omits per-exchange volumes and ohlcv_source"
     },
     "scan_duration_s": {
       "type": "number",
@@ -33,7 +33,7 @@
     },
     "regime_gate": {
       "type": "object",
-      "description": "Present when REGIME_FILTER_ENABLED: BTC 7d/30d gate outcome for dashboard/Telegram UX",
+      "description": "Present when REGIME_FILTER_ENABLED: BTC 7d/30d gate outcome for dashboard UX",
       "properties": {
         "enabled": { "type": "boolean" },
         "passed": { "type": "boolean" },
@@ -120,7 +120,7 @@
           "closes_1h": {
             "type": "array",
             "items": { "type": "number" },
-            "description": "Optional 1h close series (oldest→newest), Telegram chart parity for dashboard sparkline when scanner attaches from OHLCV cache"
+            "description": "Optional 1h close series (oldest→newest) for dashboard sparklines when scanner attaches from OHLCV cache"
           }
         }
       }

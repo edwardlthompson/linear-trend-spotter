@@ -2,7 +2,7 @@
 
 When ``WEB_PUSH_NOTIFY_URL`` and ``WEB_PUSH_INTERNAL_SECRET`` are set, the worker
 POSTs to the relay **only when** at least one coin **enters** or **exits** the
-qualified active list (same enter/exit semantics as Telegram alerts). Payloads
+qualified active list churn (entries/exits). Payloads
 include ``listed_on`` per coin so the relay can honor per-subscriber exchange
 filters (dashboard parity). No OHLCV in payloads — short text + dashboard URL.
 """
