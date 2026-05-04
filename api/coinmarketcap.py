@@ -1,6 +1,6 @@
 """
 CoinMarketCap API client - Optimized for bulk gain data
-Free tier: 10,000 calls/month, 30 calls/minute
+Verify limits on https://coinmarketcap.com/api/pricing/ (e.g. Basic free credits/month, RPM).
 """
 
 import logging

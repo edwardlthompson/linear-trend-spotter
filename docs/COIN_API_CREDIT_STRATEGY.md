@@ -2,6 +2,8 @@
 
 **Deep dive:** provider fit per pipeline stage, slug/id conflicts, caching tiers, and redesign phases — see [`API_PROVIDER_DEEP_ANALYSIS.md`](./API_PROVIDER_DEEP_ANALYSIS.md).
 
+**Monthly usage math:** call-site formulas + scenario table — see [`API_MONTHLY_BUDGET_ESTIMATE.md`](./API_MONTHLY_BUDGET_ESTIMATE.md).
+
 The scanner can **split API load** between providers that already ship **free or demo** tiers. Nothing here removes features (filters, OHLCV uniformity, backtests, exchange volumes, dashboard fields): it only changes **which HTTP call runs first** or **which bulk endpoint builds the coin universe**.
 
 ## Where credits go today
@@ -12,7 +14,7 @@ The scanner can **split API load** between providers that already ship **free or
 | **Hourly OHLCV for uniformity** | One `/coins/{id}/market_chart` or hourly OHLC per qualified coin | **CMC** hourly OHLCV (`get_cmc_hourly_ohlcv`), **Polygon** aggregates, then CG |
 | **Per-exchange 24h volume** (`exchange_volumes`) | `/coins/{id}/tickers` per coin | Still CoinGecko today (CMC global volume ≠ venue breakdown) |
 
-The largest **easy** CoinGecko saver is usually switching the **top-coins provider**. Hourly OHLCV is the next lever once `CMC_API_KEY` (free Basic, ~10k calls/month — verify on [CMC pricing](https://coinmarketcap.com/api/pricing/)) and optionally `POLYGON_API_KEY` are set.
+The largest **easy** CoinGecko saver is usually switching the **top-coins provider**. Hourly OHLCV is the next lever once `CMC_API_KEY` and optionally `POLYGON_API_KEY` are set — verify whether **historical OHLCV** is allowed on your [CMC plan](https://coinmarketcap.com/api/pricing/) (Basic free is often **listings/map-only** for practical purposes); see [`API_MONTHLY_BUDGET_ESTIMATE.md`](./API_MONTHLY_BUDGET_ESTIMATE.md).
 
 ## 1. Use CoinMarketCap for the ranked universe (biggest CG reduction)
 
