@@ -155,27 +155,39 @@ class HistoryDatabase(Database):
             conn.commit()
     
     def save_scan(self, coins: List[Dict[str, Any]]):
-        """Save scan results"""
+        """Save scan results (single transaction, batched inserts)."""
+        if not coins:
+            return
         now = datetime.now().isoformat()
+        rows: List[tuple] = []
         for coin in coins:
-            self.execute('''
+            rows.append(
+                (
+                    now,
+                    coin["name"],
+                    coin["symbol"],
+                    coin["gains"].get("7d", 0),
+                    coin["gains"].get("30d", 0),
+                    coin.get("uniformity_score", 0),
+                    str(coin.get("exchange_volumes", {}).get("coinbase", "N/A")),
+                    str(coin.get("exchange_volumes", {}).get("kraken", "N/A")),
+                    str(coin.get("exchange_volumes", {}).get("mexc", "N/A")),
+                    _build_source_url(coin),
+                )
+            )
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.executemany(
+            """
                 INSERT INTO scan_history (
                     scan_date, coin_name, coin_symbol, gain_7d, gain_30d,
-                    uniformity_score, coinbase_volume, kraken_volume, 
+                    uniformity_score, coinbase_volume, kraken_volume,
                     mexc_volume, cmc_url
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                now,
-                coin['name'],
-                coin['symbol'],
-                coin['gains'].get('7d', 0),
-                coin['gains'].get('30d', 0),
-                coin.get('uniformity_score', 0),
-                str(coin.get('exchange_volumes', {}).get('coinbase', 'N/A')),
-                str(coin.get('exchange_volumes', {}).get('kraken', 'N/A')),
-                str(coin.get('exchange_volumes', {}).get('mexc', 'N/A')),
-                _build_source_url(coin)
-            ))
+            """,
+            rows,
+        )
+        conn.commit()
 
     def get_latest_rank_map(self) -> Dict[str, int]:
         """Return symbol->rank map for the most recent saved scan."""

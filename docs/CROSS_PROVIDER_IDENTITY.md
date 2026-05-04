@@ -51,7 +51,7 @@ Three vendors mean **three namespaces**: CoinGecko **`id`** (string slug), CoinM
 ### Phase B — Stronger binding (medium effort)
 
 - **Require `name` for disambiguation:** When **multiple** CMC or mapper candidates exist for a ticker, **do not guess** — require unique **name** match (already in `CmcSlugResolver`) or an **alias** entry.
-- **Snapshot identity block:** On each qualified coin row in JSON/DB, write **`cg_id`**, **`cmc_id`** (if known), **`cmc_slug`**, **`polygon_ticker`** (e.g. `X:BTCUSD`), and **`identity_confidence`** (`direct` / `alias` / `learned` / `ambiguous_skipped`).
+- **Snapshot identity block (implemented):** Each final qualified coin gets **`coin["identity"]`** via `utils/cross_provider_identity.attach_identity_bundles` (after `ensure_cmc_notify_urls`). The public snapshot includes **`identity`** on each coin when present (`utils/scan_artifacts.build_public_qualified_snapshot`). Fields include **`cg_id`**, **`cmc_id`**, **`cmc_slug`**, **`polygon_ticker`**, **`provider_symbol_resolution`**, **`cmc_slug_resolution`**, **`ohlcv_source`**, **`top_coins_provider`**.
 - **Optional sanity check:** Compare **last-hour close** or **24h %** from CG vs CMC when both exist; flag large divergence for manual alias review (not for blocking trades — for **data QA**).
 
 ### Phase C — Unified resolver (larger refactor, highest payoff)

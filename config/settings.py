@@ -56,6 +56,7 @@ class Settings:
             'RETRY_BACKOFF': 2,
             'COINGECKO_CALLS_PER_MINUTE': 30,
             'CMC_CALLS_PER_MINUTE': 333,
+            'POLYGON_CALLS_PER_MINUTE': 5,
             'CMC_SYMBOL_ALIASES': {
                 'CRYPGPT': 'CGPT',
             },
@@ -250,6 +251,7 @@ class Settings:
             ('RETRY_BACKOFF', 1, 10),
             ('COINGECKO_CALLS_PER_MINUTE', 1, 120),
             ('CMC_CALLS_PER_MINUTE', 1, 1000),
+            ('POLYGON_CALLS_PER_MINUTE', 1, 300),
             ('CACHE_GECKO_ID_DAYS', 1, 365),
             ('CACHE_EXCHANGE_HOURS', 1, 168),
             ('CACHE_PRICE_HOURS', 1, 72),
@@ -560,6 +562,10 @@ class Settings:
     @property
     def cmc_calls_per_minute(self) -> int:
         return self._config.get('CMC_CALLS_PER_MINUTE', 333)
+
+    @property
+    def polygon_calls_per_minute(self) -> int:
+        return int(self._config.get('POLYGON_CALLS_PER_MINUTE', 5))
 
     @property
     def cmc_symbol_aliases(self) -> Dict[str, str]:

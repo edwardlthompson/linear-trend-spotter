@@ -4,6 +4,21 @@
 
 **Monthly usage math:** call-site formulas + scenario table — see [`API_MONTHLY_BUDGET_ESTIMATE.md`](./API_MONTHLY_BUDGET_ESTIMATE.md).
 
+## Bulk / batching (fewer HTTP calls)
+
+What is already bundled:
+
+| Area | Behavior |
+|------|----------|
+| **CoinGecko universe** | `/coins/markets` pages of **250** coins per request (`get_top_coins_with_gains`). |
+| **CoinGecko ID aliases** | **All** ids listed under `COINGECKO_ID_ALIASES` plus ids needed by exchange symbols → **chunked** `get_markets_rows_for_ids` (≤250 ids/request). Rare misses get a **second** bulk top-up before the gain filter. |
+| **Alias fallback** | If a row is still missing, try **one-id** `get_markets_rows_for_ids` before `/coins/{id}`. |
+| **Tickers (venue volume)** | **One** `get_tickers` chain per **distinct** `cg_id` (not per row); 24h cache. |
+| **CMC universe** | **One** `listings/latest` call. CMC + fallback share a **single** RPM gate. |
+| **Scan history DB** | `executemany` batch insert for qualified rows. |
+
+What cannot be batched (provider limits): **per-coin** OHLCV (`market_chart` / Polygon aggs / CMC OHLCV). Mitigate with **cache TTLs** and provider order — see sections 2–3 above.
+
 The scanner can **split API load** between providers that already ship **free or demo** tiers. Nothing here removes features (filters, OHLCV uniformity, backtests, exchange volumes, dashboard fields): it only changes **which HTTP call runs first** or **which bulk endpoint builds the coin universe**.
 
 ## Where credits go today
@@ -58,8 +73,9 @@ Raise gradually so staleness stays acceptable for your `SCAN_INTERVAL_SECONDS`.
 
 ## 4. Rate limits (stay within free/demo RPM)
 
-- **`COINGECKO_CALLS_PER_MINUTE`** — align with your Demo plan (often **30** RPM).
-- **`CMC_CALLS_PER_MINUTE`** — stay under CMC Basic limits.
+- **`COINGECKO_CALLS_PER_MINUTE`** — client pacing + 429 exponential backoff with optional `Retry-After` (`api/coingecko.py`).
+- **`CMC_CALLS_PER_MINUTE`** — shared **`MinIntervalGate`** across **`CoinMarketCapClient`** and **`PriceHistoryFallback`** CMC calls (`scanner/runtime_init.py`) so listings + OHLCV respect one budget; 429/transient retries with backoff (`api/coinmarketcap.py`, `api/price_history_fallback.py`).
+- **`POLYGON_CALLS_PER_MINUTE`** — separate gate for Polygon aggregates (default **5** RPM; raise if your Polygon plan allows more).
 
 ## 5. What we did **not** change
 

@@ -108,6 +108,9 @@ def build_public_qualified_snapshot(
             "current_rank": row.get("current_rank"),
             "rank_delta": row.get("rank_delta"),
         }
+        id_block = row.get("identity")
+        if isinstance(id_block, dict):
+            coin["identity"] = id_block
         if not minimal:
             coin["exchange_volumes"] = row.get("exchange_volumes")
             coin["listed_on"] = row.get("listed_on")

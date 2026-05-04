@@ -21,6 +21,7 @@ from utils.insights import (
 )
 from utils.metrics import metrics, timed_block
 from utils.runtime_hygiene import run_artifact_hygiene, update_exit_reason_analytics
+from utils.cross_provider_identity import attach_identity_bundles
 from utils.scan_artifacts import (
     write_public_qualified_snapshot,
     write_scan_heartbeat,
@@ -46,9 +47,13 @@ from scanner.coin_enrichment import (
 from scanner.web_push_notify import maybe_notify_web_push_qualified_changes
 from scanner.snapshot_relay_notify import maybe_push_qualified_snapshot_relay
 from scanner.runtime_init import initialize_runtime_components
+from scanner.top_coin_resolution import ensure_cmc_notify_urls
 from scanner.top_coins_stage import fetch_top_coins_dataset
 from scanner.exchange_universe import load_exchange_symbol_universe
-from scanner.coingecko_alias_prefetch import prefetch_alias_markets_by_gecko_id
+from scanner.coingecko_alias_prefetch import (
+    prefetch_alias_markets_by_gecko_id,
+    top_up_alias_markets_for_symbols,
+)
 from scanner.gain_volume_filter import apply_gain_volume_filter
 from scanner.listings_and_volumes import (
     attach_coin_gecko_ids_and_learn,
@@ -160,6 +165,14 @@ def run_scanner():
             top_coins_provider=top_coins_provider,
             coingecko_id_aliases=coingecko_id_aliases,
             all_symbols=all_symbols,
+            gecko=gecko,
+            app_logger=app_logger,
+        )
+        top_up_alias_markets_for_symbols(
+            top_coins_provider=top_coins_provider,
+            coingecko_id_aliases=coingecko_id_aliases,
+            all_symbols=all_symbols,
+            alias_markets_by_id=alias_markets_by_id,
             gecko=gecko,
             app_logger=app_logger,
         )
@@ -380,7 +393,11 @@ def run_scanner():
             ),
         )
         attach_rank_movement(final_results, history_db.get_latest_rank_map())
-        
+
+        for coin in final_results:
+            ensure_cmc_notify_urls(coin, cmc_slug_resolver)
+        attach_identity_bundles(final_results, top_coins_provider=top_coins_provider)
+
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
         active_before_update = active_db.get_active()

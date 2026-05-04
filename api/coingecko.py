@@ -136,7 +136,7 @@ class CoinGeckoClient:
                     self.logger.warning(f"Rate limited (429). Waiting {wait_time:.1f}s before retry")
                     time.sleep(wait_time)
                     continue
-                elif response.status_code in (408, 500, 503):
+                elif response.status_code in (408, 500, 502, 503, 504):
                     if attempt >= max_retries - 1:
                         self.logger.warning(f"Transient API error {response.status_code}. Max retries reached; skipping request")
                         return None

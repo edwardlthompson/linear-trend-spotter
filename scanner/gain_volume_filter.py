@@ -103,12 +103,19 @@ def apply_gain_volume_filter(
                         "gains": gains,
                         "volume_24h": info["volume_24h"],
                         "current_price": float(info.get("price", 0) or 0),
+                        "provider_symbol_resolution": resolution_type,
                     }
+                    raw_cmc_id = info.get("cmc_id")
+                    if raw_cmc_id is not None:
+                        try:
+                            coin_info["cmc_id"] = int(raw_cmc_id)
+                        except (TypeError, ValueError):
+                            pass
                     gecko_for_link = str(info.get("gecko_id") or "").strip().lower()
                     if top_coins_provider == "coingecko":
                         coin_info["gecko_id"] = gecko_for_link
                         if cmc_slug_resolver and gecko_for_link:
-                            resolved_slug = cmc_slug_resolver.resolve(
+                            resolved_slug, resolved_cid, slug_tag = cmc_slug_resolver.resolve_identity(
                                 symbol=symbol,
                                 name=str(info.get("name") or ""),
                                 gecko_id=gecko_for_link,
@@ -118,6 +125,14 @@ def apply_gain_volume_filter(
                                 coin_info["cmc_slug"] = resolved_slug
                                 coin_info["cmc_url"] = cu
                                 coin_info["source_url"] = cu
+                                coin_info["cmc_slug_resolution"] = slug_tag
+                                if resolved_cid is not None and coin_info.get("cmc_id") is None:
+                                    coin_info["cmc_id"] = int(resolved_cid)
+                    elif top_coins_provider == "cmc":
+                        cmc_slug_key = str(info.get("slug") or "").strip().lower()
+                        if cmc_slug_key:
+                            coin_info["cmc_slug"] = cmc_slug_key
+                        coin_info["cmc_slug_resolution"] = "cmc_listings"
                     gain_qualified.append(coin_info)
                     _log_filter_line(
                         f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% "

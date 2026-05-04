@@ -41,6 +41,8 @@ def test_loader_respects_injected_ohlcv_thresholds() -> None:
     lp = BacktestLoaderParams(
         coingecko_calls_per_minute=10,
         cmc_api_key="",
+        cmc_calls_per_minute=30,
+        polygon_calls_per_minute=5,
         ohlcv_min_1h_bars_per_day=24,
         ohlcv_min_1h_bars_slack=12,
         ohlcv_min_1h_bars_floor=600,

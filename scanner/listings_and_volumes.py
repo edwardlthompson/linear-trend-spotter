@@ -76,8 +76,17 @@ def attach_coin_gecko_ids_and_learn(
                 raw = str(coin.get("slug") or "").strip().lower()
                 if raw and raw != gid:
                     cslug = raw
+            cid_raw = coin.get("cmc_id")
+            cid: int | None = None
+            if cid_raw is not None:
+                try:
+                    cid = int(cid_raw)
+                except (TypeError, ValueError):
+                    cid = None
             if gid and cslug and cslug != gid:
-                cmc_slug_resolver.learn_from_cmc_listing_coin(gecko_id=gid, cmc_slug=cslug)
+                cmc_slug_resolver.learn_from_cmc_listing_coin(
+                    gecko_id=gid, cmc_slug=cslug, cmc_id=cid
+                )
         cmc_slug_resolver.save_learned_if_dirty()
 
     app_logger.info(f"   Found CoinGecko IDs for {len(coins_with_cg_ids)} coins")

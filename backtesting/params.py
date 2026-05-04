@@ -18,6 +18,8 @@ class BacktestLoaderParams:
 
     coingecko_calls_per_minute: int
     cmc_api_key: str
+    cmc_calls_per_minute: int
+    polygon_calls_per_minute: int
     ohlcv_min_1h_bars_per_day: int
     ohlcv_min_1h_bars_slack: int
     ohlcv_min_1h_bars_floor: int
@@ -31,6 +33,8 @@ def loader_params_from_settings() -> BacktestLoaderParams:
     return BacktestLoaderParams(
         coingecko_calls_per_minute=int(settings.coingecko_calls_per_minute),
         cmc_api_key=str(settings.cmc_api_key or ""),
+        cmc_calls_per_minute=int(settings.cmc_calls_per_minute),
+        polygon_calls_per_minute=int(settings.polygon_calls_per_minute),
         ohlcv_min_1h_bars_per_day=int(settings.ohlcv_min_1h_bars_per_day),
         ohlcv_min_1h_bars_slack=int(settings.ohlcv_min_1h_bars_slack),
         ohlcv_min_1h_bars_floor=int(settings.ohlcv_min_1h_bars_floor),

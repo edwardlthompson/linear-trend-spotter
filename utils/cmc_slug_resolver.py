@@ -38,6 +38,8 @@ class CmcSlugResolver:
         self.learn_path = self.data_dir / learn_file
         self.by_symbol: dict[str, list[dict[str, Any]]] = {}
         self.gecko_to_slug: dict[str, str] = {}
+        self.gecko_to_cmc_id: dict[str, int] = {}
+        self.slug_to_cmc_id: dict[str, int] = {}
         self._map_fetched_at: str | None = None
         self._learn_dirty = False
 
@@ -99,73 +101,139 @@ class CmcSlugResolver:
         return True
 
     def resolve(self, *, symbol: str, name: str | None, gecko_id: str | None) -> str | None:
+        slug, _cid, _tag = self.resolve_identity(symbol=symbol, name=name, gecko_id=gecko_id)
+        return slug
+
+    def resolve_identity(
+        self,
+        *,
+        symbol: str,
+        name: str | None,
+        gecko_id: str | None,
+    ) -> tuple[str | None, int | None, str]:
+        """Return ``(cmc_slug, cmc_numeric_id, resolution_tag)``.
+
+        ``resolution_tag`` is one of: ``learned``, ``map_symbol_unique``, ``map_name_unique``,
+        ``ambiguous``, ``missing``.
+        """
         gid = str(gecko_id or "").strip().lower()
         if gid and gid in self.gecko_to_slug:
-            return str(self.gecko_to_slug[gid]).strip().lower() or None
+            slug = str(self.gecko_to_slug[gid]).strip().lower() or None
+            if not slug:
+                return None, None, "missing"
+            cid = self.gecko_to_cmc_id.get(gid)
+            if cid is None:
+                cid = self.slug_to_cmc_id.get(slug)
+            return slug, cid, "learned"
 
         sym = str(symbol or "").strip().upper()
         if not sym:
-            return None
+            return None, None, "missing"
         candidates = list(self.by_symbol.get(sym, []))
         if not candidates:
-            return None
+            return None, None, "missing"
         if len(candidates) == 1:
             slug = str(candidates[0].get("slug") or "").strip().lower()
+            raw_id = candidates[0].get("id")
+            cid: int | None = None
+            if raw_id is not None:
+                try:
+                    cid = int(raw_id)
+                except (TypeError, ValueError):
+                    cid = None
             if slug and gid:
-                self._remember_pair(gid, slug)
-            return slug or None
+                self._remember_pair(gid, slug, cmc_id=cid)
+            return (slug or None), cid, "map_symbol_unique"
 
         want = _norm_name(name or "")
         if want:
             matches = [c for c in candidates if _norm_name(str(c.get("name") or "")) == want]
             if len(matches) == 1:
                 slug = str(matches[0].get("slug") or "").strip().lower()
+                raw_id = matches[0].get("id")
+                cid2: int | None = None
+                if raw_id is not None:
+                    try:
+                        cid2 = int(raw_id)
+                    except (TypeError, ValueError):
+                        cid2 = None
                 if slug and gid:
-                    self._remember_pair(gid, slug)
-                return slug or None
+                    self._remember_pair(gid, slug, cmc_id=cid2)
+                return (slug or None), cid2, "map_name_unique"
 
-        return None
+        return None, None, "ambiguous"
 
-    def learn_from_cmc_listing_coin(self, *, gecko_id: str | None, cmc_slug: str | None) -> None:
+    def learn_from_cmc_listing_coin(
+        self, *, gecko_id: str | None, cmc_slug: str | None, cmc_id: int | None = None
+    ) -> None:
         """When top-coins came from CMC, record gecko id once mapper has filled it."""
         gid = str(gecko_id or "").strip().lower()
         slug = str(cmc_slug or "").strip().lower()
         if not gid or not slug or slug == gid:
             return
-        self._remember_pair(gid, slug)
+        self._remember_pair(gid, slug, cmc_id=cmc_id)
 
     def save_learned_if_dirty(self) -> None:
         if not self._learn_dirty:
             return
-        body = {
+        body: dict[str, Any] = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "gecko_id_to_cmc_slug": dict(sorted(self.gecko_to_slug.items())),
         }
+        if self.gecko_to_cmc_id:
+            body["gecko_id_to_cmc_id"] = {
+                str(k): int(v) for k, v in sorted(self.gecko_to_cmc_id.items()) if v is not None
+            }
         self.learn_path.write_text(json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8")
         self._learn_dirty = False
-        _logger.info("Persisted gecko→CMC slug learn file (%s pairs)", len(self.gecko_to_slug))
+        _logger.info(
+            "Persisted gecko→CMC learn file (%s slug pairs, %s id pairs)",
+            len(self.gecko_to_slug),
+            len(self.gecko_to_cmc_id),
+        )
 
-    def _remember_pair(self, gecko_id: str, cmc_slug: str) -> None:
+    def _remember_pair(self, gecko_id: str, cmc_slug: str, cmc_id: int | None = None) -> None:
         if not gecko_id or not cmc_slug:
             return
         prev = self.gecko_to_slug.get(gecko_id)
         if prev != cmc_slug:
             self.gecko_to_slug[gecko_id] = cmc_slug
             self._learn_dirty = True
+        if cmc_id is not None:
+            try:
+                cid = int(cmc_id)
+            except (TypeError, ValueError):
+                cid = None
+            if cid is not None and self.gecko_to_cmc_id.get(gecko_id) != cid:
+                self.gecko_to_cmc_id[gecko_id] = cid
+                self._learn_dirty = True
 
     def _load_learned(self) -> None:
         self.gecko_to_slug = {}
+        self.gecko_to_cmc_id = {}
         if not self.learn_path.exists():
             return
         try:
             raw = json.loads(self.learn_path.read_text(encoding="utf-8"))
-            m = raw.get("gecko_id_to_cmc_slug") if isinstance(raw, dict) else None
+            if not isinstance(raw, dict):
+                return
+            m = raw.get("gecko_id_to_cmc_slug")
             if isinstance(m, dict):
                 for k, v in m.items():
                     ks = str(k).strip().lower()
                     vs = str(v).strip().lower()
                     if ks and vs:
                         self.gecko_to_slug[ks] = vs
+            mid = raw.get("gecko_id_to_cmc_id")
+            if isinstance(mid, dict):
+                for k, v in mid.items():
+                    ks = str(k).strip().lower()
+                    if not ks or v is None:
+                        continue
+                    try:
+                        self.gecko_to_cmc_id[ks] = int(v)
+                    except (TypeError, ValueError):
+                        continue
         except Exception as exc:
             _logger.warning("Could not load %s: %s", self.learn_path.name, exc)
 
@@ -187,6 +255,7 @@ class CmcSlugResolver:
 
     def _rebuild_index_from_rows(self, rows: list[dict[str, Any]]) -> None:
         idx: dict[str, list[dict[str, Any]]] = {}
+        slug_ids: dict[str, int] = {}
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -195,5 +264,13 @@ class CmcSlugResolver:
             name = str(row.get("name") or "").strip()
             if not sym or not slug:
                 continue
-            idx.setdefault(sym, []).append({"slug": slug.lower(), "name": name, "id": row.get("id")})
+            slug_key = slug.lower()
+            raw_id = row.get("id")
+            if raw_id is not None and slug_key:
+                try:
+                    slug_ids[slug_key] = int(raw_id)
+                except (TypeError, ValueError):
+                    pass
+            idx.setdefault(sym, []).append({"slug": slug_key, "name": name, "id": row.get("id")})
         self.by_symbol = idx
+        self.slug_to_cmc_id = slug_ids

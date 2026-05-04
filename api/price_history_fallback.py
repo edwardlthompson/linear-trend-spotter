@@ -7,7 +7,6 @@ This module provides provider fallbacks when CoinGecko is unavailable or incompl
 from __future__ import annotations
 
 import logging
-import random
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
@@ -15,22 +14,119 @@ from typing import Any, Optional
 import requests
 
 from utils.provider_http_usage import record_cmc_http, record_polygon_http
+from utils.provider_rate_limit import MinIntervalGate, backoff_seconds_for_attempt
 
 
 class PriceHistoryFallbackClient:
     """Fallback chain: Polygon intraday/daily OHLCV, then CoinMarketCap OHLCV / closes."""
 
-    def __init__(self, polygon_api_key: str = "", cmc_api_key: str = ""):
+    def __init__(
+        self,
+        polygon_api_key: str = "",
+        cmc_api_key: str = "",
+        *,
+        cmc_rate_gate: MinIntervalGate | None = None,
+        polygon_rate_gate: MinIntervalGate | None = None,
+        cmc_calls_per_minute: int = 30,
+        polygon_calls_per_minute: int = 5,
+    ):
         self.polygon_api_key = polygon_api_key or ""
         self.cmc_api_key = cmc_api_key or ""
         self.logger = logging.getLogger("PriceHistoryFallback")
 
+        self._cmc_gate = cmc_rate_gate if cmc_rate_gate is not None else MinIntervalGate(cmc_calls_per_minute)
+        self._polygon_gate = polygon_rate_gate if polygon_rate_gate is not None else MinIntervalGate(
+            polygon_calls_per_minute
+        )
+
         self.polygon_session = requests.Session()
         self.cmc_session = requests.Session()
-        self.cmc_session.headers.update({
-            "X-CMC_PRO_API_KEY": self.cmc_api_key,
-            "Accept": "application/json",
-        })
+        self.cmc_session.headers.update(
+            {
+                "X-CMC_PRO_API_KEY": self.cmc_api_key,
+                "Accept": "application/json",
+            }
+        )
+
+    def _polygon_http_get(
+        self,
+        url: str,
+        params: dict[str, Any],
+        *,
+        timeout: float,
+        max_retries: int = 6,
+        label: str = "",
+    ) -> Optional[requests.Response]:
+        """Paced Polygon GET with 429 / transient backoff."""
+        for attempt in range(max_retries):
+            self._polygon_gate.wait()
+            try:
+                response = self.polygon_session.get(url, params=params, timeout=timeout)
+                record_polygon_http(url)
+                if response.status_code == 200:
+                    return response
+                if response.status_code == 429 and attempt < max_retries - 1:
+                    wait_s = backoff_seconds_for_attempt(attempt, response=response)
+                    self.logger.warning("Polygon rate limited (429)%s; sleeping %.1fs", label, wait_s)
+                    time.sleep(wait_s)
+                    continue
+                if response.status_code in (408, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    wait_s = min(5 * (2**attempt), 60) + 0.25
+                    self.logger.warning("Polygon HTTP %s%s; retry in %.1fs", response.status_code, label, wait_s)
+                    time.sleep(wait_s)
+                    continue
+                return response
+            except requests.exceptions.Timeout:
+                if attempt >= max_retries - 1:
+                    self.logger.warning("Polygon timeout%s (giving up)", label)
+                    return None
+                time.sleep(min(5 * (2**attempt), 45))
+            except Exception as exc:
+                self.logger.debug("Polygon request error%s: %s", label, exc)
+                if attempt >= max_retries - 1:
+                    return None
+                time.sleep(min(3 * (2**attempt), 30))
+        return None
+
+    def _cmc_http_get(
+        self,
+        url: str,
+        params: dict[str, Any],
+        *,
+        timeout: float,
+        max_retries: int = 6,
+        label: str = "",
+    ) -> Optional[requests.Response]:
+        """Paced CMC GET with 429 / transient backoff (shares gate with ``CoinMarketCapClient`` when injected)."""
+        for attempt in range(max_retries):
+            self._cmc_gate.wait()
+            try:
+                response = self.cmc_session.get(url, params=params, timeout=timeout)
+                record_cmc_http(url)
+                if response.status_code == 200:
+                    return response
+                if response.status_code == 429 and attempt < max_retries - 1:
+                    wait_s = backoff_seconds_for_attempt(attempt, response=response)
+                    self.logger.warning("CMC rate limited (429)%s; sleeping %.1fs", label, wait_s)
+                    time.sleep(wait_s)
+                    continue
+                if response.status_code in (408, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    wait_s = min(5 * (2**attempt), 60) + 0.25
+                    self.logger.warning("CMC HTTP %s%s; retry in %.1fs", response.status_code, label, wait_s)
+                    time.sleep(wait_s)
+                    continue
+                return response
+            except requests.exceptions.Timeout:
+                if attempt >= max_retries - 1:
+                    self.logger.warning("CMC timeout%s (giving up)", label)
+                    return None
+                time.sleep(min(5 * (2**attempt), 45))
+            except Exception as exc:
+                self.logger.debug("CMC request error%s: %s", label, exc)
+                if attempt >= max_retries - 1:
+                    return None
+                time.sleep(min(3 * (2**attempt), 30))
+        return None
 
     def get_30d_prices(self, symbol: str) -> tuple[Optional[list[float]], str]:
         prices = self._get_polygon_30d_daily(symbol)
@@ -51,68 +147,45 @@ class PriceHistoryFallbackClient:
         today = date.today()
         start = today - timedelta(days=30)
         url = f"https://api.polygon.io/v2/aggs/ticker/X:{symbol.upper()}USD/range/1/hour/{start.isoformat()}/{today.isoformat()}"
-        params = {
+        params: dict[str, Any] = {
             "adjusted": "true",
             "sort": "asc",
             "limit": 50000,
             "apiKey": self.polygon_api_key,
         }
 
-        for attempt in range(6):
-            try:
-                response = self.polygon_session.get(url, params=params, timeout=20)
-                record_polygon_http(url)
-                if response.status_code == 200:
-                    payload = response.json()
-                    results = payload.get("results", []) if isinstance(payload, dict) else []
-                    if not isinstance(results, list) or not results:
-                        return None
+        response = self._polygon_http_get(url, params, timeout=20.0, label=f" hourly {symbol}")
+        if response is None or response.status_code != 200:
+            return None
+        try:
+            payload = response.json()
+        except Exception:
+            return None
+        results = payload.get("results", []) if isinstance(payload, dict) else []
+        if not isinstance(results, list) or not results:
+            return None
 
-                    rows: list[dict[str, float]] = []
-                    for row in results:
-                        if not isinstance(row, dict):
-                            continue
-                        if any(row.get(key) is None for key in ("t", "o", "h", "l", "c")):
-                            continue
+        rows: list[dict[str, float]] = []
+        for row in results:
+            if not isinstance(row, dict):
+                continue
+            if any(row.get(key) is None for key in ("t", "o", "h", "l", "c")):
+                continue
 
-                        ts_sec = int(float(row.get("t", 0)) / 1000)
-                        rows.append(
-                            {
-                                "ts": ts_sec,
-                                "open": float(row.get("o", 0)),
-                                "high": float(row.get("h", 0)),
-                                "low": float(row.get("l", 0)),
-                                "close": float(row.get("c", 0)),
-                                "volume": float(row.get("v", 0.0) or 0.0),
-                            }
-                        )
+            ts_sec = int(float(row.get("t", 0)) / 1000)
+            rows.append(
+                {
+                    "ts": ts_sec,
+                    "open": float(row.get("o", 0)),
+                    "high": float(row.get("h", 0)),
+                    "low": float(row.get("l", 0)),
+                    "close": float(row.get("c", 0)),
+                    "volume": float(row.get("v", 0.0) or 0.0),
+                }
+            )
 
-                    if len(rows) >= 600:
-                        return rows
-                    return None
-
-                if response.status_code == 429 and attempt < 5:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after and retry_after.isdigit():
-                        wait_time = min(int(retry_after), 30)
-                    else:
-                        wait_time = min(3 * (attempt + 1), 20) + random.uniform(0, 1)
-                    self.logger.warning(f"Polygon hourly 429 for {symbol}; waiting {wait_time:.1f}s")
-                    time.sleep(wait_time)
-                    continue
-
-                if response.status_code in (408, 500, 503) and attempt < 5:
-                    wait_time = min(2 * (attempt + 1), 15) + random.uniform(0, 1)
-                    time.sleep(wait_time)
-                    continue
-
-                return None
-            except Exception:
-                if attempt < 5:
-                    time.sleep(min(2 * (attempt + 1), 15))
-                    continue
-                return None
-
+        if len(rows) >= 600:
+            return rows
         return None
 
     def get_polygon_30d_daily_ohlcv(self, symbol: str) -> Optional[list[dict[str, float]]]:
@@ -133,38 +206,38 @@ class PriceHistoryFallbackClient:
             "apiKey": self.polygon_api_key,
         }
 
+        response = self._polygon_http_get(url, params, timeout=20.0, label=f" daily_ohlcv {symbol}")
+        if response is None or response.status_code != 200:
+            return None
         try:
-            response = self.polygon_session.get(url, params=params, timeout=20)
-            record_polygon_http(url)
-            if response.status_code != 200:
-                return None
             payload = response.json()
-            results = payload.get("results", []) if isinstance(payload, dict) else []
-            if not isinstance(results, list) or not results:
-                return None
-
-            rows: list[dict[str, float]] = []
-            for row in results:
-                if not isinstance(row, dict):
-                    continue
-                if any(row.get(key) is None for key in ("t", "o", "h", "l", "c")):
-                    continue
-                ts_sec = int(float(row.get("t", 0)) / 1000)
-                rows.append(
-                    {
-                        "ts": ts_sec,
-                        "open": float(row.get("o", 0)),
-                        "high": float(row.get("h", 0)),
-                        "low": float(row.get("l", 0)),
-                        "close": float(row.get("c", 0)),
-                        "volume": float(row.get("v", 0.0) or 0.0),
-                    }
-                )
-
-            if len(rows) >= 25:
-                return rows
         except Exception as exc:
-            self.logger.debug("Polygon daily OHLCV failed for %s: %s", symbol, exc)
+            self.logger.debug("Polygon daily OHLCV JSON for %s: %s", symbol, exc)
+            return None
+        results = payload.get("results", []) if isinstance(payload, dict) else []
+        if not isinstance(results, list) or not results:
+            return None
+
+        rows: list[dict[str, float]] = []
+        for row in results:
+            if not isinstance(row, dict):
+                continue
+            if any(row.get(key) is None for key in ("t", "o", "h", "l", "c")):
+                continue
+            ts_sec = int(float(row.get("t", 0)) / 1000)
+            rows.append(
+                {
+                    "ts": ts_sec,
+                    "open": float(row.get("o", 0)),
+                    "high": float(row.get("h", 0)),
+                    "low": float(row.get("l", 0)),
+                    "close": float(row.get("c", 0)),
+                    "volume": float(row.get("v", 0.0) or 0.0),
+                }
+            )
+
+        if len(rows) >= 25:
+            return rows
         return None
 
     def get_cmc_hourly_ohlcv(self, symbol: str, days: int = 30) -> Optional[list[dict[str, float]]]:
@@ -185,33 +258,18 @@ class PriceHistoryFallbackClient:
             "count": count,
         }
 
-        for attempt in range(4):
-            try:
-                response = self.cmc_session.get(url, params=params, timeout=20)
-                record_cmc_http(url)
-                if response.status_code != 200:
-                    if response.status_code == 429 and attempt < 3:
-                        time.sleep(min(3 * (attempt + 1), 20) + random.uniform(0, 1))
-                        continue
-                    self.logger.debug(
-                        "CMC hourly OHLCV HTTP %s for %s",
-                        response.status_code,
-                        symbol_u,
-                    )
-                    return None
-
-                payload = response.json()
-                rows = self._parse_cmc_hourly_quotes(payload)
-                if rows and len(rows) >= 600:
-                    return rows
-                return None
-            except Exception as exc:
-                self.logger.debug("CMC hourly OHLCV error for %s: %s", symbol_u, exc)
-                if attempt < 3:
-                    time.sleep(min(2 * (attempt + 1), 15))
-                    continue
-                return None
-
+        response = self._cmc_http_get(url, params, timeout=20.0, label=f" OHLCV {symbol_u}")
+        if response is None or response.status_code != 200:
+            self.logger.debug("CMC hourly OHLCV HTTP for %s status=%s", symbol_u, getattr(response, "status_code", None))
+            return None
+        try:
+            payload = response.json()
+        except Exception as exc:
+            self.logger.debug("CMC hourly OHLCV JSON for %s: %s", symbol_u, exc)
+            return None
+        rows = self._parse_cmc_hourly_quotes(payload)
+        if rows and len(rows) >= 600:
+            return rows
         return None
 
     @staticmethod
@@ -303,40 +361,17 @@ class PriceHistoryFallbackClient:
             "apiKey": self.polygon_api_key,
         }
 
-        for attempt in range(6):
-            try:
-                response = self.polygon_session.get(url, params=params, timeout=15)
-                record_polygon_http(url)
-                if response.status_code == 200:
-                    payload = response.json()
-                    results = payload.get("results", []) if isinstance(payload, dict) else []
-                    prices = [float(row.get("c", 0)) for row in results if isinstance(row, dict) and row.get("c") is not None]
-                    if len(prices) >= 25:
-                        return prices
-                    return None
-
-                if response.status_code == 429 and attempt < 5:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after and retry_after.isdigit():
-                        wait_time = min(int(retry_after), 30)
-                    else:
-                        wait_time = min(3 * (attempt + 1), 20) + random.uniform(0, 1)
-                    self.logger.warning(f"Polygon 429 for {symbol}; waiting {wait_time:.1f}s")
-                    time.sleep(wait_time)
-                    continue
-
-                if response.status_code in (408, 500, 503) and attempt < 5:
-                    wait_time = min(2 * (attempt + 1), 15) + random.uniform(0, 1)
-                    time.sleep(wait_time)
-                    continue
-
-                return None
-            except Exception:
-                if attempt < 5:
-                    time.sleep(min(2 * (attempt + 1), 15))
-                    continue
-                return None
-
+        response = self._polygon_http_get(url, params, timeout=15.0, label=f" daily_closes {symbol}")
+        if response is None or response.status_code != 200:
+            return None
+        try:
+            payload = response.json()
+        except Exception:
+            return None
+        results = payload.get("results", []) if isinstance(payload, dict) else []
+        prices = [float(row.get("c", 0)) for row in results if isinstance(row, dict) and row.get("c") is not None]
+        if len(prices) >= 25:
+            return prices
         return None
 
     def get_cmc_daily_closes(self, symbol: str) -> Optional[list[float]]:
@@ -359,39 +394,16 @@ class PriceHistoryFallbackClient:
             "convert": "USD",
         }
 
-        for attempt in range(5):
-            try:
-                response = self.cmc_session.get(url, params=params, timeout=15)
-                record_cmc_http(url)
-                if response.status_code == 200:
-                    payload = response.json()
-                    prices = self._extract_cmc_prices(payload, symbol.upper())
-                    if len(prices) >= 25:
-                        return prices
-                    return None
-
-                if response.status_code == 429 and attempt < 4:
-                    retry_after = response.headers.get("Retry-After")
-                    if retry_after and retry_after.isdigit():
-                        wait_time = min(int(retry_after), 30)
-                    else:
-                        wait_time = min(3 * (attempt + 1), 20) + random.uniform(0, 1)
-                    self.logger.warning(f"CMC 429 for {symbol}; waiting {wait_time:.1f}s")
-                    time.sleep(wait_time)
-                    continue
-
-                if response.status_code in (408, 500, 503) and attempt < 4:
-                    wait_time = min(2 * (attempt + 1), 15) + random.uniform(0, 1)
-                    time.sleep(wait_time)
-                    continue
-
-                return None
-            except Exception:
-                if attempt < 4:
-                    time.sleep(min(2 * (attempt + 1), 15))
-                    continue
-                return None
-
+        response = self._cmc_http_get(url, params, timeout=15.0, label=f" quotes_hist {symbol}")
+        if response is None or response.status_code != 200:
+            return None
+        try:
+            payload = response.json()
+        except Exception:
+            return None
+        prices = self._extract_cmc_prices(payload, symbol.upper())
+        if len(prices) >= 25:
+            return prices
         return None
 
     @staticmethod

@@ -44,6 +44,12 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 - **`docs/MANUAL_DEPLOY_STEPS.md`** — Render / Pages checklist  
 - **`docs/render-setup.md`** — Render blueprint and worker notes  
 - **`docs/WEB_DASHBOARD.md`** — dashboard behavior and env vars  
+- **`docs/COIN_API_CREDIT_STRATEGY.md`** — splitting load across CoinGecko / CoinMarketCap / Polygon, **rate limits & backoff**, **bulk `/coins/markets`** alias fetching  
+- **`docs/API_MONTHLY_BUDGET_ESTIMATE.md`** — rough monthly HTTP estimates per provider  
+- **`docs/API_PROVIDER_DEEP_ANALYSIS.md`** — which API fits which pipeline stage  
+- **`docs/CROSS_PROVIDER_IDENTITY.md`** — translating ids/slugs across vendors; **`identity`** on qualified snapshot rows  
+
+Optional **`config.json`** keys include **`COINGECKO_CALLS_PER_MINUTE`**, **`CMC_CALLS_PER_MINUTE`**, **`POLYGON_CALLS_PER_MINUTE`** (see **`config.json.example`**).
 
 ## Contributing / CI
 

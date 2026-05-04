@@ -11,6 +11,7 @@ from api.coingecko_mapper import CoinGeckoMapper
 from api.coinmarketcap import CoinMarketCapClient
 from api.price_history_fallback import PriceHistoryFallbackClient
 from api.tradingview_mapper import TradingViewMapper
+from utils.provider_rate_limit import MinIntervalGate
 from database.cache import PriceCache
 from database.models import ActiveCoinsDatabase, HistoryDatabase
 from exchange_data.exchange_db import ExchangeDatabase
@@ -25,7 +26,8 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
     exchange_db = ExchangeDatabase(settings.db_paths["exchanges"])
     tv_mapper = TradingViewMapper(settings.db_paths["tv_mappings"])
 
-    cmc = CoinMarketCapClient(settings.cmc_api_key)
+    cmc_gate = MinIntervalGate(settings.cmc_calls_per_minute)
+    cmc = CoinMarketCapClient(settings.cmc_api_key, rate_gate=cmc_gate, calls_per_minute=settings.cmc_calls_per_minute)
     app_logger.info("✅ CoinMarketCap client initialized")
 
     gecko = CoinGeckoClient(calls_per_minute=settings.coingecko_calls_per_minute)
@@ -34,6 +36,8 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
     history_fallback = PriceHistoryFallbackClient(
         polygon_api_key=os.getenv("POLYGON_API_KEY", ""),
         cmc_api_key=settings.cmc_api_key,
+        cmc_rate_gate=cmc_gate,
+        polygon_calls_per_minute=settings.polygon_calls_per_minute,
     )
     app_logger.info("✅ OHLCV fallback chain initialized (Polygon + CMC hourly/daily tertiary)")
 
