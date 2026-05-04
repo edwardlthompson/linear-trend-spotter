@@ -167,6 +167,7 @@ class CoinGeckoClient:
         *,
         exchange_ids: Optional[str] = None,
         page: Optional[int] = None,
+        order: Optional[str] = None,
     ) -> Optional[Dict]:
         """Get tickers for a coin (exchange volume data).
 
@@ -183,6 +184,8 @@ class CoinGeckoClient:
             params["exchange_ids"] = str(exchange_ids).strip()
         if page is not None and int(page) >= 1:
             params["page"] = str(int(page))
+        if order and str(order).strip():
+            params["order"] = str(order).strip()
         req_params: Optional[dict[str, str]] = params or None
         # Non-critical endpoint in this pipeline: fail fast to avoid scan stalls
         return self._make_request(

@@ -59,6 +59,9 @@
   const LS_OPS_LAST_ACK_MS = "qualified_dash_ops_last_ack_ms";
   /** Digest of coin-only banners last acknowledged with the bell drawer (localStorage). */
   const LS_COIN_ALERTS_ACK_DIGEST = "qualified_dash_coin_alerts_ack_digest";
+  /** Persisted qualified-list enter/exit lines for the bell dropdown (newest appended). */
+  const LS_COIN_ALERT_FEED_JSON = "qualified_dash_coin_alert_feed_v1";
+  const COIN_ALERT_FEED_MAX = 50;
   const SEARCH_DEBOUNCE_MS = 250;
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
@@ -234,6 +237,8 @@
   let lastPayload = null;
   /** Appended to meta line once after loading `../qualified_public_snapshot.json` when the relay returns 503. */
   let snapshotMetaSuffix = "";
+  /** True when the last successful snapshot fetch used the committed-repo fallback (relay 503). */
+  let snapshotLoadWasCommittedFallback = false;
   /** @type {Set<string>} */
   let lastAddedSet = new Set();
   let sortKey = "health";
@@ -460,7 +465,7 @@
     const willOpen = elCoinAlertsPopover.hidden;
     elCoinAlertsPopover.hidden = !willOpen;
     elCoinAlertsBell.setAttribute("aria-expanded", willOpen ? "true" : "false");
-    if (willOpen) writeCoinAlertsAckDigest(coinSignalsDigest());
+    if (willOpen) renderCoinAlertsList();
     syncCoinBellBadge();
   }
 
@@ -563,6 +568,7 @@
     });
   }
   syncTabVisuals();
+  renderCoinAlertsList();
   updateSortHeaderClasses();
 
   function getSnapshotUrl() {
@@ -1906,7 +1912,124 @@
             ? elWatchLeaveBannerText.textContent.trim()
             : "")
         : "";
+    if (!d && !w) return "";
     return `${d}\n---\n${w}`;
+  }
+
+  /** @returns {{ id: string, t: number, line: string }[]} */
+  function readCoinAlertFeed() {
+    try {
+      const raw = localStorage.getItem(LS_COIN_ALERT_FEED_JSON);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .filter((x) => x && typeof x.id === "string" && typeof x.line === "string")
+        .map((x) => ({ id: x.id, t: Number(x.t) || 0, line: x.line }));
+    } catch {
+      return [];
+    }
+  }
+
+  /** @param {{ id: string, t: number, line: string }[]} items */
+  function writeCoinAlertFeed(items) {
+    try {
+      const trimmed = items.slice(-COIN_ALERT_FEED_MAX);
+      localStorage.setItem(LS_COIN_ALERT_FEED_JSON, JSON.stringify(trimmed));
+    } catch (e) {
+      console.warn("coin alert feed", e);
+    }
+  }
+
+  function removeCoinAlertById(id) {
+    const want = String(id || "");
+    if (!want) return;
+    writeCoinAlertFeed(readCoinAlertFeed().filter((x) => x.id !== want));
+  }
+
+  function clearCoinAlertFeed() {
+    try {
+      localStorage.removeItem(LS_COIN_ALERT_FEED_JSON);
+    } catch (e) {
+      console.warn("coin alert feed clear", e);
+    }
+  }
+
+  function formatCoinAlertSymbolChunk(syms) {
+    if (!syms.length) return "";
+    const slice = syms.slice(0, 14);
+    const s = slice.join(", ");
+    return syms.length > 14 ? `${s}…` : s;
+  }
+
+  /**
+   * Append one line per scan when symbols enter or leave the qualified set (not the first baseline load).
+   * @param {string[]} added
+   * @param {string[]} dropped
+   * @param {boolean} isFirstBaseline
+   */
+  function appendQualifiedListNotifications(added, dropped, isFirstBaseline) {
+    if (isFirstBaseline) return;
+    if (!added.length && !dropped.length) return;
+    const snapIso = lastPayload && lastPayload.updated_at ? String(lastPayload.updated_at) : "";
+    const cur = readCoinAlertFeed();
+    const have = new Set(cur.map((x) => x.id));
+    const now = Date.now();
+    const next = [...cur];
+    if (added.length) {
+      const id = `enter|${snapIso}|${[...added].sort().join(",")}`;
+      if (!have.has(id)) {
+        next.push({
+          id,
+          t: now,
+          line: `Entered: ${formatCoinAlertSymbolChunk(added)}`,
+        });
+        have.add(id);
+      }
+    }
+    if (dropped.length) {
+      const id = `exit|${snapIso}|${[...dropped].sort().join(",")}`;
+      if (!have.has(id)) {
+        next.push({
+          id,
+          t: now,
+          line: `Left: ${formatCoinAlertSymbolChunk(dropped)}`,
+        });
+      }
+    }
+    writeCoinAlertFeed(next);
+  }
+
+  function renderCoinAlertsList() {
+    const ul = document.getElementById("coinAlertsFeedList");
+    const emptyEl = document.getElementById("coinAlertsFeedEmpty");
+    const dismissAllBtn = document.getElementById("coinAlertsDismissAll");
+    if (!ul) return;
+    const items = readCoinAlertFeed();
+    ul.innerHTML = "";
+    if (emptyEl) {
+      emptyEl.hidden = items.length > 0;
+    }
+    if (dismissAllBtn) {
+      dismissAllBtn.hidden = items.length === 0;
+    }
+    const newestFirst = items.slice().reverse();
+    for (const it of newestFirst) {
+      const li = document.createElement("li");
+      li.className = "coin-alerts-feed-item";
+      const span = document.createElement("span");
+      span.className = "coin-alerts-feed-text";
+      span.textContent = it.line;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "coin-alerts-feed-dismiss";
+      btn.setAttribute("aria-label", "Dismiss this notification");
+      btn.setAttribute("data-coin-alert-dismiss", it.id);
+      btn.textContent = "×";
+      li.appendChild(span);
+      li.appendChild(btn);
+      ul.appendChild(li);
+    }
   }
 
   function readCoinAlertsAckDigest() {
@@ -1930,9 +2053,19 @@
     const dig = coinSignalsDigest();
     const ack = readCoinAlertsAckDigest();
     const drawerOpen = elCoinAlertsPopover && !elCoinAlertsPopover.hidden;
-    const show = Boolean(dig) && dig !== ack && !drawerOpen;
+    const feedN = readCoinAlertFeed().length;
+    const bannerUnread = dig !== "" && dig !== ack;
+    const show = !drawerOpen && (feedN > 0 || bannerUnread);
     elCoinAlertsBadge.hidden = !show;
-    elCoinAlertsBadge.textContent = show ? "!" : "0";
+    if (!show) {
+      elCoinAlertsBadge.textContent = "0";
+      return;
+    }
+    if (feedN > 0) {
+      elCoinAlertsBadge.textContent = feedN > 9 ? "9+" : String(feedN);
+    } else {
+      elCoinAlertsBadge.textContent = "!";
+    }
   }
 
   function coinListingUrl(c) {
@@ -2403,7 +2536,9 @@
         elEmptyBanner.hidden = false;
         elEmptyBanner.textContent = regimeBlocked
           ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see the Regime strip on the Logs tab). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
-          : "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file.";
+          : snapshotLoadWasCommittedFallback
+            ? "The live snapshot relay returned HTTP 503 (no snapshot file on the server yet), so this page loaded the committed repo file `docs/qualified_public_snapshot.json`, which currently has 0 coins. Fix: wait for the worker to POST after a scan, or run `python scripts/sync_snapshot_to_docs.py` after a local scan and deploy the updated JSON. Check Render snapshot service logs if 503 persists."
+            : "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans (Telegram / Render worker) do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file.";
       }
     }
 
@@ -2432,6 +2567,8 @@
     }
 
     updateCoinListDiffBanner(added, dropped);
+    appendQualifiedListNotifications(added, dropped, prevSyms.size === 0);
+    renderCoinAlertsList();
     updateStaleBanner(data);
     updateHealthStrip(data);
     updateRegimeStrip(data.regime_gate);
@@ -2691,8 +2828,10 @@
       if (usedRelay503Fallback) {
         snapshotMetaSuffix =
           " · Showing committed docs/qualified_public_snapshot.json (live relay has no file yet; HTTP 503).";
+        snapshotLoadWasCommittedFallback = true;
       } else {
         snapshotMetaSuffix = "";
+        snapshotLoadWasCommittedFallback = false;
       }
       render(data);
       const snapDigest = await digestHex(text);
@@ -2886,6 +3025,29 @@
     if (!elCoinAlertsDropdownRoot || !elCoinAlertsPopover || elCoinAlertsPopover.hidden) return;
     if (!elCoinAlertsDropdownRoot.contains(ev.target)) closeCoinAlertsPopover();
   });
+
+  if (elCoinAlertsPopover) {
+    elCoinAlertsPopover.addEventListener("click", (ev) => {
+      const dismissOne = ev.target.closest("[data-coin-alert-dismiss]");
+      if (dismissOne) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        removeCoinAlertById(dismissOne.getAttribute("data-coin-alert-dismiss"));
+        renderCoinAlertsList();
+        syncCoinBellBadge();
+        return;
+      }
+      const dismissAllBtn = ev.target.closest("#coinAlertsDismissAll");
+      if (dismissAllBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        clearCoinAlertFeed();
+        writeCoinAlertsAckDigest(coinSignalsDigest());
+        renderCoinAlertsList();
+        syncCoinBellBadge();
+      }
+    });
+  }
 
   if (elSearch) {
     elSearch.addEventListener("input", () => {

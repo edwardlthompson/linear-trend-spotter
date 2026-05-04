@@ -143,6 +143,25 @@ def test_full_includes_closes_1h_when_numeric_series() -> None:
     assert payload["coins"][0].get("closes_1h") == [1.0, 1.01, 1.02, 1.0]
 
 
+def test_full_closes_1h_keeps_tail_up_to_720_hourly_bars() -> None:
+    """Public JSON must not cap hourly closes at 200 (breaks 7d vs 30d sparklines on dashboard)."""
+    long = [float(i) for i in range(800)]
+    rows = [
+        {
+            "symbol": "x",
+            "name": "X",
+            "slug": "x",
+            "gains": {"7d": 0.0, "30d": 0.0},
+            "uniformity_score": 1.0,
+            "health_score": 50,
+            "closes_1h": long,
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    out = payload["coins"][0].get("closes_1h")
+    assert out == [float(i) for i in range(80, 800)]
+
+
 def test_scan_health_fields_optional() -> None:
     rows = [
         {

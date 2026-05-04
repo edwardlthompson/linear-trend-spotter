@@ -142,7 +142,11 @@ def build_public_qualified_snapshot(
             h1 = row.get("closes_1h")
             if isinstance(h1, list) and len(h1) >= 2:
                 try:
-                    hnums = [float(x) for x in h1[:200]]
+                    # Dashboard 7d/30d sparklines need up to 30×24 hourly closes; do not cap at 200
+                    # (200 h ≈ 8.3 d made 7d vs 30d sparklines visually identical).
+                    _hour_cap = 30 * 24
+                    tail = h1 if len(h1) <= _hour_cap else h1[-_hour_cap:]
+                    hnums = [float(x) for x in tail]
                     if all(math.isfinite(x) for x in hnums):
                         coin["closes_1h"] = hnums
                 except (TypeError, ValueError):

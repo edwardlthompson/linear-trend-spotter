@@ -21,9 +21,14 @@ def _safe_float(x: object) -> float:
 def _ticker_matches_target(target: str, exchange_id: str, exchange_name: str) -> bool:
     if target in exchange_id or target in exchange_name:
         return True
-    # CoinGecko ticker `market.identifier` for Coinbase is still "gdax".
-    if target == "coinbase" and exchange_id in ("gdax", "coinbase", "coinbase_advanced"):
-        return True
+    # CoinGecko: Coinbase Exchange is often `gdax`; newer responses may use `coinbase*` identifiers.
+    if target == "coinbase":
+        if exchange_id in ("gdax", "coinbase", "coinbase_advanced", "coinbase_international"):
+            return True
+        if exchange_id.startswith("coinbase"):
+            return True
+        if "coinbase" in exchange_name and "binance" not in exchange_name:
+            return True
     return False
 
 
