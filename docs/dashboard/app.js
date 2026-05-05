@@ -2464,6 +2464,7 @@
     "trailing_stop_pct",
     "trailing_stop_loss_pct",
     "trailing_take_profit_pct",
+    "skipped_combos",
   ]);
 
   const BACKTEST_COLUMN_PRIORITY = [
@@ -2480,7 +2481,6 @@
     "combos_evaluated",
     "stops_tested",
     "total_runs",
-    "skipped_combos",
   ];
 
   function backtestSheetHeaderLabel(key) {
@@ -2498,7 +2498,6 @@
       combos_evaluated: "Combos evaluated",
       stops_tested: "Stops tested",
       total_runs: "Total runs",
-      skipped_combos: "Skipped combos",
     };
     return labels[key] || key;
   }
