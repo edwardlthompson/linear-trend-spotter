@@ -2,7 +2,7 @@
  * Qualified dashboard service worker (Milestone Q8).
  * Bump CACHE_VERSION when static assets change so deploys pick up fresh shells.
  */
-const CACHE_VERSION = "qualified-dash-v69";
+const CACHE_VERSION = "qualified-dash-v70";
 const CACHE_NAME = `qualified-dash-assets-${CACHE_VERSION}`;
 const ASSETS = [
   "./index.html",
