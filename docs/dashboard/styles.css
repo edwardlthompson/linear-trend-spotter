@@ -104,6 +104,8 @@ body.dashboard-body {
 
 .dashboard-body > dialog {
   flex-shrink: 0;
+  /* Default flex cross-axis stretch would force dialogs to full dashboard width when closed in tree; avoid. */
+  align-self: flex-start;
 }
 
 .dashboard-shell > .site-footer {
@@ -1637,12 +1639,14 @@ html[data-theme="dark"] .sheet-table--strategy .sheet-bh-name {
   font-size: 0.9rem;
 }
 
-/* Near full-bleed modal: responsive side gutters (16–32px range per common design systems). */
+/* Backtest results: `inline-flex` shrink-wraps to the strategy table; plain `max-content` on <dialog> often stays full-viewport. */
 .bt-modal {
   box-sizing: border-box;
   --bt-modal-gutter: clamp(1rem, 3vw, 2rem);
-  width: calc(100vw - 2 * var(--bt-modal-gutter));
-  max-width: calc(100vw - 2 * var(--bt-modal-gutter));
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: min(calc(100vw - 2 * var(--bt-modal-gutter)), 100%);
   margin: auto;
   border: 1px solid var(--color-border);
   border-radius: 10px;
@@ -1659,7 +1663,11 @@ html[data-theme="dark"] .sheet-table--strategy .sheet-bh-name {
 .bt-modal-box {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   max-height: min(90vh, 56rem);
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .bt-modal-head {
@@ -1695,7 +1703,15 @@ html[data-theme="dark"] .sheet-table--strategy .sheet-bh-name {
 .bt-modal-body {
   padding: 0.75rem 1rem 1rem;
   overflow: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bt-modal .sheet-table {
+  width: max-content;
+  max-width: 100%;
 }
 
 /* Full-viewport hourly chart (distinct SVG vs table sparkline). */
