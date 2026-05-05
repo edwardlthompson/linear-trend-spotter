@@ -592,7 +592,9 @@ def run_scanner():
             except Exception as hb_err:
                 app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
 
-        if settings.public_qualified_snapshot_enabled and (final_results or regime_meta):
+        # Always publish when enabled, including coins=[] (and regime_meta=None when gate is off).
+        # Otherwise a zero-qualifier scan never writes or POSTs, and the relay 503s after /tmp loss.
+        if settings.public_qualified_snapshot_enabled:
             try:
                 if final_results and str(settings.public_qualified_snapshot_field_set).strip().lower() != "minimal":
                     attach_hourly_sparkline_closes_for_snapshot(
