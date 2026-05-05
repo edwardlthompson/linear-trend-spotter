@@ -227,6 +227,30 @@ def test_full_includes_listed_on_and_volume_acceleration() -> None:
     assert coin["volume_acceleration_window_days"] == 14
 
 
+def test_qualification_exits_optional_top_level() -> None:
+    rows = [
+        {
+            "symbol": "ada",
+            "name": "Cardano",
+            "slug": "cardano",
+            "gains": {"7d": 1.0, "30d": 2.0},
+            "uniformity_score": 50.0,
+            "health_score": 60,
+        },
+    ]
+    exited = [{"symbol": "xrp", "exit_reason": "7d gain below threshold (1.0% < 2%)"}]
+    payload = build_public_qualified_snapshot(
+        rows,
+        field_set="full",
+        scan_interval_seconds=3600,
+        qualification_exits=exited,
+    )
+    assert payload["coins"][0]["symbol"] == "ADA"
+    assert payload["qualification_exits"] == [
+        {"symbol": "XRP", "exit_reason": "7d gain below threshold (1.0% < 2%)"},
+    ]
+
+
 def test_minimal_field_set_omits_backtest_and_exchange_fields() -> None:
     rows = [
         {

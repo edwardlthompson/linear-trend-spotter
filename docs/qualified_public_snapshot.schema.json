@@ -31,6 +31,18 @@
       "minimum": 0,
       "description": "Q20: optional sum of metrics error counters for the scan"
     },
+    "qualification_exits": {
+      "type": "array",
+      "description": "Symbols that left the qualified active list on this scan (symbol + exit_reason for dashboard alerts)",
+      "items": {
+        "type": "object",
+        "required": ["symbol", "exit_reason"],
+        "properties": {
+          "symbol": { "type": "string" },
+          "exit_reason": { "type": "string" }
+        }
+      }
+    },
     "regime_gate": {
       "type": "object",
       "description": "Present when REGIME_FILTER_ENABLED: BTC 7d/30d gate outcome for dashboard UX",

@@ -75,6 +75,20 @@ def _optional_scan_health_fields(scan_health: dict[str, Any] | None) -> dict[str
     return out
 
 
+def _public_qualification_exits(exited: list[dict[str, Any]] | None) -> list[dict[str, str]]:
+    """Thin list for dashboard exit lines + Tier-A copy (no PII)."""
+    if not exited:
+        return []
+    out: list[dict[str, str]] = []
+    for c in exited:
+        sym = str(c.get("symbol", "")).upper().strip()
+        if not sym:
+            continue
+        reason = str(c.get("exit_reason") or "").strip() or "No longer met qualification criteria"
+        out.append({"symbol": sym, "exit_reason": reason})
+    return out
+
+
 def build_public_qualified_snapshot(
     final_results: list[dict[str, Any]],
     *,
@@ -83,6 +97,7 @@ def build_public_qualified_snapshot(
     scan_health: dict[str, Any] | None = None,
     regime_gate: dict[str, Any] | None = None,
     api_cost_panel: dict[str, Any] | None = None,
+    qualification_exits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Notification-parity subset for public JSON (Q1/Q2). No secrets.
 
@@ -168,6 +183,9 @@ def build_public_qualified_snapshot(
         body["regime_gate"] = regime_gate
     if api_cost_panel:
         body["api_cost_panel"] = api_cost_panel
+    qe = _public_qualification_exits(qualification_exits)
+    if qe:
+        body["qualification_exits"] = qe
     return body
 
 
@@ -181,6 +199,7 @@ def write_public_qualified_snapshot(
     scan_health: dict[str, Any] | None = None,
     regime_gate: dict[str, Any] | None = None,
     api_cost_panel: dict[str, Any] | None = None,
+    qualification_exits: list[dict[str, Any]] | None = None,
 ) -> None:
     payload = build_public_qualified_snapshot(
         final_results,
@@ -189,5 +208,6 @@ def write_public_qualified_snapshot(
         scan_health=scan_health,
         regime_gate=regime_gate,
         api_cost_panel=api_cost_panel,
+        qualification_exits=qualification_exits,
     )
     _atomic_write_json(data_dir / filename, payload)

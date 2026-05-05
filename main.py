@@ -643,6 +643,7 @@ def run_scanner():
                     },
                     regime_gate=regime_meta,
                     api_cost_panel=api_cost_panel,
+                    qualification_exits=exited,
                 )
                 app_logger.info("📤 Public qualified snapshot written")
                 maybe_push_qualified_snapshot_relay(

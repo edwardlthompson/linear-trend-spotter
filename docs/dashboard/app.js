@@ -2006,17 +2006,32 @@
     }
   }
 
+  /** @param {object} data snapshot payload */
+  function qualificationExitReasonMap(data) {
+    const m = new Map();
+    const arr = data && Array.isArray(data.qualification_exits) ? data.qualification_exits : [];
+    for (const row of arr) {
+      if (!row || typeof row !== "object") continue;
+      const sym = String(row.symbol || "").toUpperCase().trim();
+      const reason = String(row.exit_reason || "").trim();
+      if (sym && reason) m.set(sym, reason);
+    }
+    return m;
+  }
+
   /**
    * Append one in-app line per symbol when the qualified set changes (not the first baseline load).
    * @param {string[]} added
    * @param {string[]} dropped
    * @param {boolean} isFirstBaseline
+   * @param {Map<string, string>} exitReasonBySym from payload qualification_exits (this scan only)
    * @returns {{ enters: string[], exits: string[] }} symbols newly written to the feed (for OS alerts)
    */
-  function appendQualifiedListNotifications(added, dropped, isFirstBaseline) {
+  function appendQualifiedListNotifications(added, dropped, isFirstBaseline, exitReasonBySym) {
     if (isFirstBaseline) return { enters: [], exits: [] };
     if (!added.length && !dropped.length) return { enters: [], exits: [] };
     const snapIso = lastPayload && lastPayload.updated_at ? String(lastPayload.updated_at) : "";
+    const reasons = exitReasonBySym instanceof Map ? exitReasonBySym : new Map();
     const cur = readCoinAlertFeed();
     const have = new Set(cur.map((x) => x.id));
     const now = Date.now();
@@ -2038,7 +2053,9 @@
       if (!s) continue;
       const id = `exit|${snapIso}|${s}`;
       if (!have.has(id)) {
-        next.push({ id, t: now, line: `Left: ${s}` });
+        const why = reasons.get(s);
+        const line = why ? `Left: ${s} — ${why}` : `Left: ${s}`;
+        next.push({ id, t: now, line });
         have.add(id);
         exits.push(s);
       }
@@ -2046,7 +2063,7 @@
     if (enters.length || exits.length) {
       writeCoinAlertFeed(next);
     }
-    return { enters, exits: exits };
+    return { enters, exits };
   }
 
   function renderCoinAlertsList() {
@@ -2616,7 +2633,13 @@
     }
 
     updateCoinListDiffBanner(added, dropped);
-    const listNotifyDelta = appendQualifiedListNotifications(added, dropped, prevSyms.size === 0);
+    const exitReasonBySym = qualificationExitReasonMap(data);
+    const listNotifyDelta = appendQualifiedListNotifications(
+      added,
+      dropped,
+      prevSyms.size === 0,
+      exitReasonBySym,
+    );
     renderCoinAlertsList();
     if (notifyAlertsEnabled && (listNotifyDelta.enters.length || listNotifyDelta.exits.length)) {
       const stamp = String(updatedRaw || "snap").replace(/[^a-z0-9]+/gi, "").slice(0, 24);
@@ -2629,9 +2652,14 @@
           });
         }
         for (const sym of listNotifyDelta.exits) {
+          const why = exitReasonBySym.get(sym) || "";
+          let body = why
+            ? `${sym} left the qualified list. ${why}`
+            : `${sym} left the qualified list.`;
+          if (body.length > 240) body = `${body.slice(0, 236)}…`;
           await showDashboardNotification({
             title: `Left: ${sym}`,
-            body: `${sym} left the qualified list.`,
+            body,
             tag: `qfeed-out-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
           });
         }
