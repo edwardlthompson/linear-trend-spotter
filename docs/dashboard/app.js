@@ -39,6 +39,8 @@
   const LS_UI_VOL_ACCEL = "qualified_dash_ui_vol_accel";
   /** Minimum 24h volume (USD) on the row’s venue; empty = no floor. */
   const LS_UI_VOL_MIN_USD = "qualified_dash_ui_vol_min_usd";
+  /** Max % below window high (7d or 30d chart) to allow; empty = no filter. Values: 5, 10, 15. */
+  const LS_UI_CHART_DIST_MAX = "qualified_dash_ui_chart_dist_max";
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
   const LS_UI_EXCHANGES_JSON = "qualified_dash_ui_exchanges_json";
@@ -209,6 +211,12 @@
   const elUniformityMinSelect = document.getElementById("uniformityMinSelect");
   const elVolAccelFilterSelect = document.getElementById("volAccelFilterSelect");
   const elVolumeMinSelect = document.getElementById("volumeMinSelect");
+  const elChartDistMaxSelect = document.getElementById("chartDistMaxSelect");
+  const elChartFsDialog = document.getElementById("chartFsDialog");
+  const elChartFsTitle = document.getElementById("chartFsTitle");
+  const elChartFsStats = document.getElementById("chartFsStats");
+  const elChartFsSvg = document.getElementById("chartFsSvg");
+  const elChartFsClose = document.getElementById("chartFsClose");
   const elWatchlistBadge = document.getElementById("watchlistBadge");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
@@ -253,6 +261,8 @@
   let filterVolAccel = "";
   /** @type {number | null} minimum 24h volume USD on the row’s venue */
   let filterVolMinUsd = null;
+  /** @type {5 | 10 | 15 | null} hide rows where 7d or 30d % below window high is >= this */
+  let filterChartDistMax = null;
   /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
   /** @type {Set<string>} */
   let filterExchangeSet = new Set();
@@ -328,6 +338,8 @@
       else localStorage.setItem(LS_UI_VOL_ACCEL, filterVolAccel);
       if (filterVolMinUsd == null) localStorage.removeItem(LS_UI_VOL_MIN_USD);
       else localStorage.setItem(LS_UI_VOL_MIN_USD, String(filterVolMinUsd));
+      if (filterChartDistMax == null) localStorage.removeItem(LS_UI_CHART_DIST_MAX);
+      else localStorage.setItem(LS_UI_CHART_DIST_MAX, String(filterChartDistMax));
       if (filterExchangeSet.size === 0) {
         localStorage.removeItem(LS_UI_EXCHANGES_JSON);
         localStorage.removeItem(LS_UI_EXCHANGE);
@@ -374,6 +386,9 @@
         const vn = Number(vmin);
         if (Number.isFinite(vn) && VOL_MIN_FILTER_OPTIONS.some((o) => o.v === vn)) filterVolMinUsd = vn;
       }
+      filterChartDistMax = null;
+      const cdm = localStorage.getItem(LS_UI_CHART_DIST_MAX);
+      if (cdm === "5" || cdm === "10" || cdm === "15") filterChartDistMax = Number(cdm);
       filterExchangeSet = new Set();
       const exJson = localStorage.getItem(LS_UI_EXCHANGES_JSON);
       if (exJson) {
@@ -427,6 +442,12 @@
     if (!elVolAccelFilterSelect) return;
     const v = filterVolAccel === "pos" || filterVolAccel === "25" || filterVolAccel === "50" ? filterVolAccel : "";
     elVolAccelFilterSelect.value = v;
+  }
+
+  function syncChartDistFilterSelect() {
+    if (!elChartDistMaxSelect) return;
+    const v = filterChartDistMax == null ? "" : String(filterChartDistMax);
+    elChartDistMaxSelect.value = v === "5" || v === "10" || v === "15" ? v : "";
   }
 
   function updateWatchlistBadge() {
@@ -545,6 +566,7 @@
   syncUniformityMinSelect();
   syncVolAccelFilterSelect();
   syncVolumeMinSelect();
+  syncChartDistFilterSelect();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
   try {
@@ -1185,6 +1207,17 @@
         if (r.coin._watchlist_only) return true;
         if (!r.exchangeId) return false;
         return filterExchangeSet.has(r.exchangeId);
+      });
+    }
+    if (filterChartDistMax != null) {
+      const cap = filterChartDistMax;
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
+        const g7 = rowG7Hi(r);
+        const g30 = rowG30Hi(r);
+        const bad7 = g7 != null && Number.isFinite(g7) && g7 >= cap;
+        const bad30 = g30 != null && Number.isFinite(g30) && g30 >= cap;
+        return !(bad7 || bad30);
       });
     }
     return rows;
@@ -2066,6 +2099,32 @@
     return { enters, exits };
   }
 
+  /** @param {{ id: string, t: number, line: string }} it */
+  function coinAlertItemTimeMs(it) {
+    const n = Number(it.t);
+    if (Number.isFinite(n) && n > 0) return n;
+    const m = String(it.id || "").match(/^(?:enter|exit)\|([^|]+)\|/);
+    if (m && m[1]) {
+      const parsed = Date.parse(m[1]);
+      if (Number.isFinite(parsed) && isValidSnapshotTimeMs(parsed)) return parsed;
+    }
+    return 0;
+  }
+
+  function formatCoinAlertListTime(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return "";
+    const d = new Date(ms);
+    const sameYear = d.getFullYear() === new Date().getFullYear();
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      ...(sameYear ? {} : { year: "numeric" }),
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
   function renderCoinAlertsList() {
     const ul = document.getElementById("coinAlertsFeedList");
     const emptyEl = document.getElementById("coinAlertsFeedEmpty");
@@ -2083,6 +2142,16 @@
     for (const it of newestFirst) {
       const li = document.createElement("li");
       li.className = "coin-alerts-feed-item";
+      const tMs = coinAlertItemTimeMs(it);
+      const timeStr = formatCoinAlertListTime(tMs);
+      if (timeStr) {
+        const timeEl = document.createElement("time");
+        timeEl.className = "coin-alerts-feed-time";
+        timeEl.dateTime = new Date(tMs).toISOString();
+        timeEl.textContent = timeStr;
+        timeEl.title = new Date(tMs).toLocaleString();
+        li.appendChild(timeEl);
+      }
       const span = document.createElement("span");
       span.className = "coin-alerts-feed-text";
       span.textContent = it.line;
@@ -2210,7 +2279,124 @@
     return { svgHtml, pctFromHigh };
   }
 
-  function sparklineChartCellHtml(closes, w, h) {
+  function formatChartPrice(v) {
+    if (!Number.isFinite(v)) return "—";
+    const a = Math.abs(v);
+    if (a >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (a >= 1) return v.toFixed(4);
+    if (a >= 0.0001) return v.toFixed(6);
+    return v.toExponential(3);
+  }
+
+  function escapeSvgText(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  /**
+   * Fullscreen modal chart: area + grid + Y labels (distinct from the table sparkline).
+   * @param {number[]} closes
+   * @param {"7" | "30"} kind
+   */
+  function buildFullscreenChartSvg(closes, kind) {
+    const is30 = kind === "30";
+    if (!closes || closes.length < 2) return { svgHtml: "", statsHtml: "" };
+    const W = 960;
+    const H = 440;
+    const padL = 58;
+    const padR = 16;
+    const padT = 32;
+    const padB = 50;
+    const cw = W - padL - padR;
+    const ch = H - padT - padB;
+    const min = Math.min(...closes);
+    const max = Math.max(...closes);
+    const last = closes[closes.length - 1];
+    const pctFromHigh = closesPctFromHigh(closes);
+    const pctStr =
+      pctFromHigh != null && Number.isFinite(pctFromHigh) ? `${pctFromHigh.toFixed(2)}% below window high` : "—";
+    const normY = (v) => {
+      if (!(max > min)) return padT + ch / 2;
+      return padT + ch - ((v - min) / (max - min)) * ch;
+    };
+    const lastX = padL + cw;
+    const yBot = padT + ch;
+    let d = `M ${padL} ${yBot}`;
+    for (let i = 0; i < closes.length; i += 1) {
+      const x = padL + (i / (closes.length - 1)) * cw;
+      const y = normY(closes[i]);
+      d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+    d += ` L ${lastX.toFixed(2)} ${yBot} Z`;
+    const polyPts = closes
+      .map((v, i) => {
+        const x = padL + (i / (closes.length - 1)) * cw;
+        return `${x.toFixed(2)},${normY(v).toFixed(2)}`;
+      })
+      .join(" ");
+    const gradId = is30 ? "chartFsGrad30" : "chartFsGrad7";
+    const gHi = is30 ? "#8b5cf6" : "#0ea5e9";
+    let grid = "";
+    for (let g = 0; g <= 4; g += 1) {
+      const yy = padT + (ch * g) / 4;
+      grid += `<line class="chart-fs-grid" x1="${padL}" y1="${yy.toFixed(2)}" x2="${lastX.toFixed(2)}" y2="${yy.toFixed(2)}" />`;
+    }
+    const yLabels = [0, 0.25, 0.5, 0.75, 1]
+      .map((t) => {
+        const val = min + (max - min) * (1 - t);
+        const yy = padT + ch * t;
+        return `<text class="chart-fs-ylab" x="${padL - 8}" y="${(yy + 4).toFixed(2)}" text-anchor="end">${escapeSvgText(formatChartPrice(val))}</text>`;
+      })
+      .join("");
+    const svgClass = is30 ? "chart-fs-svg chart-fs-svg--30d" : "chart-fs-svg chart-fs-svg--7d";
+    const capMid = (padL + lastX) / 2;
+    const sub = is30
+      ? "30-day window · up to 720 hourly closes (closes_1h)"
+      : "7-day window · 168 hourly closes (closes_1h)";
+    const yLast = normY(last);
+    const labelTop = is30 ? "Older ← 30d hourly → Newer" : "Older ← 7d hourly → Newer";
+    const aria = is30 ? "Thirty-day hourly close price chart" : "Seven-day hourly close price chart";
+    const svgHtml = `<svg class="${svgClass}" viewBox="0 0 ${W} ${H}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeAttr(aria)}">
+  <defs>
+    <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${gHi}" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="${gHi}" stop-opacity="0.04" />
+    </linearGradient>
+  </defs>
+  ${grid}
+  <path class="chart-fs-area" d="${d}" fill="url(#${gradId})" />
+  <polyline class="chart-fs-line" fill="none" stroke-width="2.4" vector-effect="non-scaling-stroke" points="${polyPts}" />
+  <line class="chart-fs-ref-last" x1="${padL}" y1="${yLast.toFixed(2)}" x2="${lastX.toFixed(2)}" y2="${yLast.toFixed(2)}" />
+  ${yLabels}
+  <text class="chart-fs-caption chart-fs-caption--top" x="${capMid.toFixed(2)}" y="20" text-anchor="middle">${escapeSvgText(labelTop)}</text>
+  <text class="chart-fs-caption" x="${padL}" y="${H - 12}" text-anchor="start">${escapeSvgText(`${sub} · ${closes.length} bars`)}</text>
+</svg>`;
+    const statsHtml = `<dl class="chart-fs-dl">
+    <div><dt>Last close</dt><dd>${escapeHtml(formatChartPrice(last))}</dd></div>
+    <div><dt>Window high</dt><dd>${escapeHtml(formatChartPrice(max))}</dd></div>
+    <div><dt>Window low</dt><dd>${escapeHtml(formatChartPrice(min))}</dd></div>
+    <div><dt>Below high</dt><dd>${escapeHtml(pctStr)}</dd></div>
+  </dl>`;
+    return { svgHtml, statsHtml };
+  }
+
+  function openSparkFullscreen(coin, kind) {
+    const is30 = kind === "30";
+    const closes = is30 ? effectiveSparklineCloses(coin) : effectiveSparklineCloses7d(coin);
+    if (!closes || closes.length < 2) return;
+    const sym = String(coin.symbol || "").toUpperCase();
+    const name = String(coin.name || "").trim();
+    if (elChartFsTitle) elChartFsTitle.textContent = name ? `${sym} · ${name}` : sym;
+    const { svgHtml, statsHtml } = buildFullscreenChartSvg(closes, kind);
+    if (elChartFsSvg) elChartFsSvg.innerHTML = svgHtml;
+    if (elChartFsStats) elChartFsStats.innerHTML = statsHtml;
+    if (elChartFsDialog && typeof elChartFsDialog.showModal === "function") elChartFsDialog.showModal();
+  }
+
+  /** @param {"7" | "30"} chartKind */
+  function sparklineChartCellHtml(closes, w, h, chartKind) {
     const m = sparklineMarkup(closes, w, h);
     if (!m) return '<span class="cell-muted">—</span>';
     const pctStr =
@@ -2218,7 +2404,11 @@
     const t = escapeAttr(
       "% distance of last close below the window high (closes_1h). Lower = closer to the high.",
     );
-    return `<div class="spark-cell" title="${t}"><div class="spark-cell-chart">${m.svgHtml}</div><span class="spark-from-high" title="${t}">${pctStr}</span></div>`;
+    const fsHint =
+      chartKind === "30"
+        ? "Open full-screen 30-day hourly chart (area plot)"
+        : "Open full-screen 7-day hourly chart (area plot)";
+    return `<div class="spark-cell" title="${t}"><button type="button" class="spark-fs-btn" data-spark-kind="${chartKind}" aria-label="${escapeAttr(fsHint)}" title="${escapeAttr(fsHint)}"><span class="spark-cell-chart">${m.svgHtml}</span><span class="spark-from-high">${pctStr}</span></button></div>`;
   }
 
   function fmtSheetCell(v) {
@@ -2392,8 +2582,8 @@
           : nHour < SPARKLINE_1H_BARS_30D
             ? `30-day % from snapshot; sparkline plots ${rawSpark30.length} hourly closes on file (full month = ${SPARKLINE_1H_BARS_30D} bars); orange line = last close in window`
             : `30-day % from snapshot; sparkline plots last ${SPARKLINE_1H_BARS_30D} hourly closes (1h bars); orange line = last close in window`;
-        const spark7Cell = sparklineChartCellHtml(rawSpark7, 168, 44);
-        const spark30Cell = sparklineChartCellHtml(rawSpark30, 168, 44);
+        const spark7Cell = sparklineChartCellHtml(rawSpark7, 168, 44, "7");
+        const spark30Cell = sparklineChartCellHtml(rawSpark30, 168, 44, "30");
         const u = typeof c.uniformity_score === "number" ? c.uniformity_score.toFixed(1) : "—";
         const h =
           c.health_score != null && c.health_score !== ""
@@ -2702,6 +2892,18 @@
           elBacktestModal.showModal();
         }
         return;
+      }
+      const fsBtn = ev.target.closest(".spark-fs-btn");
+      if (fsBtn) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const kind = fsBtn.getAttribute("data-spark-kind") === "30" ? "30" : "7";
+        const row = fsBtn.closest("tr.coin-row");
+        const sym = row ? row.getAttribute("data-symbol") : "";
+        if (!sym || !lastPayload) return;
+        const pool = Array.isArray(lastPayload.coins) ? lastPayload.coins : [];
+        const coin = pool.find((x) => String(x.symbol || "").toUpperCase() === sym.toUpperCase());
+        if (coin) openSparkFullscreen(coin, kind);
       }
     });
     elTbody.addEventListener("focusin", (ev) => {
@@ -3072,6 +3274,28 @@
       persistUiPreferences();
       resetTierAPollBaselineIfAlerts();
       void syncPushNotifyExchangesIfSubscribed();
+    });
+  }
+
+  if (elChartDistMaxSelect) {
+    elChartDistMaxSelect.addEventListener("change", () => {
+      const raw = elChartDistMaxSelect.value;
+      if (raw === "5" || raw === "10" || raw === "15") filterChartDistMax = Number(raw);
+      else filterChartDistMax = null;
+      syncChartDistFilterSelect();
+      applyTableView();
+      persistUiPreferences();
+      resetTierAPollBaselineIfAlerts();
+      void syncPushNotifyExchangesIfSubscribed();
+    });
+  }
+
+  if (elChartFsClose && elChartFsDialog) {
+    elChartFsClose.addEventListener("click", () => elChartFsDialog.close());
+  }
+  if (elChartFsDialog) {
+    elChartFsDialog.addEventListener("click", (ev) => {
+      if (ev.target === elChartFsDialog) elChartFsDialog.close();
     });
   }
 

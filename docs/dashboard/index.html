@@ -132,6 +132,22 @@
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
       <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
       <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
+      <div class="dashboard-toolbar" role="region" aria-label="Extra table filters">
+        <label class="toolbar-field dashboard-toolbar-field">
+          <span class="toolbar-field-label">Chart % below high</span>
+          <select
+            id="chartDistMaxSelect"
+            class="toolbar-select"
+            title="Hide rows where the 7-day or 30-day chart is at least this far below its window high"
+            aria-label="Filter rows by distance below chart window high"
+          >
+            <option value="">All rows</option>
+            <option value="5">Exclude ≥5% below high</option>
+            <option value="10">Exclude ≥10% below high</option>
+            <option value="15">Exclude ≥15% below high</option>
+          </select>
+        </label>
+      </div>
       <div class="table-scroll">
         <table class="qualified-grid">
           <caption class="visually-hidden">
@@ -567,6 +583,19 @@
       </p>
     </footer>
     </div>
+
+    <dialog id="chartFsDialog" class="chart-fs-dialog">
+      <div class="chart-fs-box">
+        <header class="chart-fs-head">
+          <h2 id="chartFsTitle" class="chart-fs-title">Chart</h2>
+          <button type="button" class="chart-fs-close" id="chartFsClose" aria-label="Close chart" title="Close">
+            ×
+          </button>
+        </header>
+        <div id="chartFsStats" class="chart-fs-stats"></div>
+        <div id="chartFsSvg" class="chart-fs-svg-wrap"></div>
+      </div>
+    </dialog>
 
     <dialog id="backtestModal" class="bt-modal">
       <div class="bt-modal-box">

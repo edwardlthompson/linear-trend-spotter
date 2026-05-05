@@ -12,7 +12,7 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 
 - **Scanner worker:** scheduled runs (e.g. Render), SQLite caches, CoinGecko/CMC/Polygon as configured, anomaly hints in logs.
 - **Qualified snapshot:** JSON consumed by the static UI under `docs/dashboard/`; relay POST optional.
-- **Dashboard:** filters, pins, Tier-A poll alerts, Tier-B push integration—see **`docs/WEB_DASHBOARD.md`**.
+- **Dashboard:** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot—distinct styling for 7d vs 30d), optional **chart % below high** filter (drops rows where either chart is at or above the threshold below its window high), watchlist pins, CSV/JSON export, **List changes** bell feed with a **timestamp on each line**, Tier-A poll alerts, Tier-B push—see **`docs/WEB_DASHBOARD.md`**.
 - **Backtesting:** per-coin strategy sweep artifacts (`backtest_results.json`, checkpoints)—library boundary documented in **`docs/BACKTESTING_LIBRARY.md`**.
 
 ## Quick start
