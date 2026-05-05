@@ -1656,6 +1656,11 @@ html[data-theme="dark"] .sheet-table--strategy .sheet-bh-name {
   box-shadow: 0 12px 40px var(--shadow);
 }
 
+/* Closed <dialog> must stay hidden (UA `display: none`); `.bt-modal { display: … }` overrides it — force off when not [open]. */
+.bt-modal:not([open]) {
+  display: none !important;
+}
+
 .bt-modal::backdrop {
   background: rgba(15, 23, 42, 0.45);
 }
@@ -1729,6 +1734,10 @@ html[data-theme="dark"] .sheet-table--strategy .sheet-bh-name {
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: 0 12px 40px var(--shadow);
+}
+
+.chart-fs-dialog:not([open]) {
+  display: none !important;
 }
 
 .chart-fs-dialog::backdrop {
