@@ -582,6 +582,11 @@ html[data-theme="dark"] .app-tab.is-active {
   max-width: 5.75rem;
 }
 
+.th-split--g7chart .th-filter-select--chartdist,
+.th-split--g30chart .th-filter-select--chartdist {
+  max-width: 5.85rem;
+}
+
 tr.coin-row--watchlist-only td {
   background: color-mix(in srgb, var(--color-surface) 85%, var(--color-muted) 15%);
 }
@@ -1005,26 +1010,6 @@ th.sort-desc .sort-btn::after {
   font-size: 0.85rem;
   color: var(--color-muted);
   margin-bottom: 0.75rem;
-}
-
-.dashboard-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  margin: -0.35rem 0 0.65rem;
-  font-size: 0.85rem;
-}
-
-.dashboard-toolbar-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.toolbar-field-label {
-  color: var(--color-muted);
-  white-space: nowrap;
 }
 
 /* Do not set display:flex without [hidden] guard — it overrides the UA display:none from the hidden attribute. */

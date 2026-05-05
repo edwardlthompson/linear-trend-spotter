@@ -132,22 +132,6 @@
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
       <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
       <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
-      <div class="dashboard-toolbar" role="region" aria-label="Extra table filters">
-        <label class="toolbar-field dashboard-toolbar-field">
-          <span class="toolbar-field-label">Chart % below high</span>
-          <select
-            id="chartDistMaxSelect"
-            class="toolbar-select"
-            title="Hide rows where the 7-day or 30-day chart is at least this far below its window high"
-            aria-label="Filter rows by distance below chart window high"
-          >
-            <option value="">All rows</option>
-            <option value="5">Exclude ≥5% below high</option>
-            <option value="10">Exclude ≥10% below high</option>
-            <option value="15">Exclude ≥15% below high</option>
-          </select>
-        </label>
-      </div>
       <div class="table-scroll">
         <table class="qualified-grid">
           <caption class="visually-hidden">
@@ -191,16 +175,33 @@
                   7d %
                 </button>
               </th>
-              <th scope="col" id="col-g7chart" title="Seven-day 1h-close sparkline; sort by distance of last close from window high (%)">
-                <button
-                  type="button"
-                  class="sort-btn"
-                  data-sort="g7hi"
-                  aria-label="Sort by 7-day chart distance from high"
-                  title="Sort by % distance of last close below the window high (up to 168 hourly closes from closes_1h)"
-                >
-                  7d <span class="th-sub" aria-hidden="true">chart</span>
-                </button>
+              <th
+                scope="col"
+                id="col-g7chart"
+                title="Seven-day sparkline; sort by % below window high. Filter excludes rows by the 7d chart only."
+              >
+                <div class="th-split th-split--g7chart">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    data-sort="g7hi"
+                    aria-label="Sort by 7-day chart distance from high"
+                    title="Sort by % distance of last close below the window high (up to 168 hourly closes from closes_1h)"
+                  >
+                    7d <span class="th-sub" aria-hidden="true">chart</span>
+                  </button>
+                  <select
+                    id="chartDistMax7Select"
+                    class="th-filter-select th-filter-select--chartdist"
+                    title="Exclude rows where the 7-day chart % below window high is at or above this threshold"
+                    aria-label="7-day chart: exclude at or above % below window high"
+                  >
+                    <option value="">All</option>
+                    <option value="5">Ex ≥5%</option>
+                    <option value="10">Ex ≥10%</option>
+                    <option value="15">Ex ≥15%</option>
+                  </select>
+                </div>
               </th>
               <th scope="col" id="col-g30pct" title="Thirty-day percent gain from snapshot">
                 <button
@@ -213,16 +214,33 @@
                   30d %
                 </button>
               </th>
-              <th scope="col" id="col-g30chart" title="Thirty-day 1h-close sparkline; sort by distance from window high (%)">
-                <button
-                  type="button"
-                  class="sort-btn"
-                  data-sort="g30hi"
-                  aria-label="Sort by 30-day chart distance from high"
-                  title="Sort by % distance of last close below the window high (up to 720 hourly closes from closes_1h)"
-                >
-                  30d <span class="th-sub" aria-hidden="true">chart</span>
-                </button>
+              <th
+                scope="col"
+                id="col-g30chart"
+                title="Thirty-day sparkline; sort by % below window high. Filter excludes rows by the 30d chart only."
+              >
+                <div class="th-split th-split--g30chart">
+                  <button
+                    type="button"
+                    class="sort-btn"
+                    data-sort="g30hi"
+                    aria-label="Sort by 30-day chart distance from high"
+                    title="Sort by % distance of last close below the window high (up to 720 hourly closes from closes_1h)"
+                  >
+                    30d <span class="th-sub" aria-hidden="true">chart</span>
+                  </button>
+                  <select
+                    id="chartDistMax30Select"
+                    class="th-filter-select th-filter-select--chartdist"
+                    title="Exclude rows where the 30-day chart % below window high is at or above this threshold"
+                    aria-label="30-day chart: exclude at or above % below window high"
+                  >
+                    <option value="">All</option>
+                    <option value="5">Ex ≥5%</option>
+                    <option value="10">Ex ≥10%</option>
+                    <option value="15">Ex ≥15%</option>
+                  </select>
+                </div>
               </th>
               <th scope="col" id="col-uniformity" title="OHLCV uniformity score and optional minimum filter">
                 <div class="th-split th-split--uniformity">

@@ -12,7 +12,7 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 
 - **Scanner worker:** scheduled runs (e.g. Render), SQLite caches, CoinGecko/CMC/Polygon as configured, anomaly hints in logs.
 - **Qualified snapshot:** JSON consumed by the static UI under `docs/dashboard/`; relay POST optional.
-- **Dashboard:** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot—distinct styling for 7d vs 30d), optional **chart % below high** filter (drops rows where either chart is at or above the threshold below its window high), watchlist pins, CSV/JSON export, **List changes** bell feed with a **timestamp on each line**, Tier-A poll alerts, Tier-B push—see **`docs/WEB_DASHBOARD.md`**.
+- **Dashboard:** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot—distinct styling for 7d vs 30d), optional **per-chart % below high** filters on **7d chart** and **30d chart** headers (each excludes rows independently using that window’s distance-from-high), watchlist pins, CSV/JSON export, **List changes** bell feed with a **timestamp on each line**, Tier-A poll alerts, Tier-B push—see **`docs/WEB_DASHBOARD.md`**.
 - **Backtesting:** per-coin strategy sweep artifacts (`backtest_results.json`, checkpoints)—library boundary documented in **`docs/BACKTESTING_LIBRARY.md`**.
 
 ## Quick start
@@ -45,7 +45,7 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 - **`docs/DELIVERY_MODE.md`** — how snapshot data reaches the browser  
 - **`docs/MANUAL_DEPLOY_STEPS.md`** — Render / Pages checklist  
 - **`docs/render-setup.md`** — Render blueprint and worker notes  
-- **`docs/WEB_DASHBOARD.md`** — dashboard behavior and env vars  
+- **`docs/WEB_DASHBOARD.md`** — dashboard UI (grid, per-chart filters, alerts), relay/env vars  
 - **`docs/COIN_API_CREDIT_STRATEGY.md`** — splitting load across CoinGecko / CoinMarketCap / Polygon, **rate limits & backoff**, **bulk `/coins/markets`** alias fetching  
 - **`docs/API_MONTHLY_BUDGET_ESTIMATE.md`** — rough monthly HTTP estimates per provider  
 - **`docs/API_PROVIDER_DEEP_ANALYSIS.md`** — which API fits which pipeline stage  

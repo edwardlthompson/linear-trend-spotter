@@ -26,7 +26,7 @@ Open `http://localhost:8765/?api=https%3A%2F%2Fyour-snapshot-relay.example%2Fqua
 The **Qualified** and **Watchlist** tabs render a **single logical table** with these behaviors:
 
 - **One row per coin per venue** for the scanner’s target exchanges (Coinbase, Kraken, MEXC): rows are derived from `listed_on` and/or `exchange_volumes` in the snapshot. The **Name** column shows the venue in parentheses (e.g. `Jito (Coinbase)`). **Exchange** shows the venue label; **24h vol** shows that venue’s approximate USD volume from `exchange_volumes`.
-- **7d %** and **30d %** are numeric gain columns (sort keys `g7pct`, `g30pct`). **7d chart** and **30d chart** show `closes_1h` sparklines (high/low reference lines and orange last-close). Beside each chart, **% distance of last close below the window high** is shown; those columns sort independently (`g7hi`, `g30hi`).
+- **7d %** and **30d %** are numeric gain columns (sort keys `g7pct`, `g30pct`). **7d chart** and **30d chart** show `closes_1h` sparklines (high/low reference lines and orange last-close). Beside each chart, **% distance of last close below the window high** is shown; those columns sort independently (`g7hi`, `g30hi`). Each chart header also has a **distance-from-high** dropdown (**All**, exclude at **≥ 5%**, **≥ 10%**, **≥ 15%** below that chart’s window high); **7d** and **30d** filters apply **separately** (so rows can be filtered on one window without the other).
 - **Uniformity** and **Health** have header **minimum** filters (Health includes **≥ 60**, **≥ 65**, **≥ 70**). **Vol Δ%** has acceleration filters. **24h vol** has a **floor** filter: **≥ $100k**, **$500k**, **$1M**, **$10M** (applies to the row’s venue volume).
 - **Exchange** header holds the **multi-select** checklist: no boxes checked = all venues; one or more checked = only rows whose **Exchange** matches a checked venue (row-level filter, not “coin listed on any of these”).
 - **Backtest**: when the snapshot includes data, **Chart** / **Results** open links or a modal; there is no separate “expand row” sheet for OHLCV.
@@ -37,7 +37,7 @@ Future dashboard milestones are tracked in [`EXECUTION_PLAN.md`](EXECUTION_PLAN.
 
 ## Sort, filters, and persistence (refresh-safe)
 
-Column sorts, **Health** / **Uniformity** / **Vol Δ%** / **24h vol** / **Exchange** filters, **active tab**, **Tier-A poll interval**, and **theme** are stored in **`localStorage`** (`qualified_dash_ui_*` keys; exchanges as `qualified_dash_ui_exchanges_json`; volume floor as `qualified_dash_ui_vol_min_usd`) and restored on load.
+Column sorts, **Health** / **Uniformity** / **Vol Δ%** / **24h vol** / **Exchange** filters, **7d / 30d chart distance** thresholds (`qualified_dash_ui_chart_dist_max_7`, `qualified_dash_ui_chart_dist_max_30`), **active tab**, **Tier-A poll interval**, and **theme** are stored in **`localStorage`** (`qualified_dash_ui_*` keys; exchanges as `qualified_dash_ui_exchanges_json`; volume floor as `qualified_dash_ui_vol_min_usd`) and restored on load.
 
 **Tier-A update alerts** (Settings → enable notifications + **Alert poll**) compare the **fully filtered view** between polls, including exchange and volume floor filters. The stored baseline is a JSON array of **row keys** `SYMBOL|exchangeId` (`qualified_dash_poll_filtered_rows_v2`), so duplicate symbols on different venues are tracked separately. Notifications fire only when that filtered row set **changes** (add/remove), not when the JSON body updates but your filtered table is unchanged.
 

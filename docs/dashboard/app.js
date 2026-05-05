@@ -39,8 +39,11 @@
   const LS_UI_VOL_ACCEL = "qualified_dash_ui_vol_accel";
   /** Minimum 24h volume (USD) on the row’s venue; empty = no floor. */
   const LS_UI_VOL_MIN_USD = "qualified_dash_ui_vol_min_usd";
-  /** Max % below window high (7d or 30d chart) to allow; empty = no filter. Values: 5, 10, 15. */
-  const LS_UI_CHART_DIST_MAX = "qualified_dash_ui_chart_dist_max";
+  /** Max % below window high per chart; empty = no filter. Values: 5, 10, 15. */
+  const LS_UI_CHART_DIST_MAX_7 = "qualified_dash_ui_chart_dist_max_7";
+  const LS_UI_CHART_DIST_MAX_30 = "qualified_dash_ui_chart_dist_max_30";
+  /** @deprecated migrated on restore to LS_UI_CHART_DIST_MAX_7 / _30 */
+  const LS_UI_CHART_DIST_MAX_LEGACY = "qualified_dash_ui_chart_dist_max";
   /** @deprecated use LS_UI_EXCHANGES_JSON */
   const LS_UI_EXCHANGE = "qualified_dash_ui_exchange";
   const LS_UI_EXCHANGES_JSON = "qualified_dash_ui_exchanges_json";
@@ -211,7 +214,8 @@
   const elUniformityMinSelect = document.getElementById("uniformityMinSelect");
   const elVolAccelFilterSelect = document.getElementById("volAccelFilterSelect");
   const elVolumeMinSelect = document.getElementById("volumeMinSelect");
-  const elChartDistMaxSelect = document.getElementById("chartDistMaxSelect");
+  const elChartDistMax7Select = document.getElementById("chartDistMax7Select");
+  const elChartDistMax30Select = document.getElementById("chartDistMax30Select");
   const elChartFsDialog = document.getElementById("chartFsDialog");
   const elChartFsTitle = document.getElementById("chartFsTitle");
   const elChartFsStats = document.getElementById("chartFsStats");
@@ -261,8 +265,10 @@
   let filterVolAccel = "";
   /** @type {number | null} minimum 24h volume USD on the row’s venue */
   let filterVolMinUsd = null;
-  /** @type {5 | 10 | 15 | null} hide rows where 7d or 30d % below window high is >= this */
-  let filterChartDistMax = null;
+  /** @type {5 | 10 | 15 | null} hide rows where 7d % below window high is >= this */
+  let filterChartDistMax7 = null;
+  /** @type {5 | 10 | 15 | null} hide rows where 30d % below window high is >= this */
+  let filterChartDistMax30 = null;
   /** When non-empty, coin must be listed on **at least one** selected exchange (`listed_on`). Empty = all. */
   /** @type {Set<string>} */
   let filterExchangeSet = new Set();
@@ -338,8 +344,15 @@
       else localStorage.setItem(LS_UI_VOL_ACCEL, filterVolAccel);
       if (filterVolMinUsd == null) localStorage.removeItem(LS_UI_VOL_MIN_USD);
       else localStorage.setItem(LS_UI_VOL_MIN_USD, String(filterVolMinUsd));
-      if (filterChartDistMax == null) localStorage.removeItem(LS_UI_CHART_DIST_MAX);
-      else localStorage.setItem(LS_UI_CHART_DIST_MAX, String(filterChartDistMax));
+      if (filterChartDistMax7 == null) localStorage.removeItem(LS_UI_CHART_DIST_MAX_7);
+      else localStorage.setItem(LS_UI_CHART_DIST_MAX_7, String(filterChartDistMax7));
+      if (filterChartDistMax30 == null) localStorage.removeItem(LS_UI_CHART_DIST_MAX_30);
+      else localStorage.setItem(LS_UI_CHART_DIST_MAX_30, String(filterChartDistMax30));
+      try {
+        localStorage.removeItem(LS_UI_CHART_DIST_MAX_LEGACY);
+      } catch {
+        /* ignore */
+      }
       if (filterExchangeSet.size === 0) {
         localStorage.removeItem(LS_UI_EXCHANGES_JSON);
         localStorage.removeItem(LS_UI_EXCHANGE);
@@ -386,9 +399,20 @@
         const vn = Number(vmin);
         if (Number.isFinite(vn) && VOL_MIN_FILTER_OPTIONS.some((o) => o.v === vn)) filterVolMinUsd = vn;
       }
-      filterChartDistMax = null;
-      const cdm = localStorage.getItem(LS_UI_CHART_DIST_MAX);
-      if (cdm === "5" || cdm === "10" || cdm === "15") filterChartDistMax = Number(cdm);
+      filterChartDistMax7 = null;
+      filterChartDistMax30 = null;
+      const c7 = localStorage.getItem(LS_UI_CHART_DIST_MAX_7);
+      const c30 = localStorage.getItem(LS_UI_CHART_DIST_MAX_30);
+      if (c7 === "5" || c7 === "10" || c7 === "15") filterChartDistMax7 = Number(c7);
+      if (c30 === "5" || c30 === "10" || c30 === "15") filterChartDistMax30 = Number(c30);
+      if (filterChartDistMax7 == null && filterChartDistMax30 == null) {
+        const legacy = localStorage.getItem(LS_UI_CHART_DIST_MAX_LEGACY);
+        if (legacy === "5" || legacy === "10" || legacy === "15") {
+          const n = Number(legacy);
+          filterChartDistMax7 = n;
+          filterChartDistMax30 = n;
+        }
+      }
       filterExchangeSet = new Set();
       const exJson = localStorage.getItem(LS_UI_EXCHANGES_JSON);
       if (exJson) {
@@ -444,10 +468,14 @@
     elVolAccelFilterSelect.value = v;
   }
 
-  function syncChartDistFilterSelect() {
-    if (!elChartDistMaxSelect) return;
-    const v = filterChartDistMax == null ? "" : String(filterChartDistMax);
-    elChartDistMaxSelect.value = v === "5" || v === "10" || v === "15" ? v : "";
+  function syncChartDistFilterSelects() {
+    const applyOne = (el, val) => {
+      if (!el) return;
+      const v = val == null ? "" : String(val);
+      el.value = v === "5" || v === "10" || v === "15" ? v : "";
+    };
+    applyOne(elChartDistMax7Select, filterChartDistMax7);
+    applyOne(elChartDistMax30Select, filterChartDistMax30);
   }
 
   function updateWatchlistBadge() {
@@ -566,7 +594,7 @@
   syncUniformityMinSelect();
   syncVolAccelFilterSelect();
   syncVolumeMinSelect();
-  syncChartDistFilterSelect();
+  syncChartDistFilterSelects();
   syncExchangeCheckboxesFromSet();
   updateExchangeFilterSummary();
   try {
@@ -1209,15 +1237,22 @@
         return filterExchangeSet.has(r.exchangeId);
       });
     }
-    if (filterChartDistMax != null) {
-      const cap = filterChartDistMax;
+    if (filterChartDistMax7 != null) {
+      const cap = filterChartDistMax7;
       rows = rows.filter((r) => {
         if (r.coin._watchlist_only) return true;
         const g7 = rowG7Hi(r);
+        const bad = g7 != null && Number.isFinite(g7) && g7 >= cap;
+        return !bad;
+      });
+    }
+    if (filterChartDistMax30 != null) {
+      const cap = filterChartDistMax30;
+      rows = rows.filter((r) => {
+        if (r.coin._watchlist_only) return true;
         const g30 = rowG30Hi(r);
-        const bad7 = g7 != null && Number.isFinite(g7) && g7 >= cap;
-        const bad30 = g30 != null && Number.isFinite(g30) && g30 >= cap;
-        return !(bad7 || bad30);
+        const bad = g30 != null && Number.isFinite(g30) && g30 >= cap;
+        return !bad;
       });
     }
     return rows;
@@ -3277,16 +3312,29 @@
     });
   }
 
-  if (elChartDistMaxSelect) {
-    elChartDistMaxSelect.addEventListener("change", () => {
-      const raw = elChartDistMaxSelect.value;
-      if (raw === "5" || raw === "10" || raw === "15") filterChartDistMax = Number(raw);
-      else filterChartDistMax = null;
-      syncChartDistFilterSelect();
-      applyTableView();
-      persistUiPreferences();
-      resetTierAPollBaselineIfAlerts();
-      void syncPushNotifyExchangesIfSubscribed();
+  function onChartDistFilterChange() {
+    applyTableView();
+    persistUiPreferences();
+    resetTierAPollBaselineIfAlerts();
+    void syncPushNotifyExchangesIfSubscribed();
+  }
+
+  if (elChartDistMax7Select) {
+    elChartDistMax7Select.addEventListener("change", () => {
+      const raw = elChartDistMax7Select.value;
+      if (raw === "5" || raw === "10" || raw === "15") filterChartDistMax7 = Number(raw);
+      else filterChartDistMax7 = null;
+      syncChartDistFilterSelects();
+      onChartDistFilterChange();
+    });
+  }
+  if (elChartDistMax30Select) {
+    elChartDistMax30Select.addEventListener("change", () => {
+      const raw = elChartDistMax30Select.value;
+      if (raw === "5" || raw === "10" || raw === "15") filterChartDistMax30 = Number(raw);
+      else filterChartDistMax30 = null;
+      syncChartDistFilterSelects();
+      onChartDistFilterChange();
     });
   }
 
