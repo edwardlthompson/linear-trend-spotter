@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -133,10 +134,13 @@ def _trim(text: str, limit: int) -> str:
 
 def _entry_notification_payload(coin: dict[str, Any], url: str) -> dict[str, str]:
     sym = str(coin.get("symbol", "")).upper().strip() or "UNKNOWN"
+    # Unique tag per push so clients do not collapse multiple events (see docs/dashboard/sw.js).
+    tag = f"q-ent-{sym.lower()}-{secrets.token_hex(4)}"
     return {
         "title": _trim(f"Qualified entry: {sym}", 120),
         "body": _trim(f"{sym} entered the qualified list.", 240),
         "url": _trim(url, 2000),
+        "tag": _trim(tag, 64),
     }
 
 
@@ -147,10 +151,12 @@ def _exit_notification_payload(coin: dict[str, Any], url: str) -> dict[str, str]
         body = f"{sym} exited the qualified list. Reason: {reason}"
     else:
         body = f"{sym} exited the qualified list."
+    tag = f"q-ext-{sym.lower()}-{secrets.token_hex(4)}"
     return {
         "title": _trim(f"Qualified exit: {sym}", 120),
         "body": _trim(body, 240),
         "url": _trim(url, 2000),
+        "tag": _trim(tag, 64),
     }
 
 
@@ -218,15 +224,16 @@ def notify_scan():
 
     entered_coins: list[dict[str, Any]] = []
     exited_coins: list[dict[str, Any]] = []
-    if "entered_coins" in body or "exited_coins" in body:
-        ec = body.get("entered_coins")
-        if isinstance(ec, list):
-            entered_coins = [x for x in ec if isinstance(x, dict)]
-        xc = body.get("exited_coins")
-        if isinstance(xc, list):
-            exited_coins = [x for x in xc if isinstance(x, dict)]
+    ec = body.get("entered_coins")
+    if isinstance(ec, list):
+        entered_coins = [x for x in ec if isinstance(x, dict)]
+    xc = body.get("exited_coins")
+    if isinstance(xc, list):
+        exited_coins = [x for x in xc if isinstance(x, dict)]
 
-    structured = bool(entered_coins or exited_coins)
+    # Scanner always POSTs entered_coins/exited_coins. Never downgrade to one batched notification
+    # when those keys exist but lists are empty (would hide per-coin UX).
+    per_coin_api = "entered_coins" in body or "exited_coins" in body
 
     vapid_private = os.getenv("VAPID_PRIVATE_KEY", "").strip()
     vapid_email = os.getenv("VAPID_CONTACT_EMAIL", "").strip()
@@ -249,7 +256,7 @@ def notify_scan():
             continue
         notify_ids = normalize_notify_exchange_ids(env.get("notify_exchanges"))
         payloads: list[dict[str, str]]
-        if structured:
+        if per_coin_api:
             ent_f, ext_f = filter_events_for_subscriber(notify_ids, entered_coins, exited_coins)
             if not ent_f and not ext_f:
                 kept.append(env)
@@ -260,7 +267,14 @@ def notify_scan():
             for coin in ext_f:
                 payloads.append(_exit_notification_payload(coin, url))
         else:
-            payloads = [{"title": title_default, "body": msg_default, "url": url}]
+            payloads = [
+                {
+                    "title": title_default,
+                    "body": msg_default,
+                    "url": url,
+                    "tag": _trim(f"q-legacy-{secrets.token_hex(4)}", 64),
+                }
+            ]
 
         endpoint_removed = False
         for event_payload in payloads:

@@ -2,7 +2,7 @@
  * Qualified dashboard service worker (Milestone Q8).
  * Bump CACHE_VERSION when static assets change so deploys pick up fresh shells.
  */
-const CACHE_VERSION = "qualified-dash-v62";
+const CACHE_VERSION = "qualified-dash-v63";
 const CACHE_NAME = `qualified-dash-assets-${CACHE_VERSION}`;
 const ASSETS = [
   "./index.html",
@@ -44,12 +44,15 @@ self.addEventListener("push", (event) => {
   let title = "Linear Trend Spotter";
   let body = "Open the qualified dashboard for the latest snapshot.";
   let openUrl = self.location.origin + self.location.pathname;
+  /* Each push must use a distinct tag, or the OS replaces prior notifications. */
+  let notifTag = `qualified-push-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   if (event.data) {
     try {
       const j = event.data.json();
       if (j && typeof j.title === "string" && j.title.trim()) title = j.title.trim().slice(0, 120);
       if (j && typeof j.body === "string" && j.body.trim()) body = j.body.trim().slice(0, 240);
       if (j && typeof j.url === "string" && j.url.trim()) openUrl = j.url.trim().slice(0, 2000);
+      if (j && typeof j.tag === "string" && j.tag.trim()) notifTag = j.tag.trim().slice(0, 64);
     } catch {
       try {
         const t = event.data.text();
@@ -64,7 +67,7 @@ self.addEventListener("push", (event) => {
       body,
       icon: "./icons/icon-192.png",
       badge: "./icons/icon-192.png",
-      tag: "qualified-scan-push",
+      tag: notifTag,
       data: { url: openUrl },
     }),
   );
