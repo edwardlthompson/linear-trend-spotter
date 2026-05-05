@@ -67,3 +67,27 @@ def test_ingest_then_get(relay_client):
     assert j1.get("last_successful_ingest_bytes") == len(raw)
     assert j1.get("last_ingest_http_status") == 200
     assert j1.get("last_error") is None
+
+
+def test_public_serves_backup_if_primary_missing(relay_client, tmp_path, monkeypatch):
+    payload = {"schema_version": 1, "coins": [{"symbol": "BTC"}]}
+    raw = json.dumps(payload).encode("utf-8")
+    store = tmp_path / "qualified_public_snapshot.json"
+    backup = tmp_path / "qualified_public_snapshot.json.bak"
+    monkeypatch.setenv("SNAPSHOT_RELAY_STORE", str(store))
+    monkeypatch.setenv("SNAPSHOT_RELAY_BACKUP_STORE", str(backup))
+
+    ok = relay_client.post(
+        "/internal/ingest-snapshot",
+        data=raw,
+        headers={"Authorization": "Bearer test-secret-xyz"},
+    )
+    assert ok.status_code == 200
+    assert store.exists()
+    assert backup.exists()
+
+    # Simulate primary store loss (e.g., transient disk issue); backup should still serve.
+    store.unlink()
+    get_r = relay_client.get("/qualified_public_snapshot.json")
+    assert get_r.status_code == 200
+    assert json.loads(get_r.get_data(as_text=True)) == payload

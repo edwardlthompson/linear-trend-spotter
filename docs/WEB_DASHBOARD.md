@@ -58,6 +58,12 @@ The origin that hosts `index.html` (e.g. `https://YOURNAME.github.io`) must be a
 
 **Recommended:** deploy **`snapshot_server/`** from root [`render.yaml`](render.yaml) (`linear-trend-spotter-snapshot`). It sends **`Access-Control-Allow-Origin`** (default `*`) on **`GET /qualified_public_snapshot.json`**, **`GET /relay-health`**, and **`POST /internal/ingest-snapshot`** for the worker. Set **`QUALIFIED_SNAPSHOT_RELAY_URL`** and **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on the worker (same secret as on the relay). Background workers do **not** serve HTTP.
 
+For 503-hardening in production:
+- Set **`SNAPSHOT_RELAY_STORE`** to a persistent path (for example a mounted disk path on your host), not the default `/tmp`.
+- Optional: set **`SNAPSHOT_RELAY_BACKUP_STORE`** so relay writes a second on-disk copy and can serve it if the primary file disappears.
+- Optional: set **`SNAPSHOT_RELAY_FALLBACK_URL`** to a known-good snapshot URL; when no local file exists the relay can seed itself from this URL instead of returning 503.
+- Worker relay push now retries more aggressively on transient errors (HTTP 5xx/429, network errors), reducing missed ingests after brief outages.
+
 **Operator health:** **`GET /relay-health`** returns JSON (`schema_version`, `has_snapshot_file`, `last_successful_ingest_at`, `last_ingest_http_status`, ingest byte size, `last_error`). The dashboard fetches the same origin path as your snapshot URL with the filename replaced by **`relay-health`** (or set **`window.__RELAY_HEALTH_URL__`** in `config.js`), after each successful snapshot load, and shows a short strip so you can spot a stale relay or failed worker POST without opening DevTools.
 
 Alternatively, configure CORS on another HTTPS host (static headers, reverse proxy, object storage). Set **`Cache-Control: public, max-age=`** to slightly under your `SCAN_INTERVAL_SECONDS` so repeat visitors do not refetch every second.

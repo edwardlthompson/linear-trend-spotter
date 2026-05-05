@@ -13,10 +13,13 @@ import json
 import logging
 import os
 import secrets
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from flask import Flask, Response, jsonify, request
 
@@ -32,6 +35,8 @@ _relay_state: dict[str, Any] = {
     "last_attempt_status": None,
     "last_error": None,
 }
+_last_snapshot_bytes: bytes | None = None
+_fallback_last_try_ts: float = 0.0
 
 
 def _utc_now_iso_z() -> str:
@@ -92,6 +97,18 @@ def _store_path() -> Path:
     return Path(os.getenv("SNAPSHOT_RELAY_STORE", _DEFAULT_STORE))
 
 
+def _backup_path() -> Path:
+    raw = os.getenv("SNAPSHOT_RELAY_BACKUP_STORE", "").strip()
+    if raw:
+        return Path(raw)
+    path = _store_path()
+    return path.with_suffix(path.suffix + ".bak")
+
+
+def _fallback_seed_url() -> str:
+    return os.getenv("SNAPSHOT_RELAY_FALLBACK_URL", "").strip()
+
+
 def _public_filename() -> str:
     name = os.getenv("SNAPSHOT_PUBLIC_FILENAME", _DEFAULT_PUBLIC).strip()
     if not name or "/" in name or "\\" in name or ".." in name:
@@ -109,6 +126,66 @@ def _auth_ingest() -> bool:
         return False
     token = auth[7:].strip()
     return secrets.compare_digest(token, expected)
+
+
+def _read_snapshot_bytes(path: Path) -> bytes | None:
+    try:
+        if not path.exists():
+            return None
+        data = path.read_bytes()
+        if not data:
+            return None
+        # Ensure we only cache valid JSON payloads.
+        json.loads(data.decode("utf-8"))
+        return data
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+
+
+def _write_snapshot_bytes(path: Path, raw: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_bytes(raw)
+    os.replace(tmp, path)
+
+
+def _seed_memory_from_disk() -> None:
+    global _last_snapshot_bytes
+    primary = _read_snapshot_bytes(_store_path())
+    backup = _read_snapshot_bytes(_backup_path())
+    data = primary if primary is not None else backup
+    if data is not None:
+        with _lock:
+            _last_snapshot_bytes = data
+
+
+def _try_fetch_fallback_snapshot() -> bytes | None:
+    global _fallback_last_try_ts
+    url = _fallback_seed_url()
+    if not url:
+        return None
+    now = time.time()
+    # Avoid hammering the fallback on repeated traffic during outages.
+    if (now - _fallback_last_try_ts) < 30:
+        return None
+    _fallback_last_try_ts = now
+    req = Request(
+        url,
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "linear-trend-spotter-snapshot-relay/1.0",
+        },
+    )
+    try:
+        with urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+        if not raw:
+            return None
+        json.loads(raw.decode("utf-8"))
+        return raw
+    except (HTTPError, URLError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
 
 
 @app.route("/health", methods=["GET"])
@@ -158,11 +235,12 @@ def ingest() -> tuple[Response, int] | Response:
         return jsonify({"error": f"invalid json: {e}"}), 400
 
     path = _store_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    bkp = _backup_path()
+    global _last_snapshot_bytes
     with _lock:
-        tmp.write_bytes(raw)
-        os.replace(tmp, path)
+        _write_snapshot_bytes(path, raw)
+        _write_snapshot_bytes(bkp, raw)
+        _last_snapshot_bytes = raw
     byte_len = len(raw)
     _ingest_record_success(byte_len)
     _logger.info("snapshot ingested (%s bytes)", byte_len)
@@ -171,10 +249,27 @@ def ingest() -> tuple[Response, int] | Response:
 
 def _serve_public() -> Response | tuple[Response, int]:
     path = _store_path()
-    if not path.exists():
+    bkp = _backup_path()
+    data = _read_snapshot_bytes(path)
+    if data is None:
+        data = _read_snapshot_bytes(bkp)
+    if data is None:
+        with _lock:
+            data = _last_snapshot_bytes
+    if data is None:
+        # Last-resort seed (optional env): prevents fresh restarts from serving 503.
+        fallback = _try_fetch_fallback_snapshot()
+        if fallback is not None:
+            with _lock:
+                _last_snapshot_bytes = fallback
+            try:
+                _write_snapshot_bytes(path, fallback)
+                _write_snapshot_bytes(bkp, fallback)
+            except OSError:
+                pass
+            data = fallback
+    if data is None:
         return jsonify({"error": "no snapshot yet"}), 503
-    with _lock:
-        data = path.read_bytes()
     resp = Response(data, mimetype="application/json; charset=utf-8")
     resp.headers["Cache-Control"] = os.getenv(
         "SNAPSHOT_CACHE_CONTROL",
@@ -200,3 +295,4 @@ def _register_public() -> None:
 
 
 _register_public()
+_seed_memory_from_disk()

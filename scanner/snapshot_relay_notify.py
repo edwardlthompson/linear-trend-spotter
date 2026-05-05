@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 from utils.logger import app_logger
 
-_RELAY_MAX_ATTEMPTS = 3
+_RELAY_MAX_ATTEMPTS = 6
 
 
 def _should_retry_http(status: int) -> bool:
