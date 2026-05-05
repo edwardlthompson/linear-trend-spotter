@@ -248,6 +248,7 @@ def ingest() -> tuple[Response, int] | Response:
 
 
 def _serve_public() -> Response | tuple[Response, int]:
+    global _last_snapshot_bytes
     path = _store_path()
     bkp = _backup_path()
     data = _read_snapshot_bytes(path)
