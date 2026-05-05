@@ -2006,49 +2006,47 @@
     }
   }
 
-  function formatCoinAlertSymbolChunk(syms) {
-    if (!syms.length) return "";
-    const slice = syms.slice(0, 14);
-    const s = slice.join(", ");
-    return syms.length > 14 ? `${s}…` : s;
-  }
-
   /**
-   * Append one line per scan when symbols enter or leave the qualified set (not the first baseline load).
+   * Append one in-app line per symbol when the qualified set changes (not the first baseline load).
    * @param {string[]} added
    * @param {string[]} dropped
    * @param {boolean} isFirstBaseline
+   * @returns {{ enters: string[], exits: string[] }} symbols newly written to the feed (for OS alerts)
    */
   function appendQualifiedListNotifications(added, dropped, isFirstBaseline) {
-    if (isFirstBaseline) return;
-    if (!added.length && !dropped.length) return;
+    if (isFirstBaseline) return { enters: [], exits: [] };
+    if (!added.length && !dropped.length) return { enters: [], exits: [] };
     const snapIso = lastPayload && lastPayload.updated_at ? String(lastPayload.updated_at) : "";
     const cur = readCoinAlertFeed();
     const have = new Set(cur.map((x) => x.id));
     const now = Date.now();
     const next = [...cur];
-    if (added.length) {
-      const id = `enter|${snapIso}|${[...added].sort().join(",")}`;
+    const enters = [];
+    const exits = [];
+    for (const sym of added) {
+      const s = String(sym || "").toUpperCase();
+      if (!s) continue;
+      const id = `enter|${snapIso}|${s}`;
       if (!have.has(id)) {
-        next.push({
-          id,
-          t: now,
-          line: `Entered: ${formatCoinAlertSymbolChunk(added)}`,
-        });
+        next.push({ id, t: now, line: `Entered: ${s}` });
         have.add(id);
+        enters.push(s);
       }
     }
-    if (dropped.length) {
-      const id = `exit|${snapIso}|${[...dropped].sort().join(",")}`;
+    for (const sym of dropped) {
+      const s = String(sym || "").toUpperCase();
+      if (!s) continue;
+      const id = `exit|${snapIso}|${s}`;
       if (!have.has(id)) {
-        next.push({
-          id,
-          t: now,
-          line: `Left: ${formatCoinAlertSymbolChunk(dropped)}`,
-        });
+        next.push({ id, t: now, line: `Left: ${s}` });
+        have.add(id);
+        exits.push(s);
       }
     }
-    writeCoinAlertFeed(next);
+    if (enters.length || exits.length) {
+      writeCoinAlertFeed(next);
+    }
+    return { enters, exits: exits };
   }
 
   function renderCoinAlertsList() {
@@ -2618,8 +2616,27 @@
     }
 
     updateCoinListDiffBanner(added, dropped);
-    appendQualifiedListNotifications(added, dropped, prevSyms.size === 0);
+    const listNotifyDelta = appendQualifiedListNotifications(added, dropped, prevSyms.size === 0);
     renderCoinAlertsList();
+    if (notifyAlertsEnabled && (listNotifyDelta.enters.length || listNotifyDelta.exits.length)) {
+      const stamp = String(updatedRaw || "snap").replace(/[^a-z0-9]+/gi, "").slice(0, 24);
+      void (async () => {
+        for (const sym of listNotifyDelta.enters) {
+          await showDashboardNotification({
+            title: `Entered: ${sym}`,
+            body: `${sym} entered the qualified list.`,
+            tag: `qfeed-ent-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
+          });
+        }
+        for (const sym of listNotifyDelta.exits) {
+          await showDashboardNotification({
+            title: `Left: ${sym}`,
+            body: `${sym} left the qualified list.`,
+            tag: `qfeed-out-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
+          });
+        }
+      })();
+    }
     updateStaleBanner(data);
     updateHealthStrip(data);
     updateRegimeStrip(data.regime_gate);
@@ -2779,19 +2796,24 @@
       const ex = parts[1] ? EXCHANGE_LABELS[parts[1]] || parts[1] : "";
       return ex ? `${sym} (${ex})` : sym;
     };
-    let body = `Filtered view: ${keys.length} row(s)${exchHint}`;
-    if (added.length) {
-      body += ` · New: ${added.slice(0, 10).map(rowKeyLabel).join(", ")}${added.length > 10 ? "…" : ""}`;
+    const stamp = Date.now();
+    for (let i = 0; i < added.length; i += 1) {
+      const k = added[i];
+      await showDashboardNotification({
+        title: "Qualified list updated",
+        body: `New in filtered view: ${rowKeyLabel(k)} (${keys.length} row(s)${exchHint})`,
+        tag: `qf-new-${String(k).replace(/[^a-z0-9]+/gi, "").slice(0, 48)}-${stamp}-${i}`.slice(0, 64),
+      });
     }
-    if (removed.length) {
-      body += ` · Out: ${removed.slice(0, 8).map(rowKeyLabel).join(", ")}${removed.length > 8 ? "…" : ""}`;
+    for (let i = 0; i < removed.length; i += 1) {
+      const k = removed[i];
+      await showDashboardNotification({
+        title: "Qualified list updated",
+        body: `Removed from filtered view: ${rowKeyLabel(k)} (${keys.length} row(s)${exchHint})`,
+        tag: `qf-out-${String(k).replace(/[^a-z0-9]+/gi, "").slice(0, 48)}-${stamp}-${i}`.slice(0, 64),
+      });
     }
-    await showDashboardNotification({
-      title: "Qualified list updated",
-      body,
-      tag: "qualified-snapshot-filtered",
-    });
-    return true;
+    return added.length > 0 || removed.length > 0;
   }
 
   /** Tier-A: notify when a watched symbol enters or leaves the full qualified set (independent of table filters). */
@@ -2808,23 +2830,22 @@
         entered.map((k) => parseRowPinKey(String(k || "")).sym).filter((s) => s && filteredSet.has(s)),
       ),
     ];
-    const parts = [];
-    if (enteredFiltered.length) {
-      parts.push(
-        `In: ${enteredFiltered.slice(0, 12).join(", ")}${enteredFiltered.length > 12 ? "…" : ""}`,
-      );
+    const stamp = Date.now();
+    let n = 0;
+    for (const sym of enteredFiltered) {
+      await showDashboardNotification({
+        title: "Watch: entered qualified set",
+        body: `${sym} entered the qualified list (matches your watch + filters).`,
+        tag: `watch-in-${sym}-${stamp}-${n++}`.slice(0, 64),
+      });
     }
-    if (left.length) {
-      const leftLbl = left.slice(0, 12).map((k) => rowPinKeyDisplayLabel(k));
-      parts.push(`Out: ${leftLbl.join(", ")}${left.length > 12 ? "…" : ""}`);
+    for (const k of left) {
+      await showDashboardNotification({
+        title: "Watch: left qualified set",
+        body: `${rowPinKeyDisplayLabel(k)} left the qualified list.`,
+        tag: `watch-out-${String(k).replace(/[^a-z0-9]+/gi, "").slice(0, 32)}-${stamp}-${n++}`.slice(0, 64),
+      });
     }
-    if (!parts.length) return;
-    const body = `Watch · ${parts.join(" · ")}`;
-    await showDashboardNotification({
-      title: "Watched symbols (qualified set)",
-      body,
-      tag: "qualified-pinned-watch",
-    });
   }
 
   async function loadSnapshot(options) {
