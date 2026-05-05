@@ -2457,6 +2457,75 @@
     return s.length > 64 ? `${s.slice(0, 63)}…` : s;
   }
 
+  /** Omitted from Backtest Results strategy table (shown elsewhere or redundant). */
+  const BACKTEST_SHEET_EXCLUDED_KEYS = new Set([
+    "symbol",
+    "take_profit_pct",
+    "trailing_stop_pct",
+    "trailing_stop_loss_pct",
+    "trailing_take_profit_pct",
+  ]);
+
+  const BACKTEST_COLUMN_PRIORITY = [
+    "indicator",
+    "strategy",
+    "timeframe",
+    "params",
+    "net_pct",
+    "win_pct",
+    "trades",
+    "tsl_hits",
+    "final_equity",
+    "rank",
+    "combos_evaluated",
+    "stops_tested",
+    "total_runs",
+    "skipped_combos",
+  ];
+
+  function backtestSheetHeaderLabel(key) {
+    const labels = {
+      indicator: "Indicator",
+      strategy: "Strategy",
+      timeframe: "Timeframe",
+      params: "Params",
+      net_pct: "Net %",
+      win_pct: "Win %",
+      trades: "Trades",
+      tsl_hits: "TSL hits",
+      final_equity: "Equity",
+      rank: "Rank",
+      combos_evaluated: "Combos evaluated",
+      stops_tested: "Stops tested",
+      total_runs: "Total runs",
+      skipped_combos: "Skipped combos",
+    };
+    return labels[key] || key;
+  }
+
+  /** @param {string} columnKey */
+  function formatBacktestSheetCell(columnKey, val) {
+    if (columnKey === "final_equity") {
+      if (typeof val === "number" && Number.isFinite(val)) {
+        const neg = val < 0 ? "-" : "";
+        const abs = Math.abs(val);
+        return `${neg}$${abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+      return fmtSheetCell(val);
+    }
+    if (columnKey === "net_pct" || columnKey === "win_pct") {
+      if (typeof val === "number" && Number.isFinite(val)) return `${val.toFixed(1)}%`;
+      const n = Number(val);
+      if (Number.isFinite(n)) return `${n.toFixed(1)}%`;
+      return fmtSheetCell(val);
+    }
+    return fmtSheetCell(val);
+  }
+
+  function backtestRowIsBuyHold(r) {
+    return String(r.indicator || "").trim() === "B&H";
+  }
+
   /** Top strategies plus buy & hold (if present), sorted by net_pct for side-by-side comparison. */
   function backtestModalStrategyRows(c) {
     const strategies = Array.isArray(c.backtest_top_strategies)
@@ -2480,23 +2549,45 @@
     if (!Array.isArray(rows) || !rows.length) {
       return '<p class="detail-muted">No strategy rows in this snapshot.</p>';
     }
-    const preferred = ["indicator", "strategy", "net_pct", "win_pct", "trades", "tsl_hits", "rank"];
-    const allKeys = [...new Set(rows.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : [])))];
+    const keySet = new Set();
+    for (const r of rows) {
+      if (r && typeof r === "object") {
+        for (const k of Object.keys(r)) {
+          if (!BACKTEST_SHEET_EXCLUDED_KEYS.has(k)) keySet.add(k);
+        }
+      }
+    }
+    const allKeys = [...keySet];
     const useKeys = [
-      ...preferred.filter((k) => allKeys.includes(k)),
-      ...allKeys.filter((k) => !preferred.includes(k)).sort(),
+      ...BACKTEST_COLUMN_PRIORITY.filter((k) => allKeys.includes(k)),
+      ...allKeys.filter((k) => !BACKTEST_COLUMN_PRIORITY.includes(k)).sort(),
     ];
     if (!useKeys.length) return '<p class="detail-muted">No columns.</p>';
     const th = useKeys
-      .map((k) => `<th scope="col" title="${escapeAttr(`Backtest optimizer field: ${k}`)}">${escapeHtml(k)}</th>`)
+      .map(
+        (k) =>
+          `<th scope="col" title="${escapeAttr(`Backtest field: ${k}`)}">${escapeHtml(backtestSheetHeaderLabel(k))}</th>`,
+      )
       .join("");
     const tb = rows
       .map((r) => {
         if (!r || typeof r !== "object") return "";
-        return `<tr>${useKeys.map((k) => `<td>${escapeHtml(fmtSheetCell(r[k]))}</td>`).join("")}</tr>`;
+        const cells = useKeys
+          .map((k) => {
+            if (k === "indicator") {
+              const ind = String(r.indicator ?? "");
+              const inner = backtestRowIsBuyHold(r)
+                ? `<span class="sheet-bh-name">${escapeHtml(ind)}</span>`
+                : escapeHtml(ind || "—");
+              return `<td>${inner}</td>`;
+            }
+            return `<td>${escapeHtml(formatBacktestSheetCell(k, r[k]))}</td>`;
+          })
+          .join("");
+        return `<tr>${cells}</tr>`;
       })
       .join("");
-    return `<table class="sheet-table"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`;
+    return `<table class="sheet-table sheet-table--strategy"><thead><tr>${th}</tr></thead><tbody>${tb}</tbody></table>`;
   }
 
   function backtestModalHtml(c) {

@@ -1603,6 +1603,23 @@ html[data-theme="light"] .spark-svg .spark-hilo-line {
   font-variant-numeric: tabular-nums;
 }
 
+.sheet-table--strategy tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--color-th) 72%, var(--color-surface) 28%);
+}
+
+html[data-theme="dark"] .sheet-table--strategy tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--color-th) 52%, var(--color-surface) 48%);
+}
+
+.sheet-table--strategy .sheet-bh-name {
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .sheet-table--strategy .sheet-bh-name {
+  color: #c4b5fd;
+}
+
 .bt-modal-thumb {
   margin: 0.5rem 0 0;
 }
