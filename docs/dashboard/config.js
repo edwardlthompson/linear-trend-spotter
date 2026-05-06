@@ -8,6 +8,8 @@
  * `snapshot_server/` + worker POST (see README). Or override with `?api=` on the dashboard URL.
  */
 window.__SNAPSHOT_URL__ =
+  // Live snapshot relay (Render).
+  // You can override per-load with `?api=...` on the dashboard URL.
   "https://linear-trend-spotter-snapshot.onrender.com/qualified_public_snapshot.json";
 
 /** Operator-only relay telemetry (same host as snapshot). */
