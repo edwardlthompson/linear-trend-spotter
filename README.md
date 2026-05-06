@@ -62,15 +62,3 @@ Optional **`config.json`** keys include **`TOP_COINS_PROVIDER`** (`cmc` or `coin
 **Production diagnostics:** if the dashboard looks empty but the worker ran, check the snapshot relay (`scripts/check_snapshot_relay.py` from a shell that has relay env vars, or open `/relay-health` on the relay host). Worker logs may show **`EXCHANGE_UNIVERSE_FALLBACK`** when exchange listings never populated—often a failed listings refresh (see `exchange_data` logs).
 
 PRs should keep **`python scripts/check_github_ci.py`** green if you use that helper.
-
----
-
-### GitHub “About” copy (paste into the repository description field)
-
-**Short (≤350 characters):**
-
-> Scanner for exchange-listed coins: volume/momentum filters, OHLCV uniformity, integrated backtests. Results ship to a static web dashboard (`docs/dashboard`) plus optional snapshot relay and browser push—no third-party chat delivery.
-
-**Topics to add:** `cryptocurrency` `trading` `coinbase` `kraken` `technical-analysis` `python` `render` `github-pages`
-
-**Website field:** your GitHub Pages URL for `docs/dashboard`, or your deployed snapshot relay root if you prefer.
