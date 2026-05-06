@@ -59,6 +59,8 @@
   const LS_UI_ACTIVE_VIEW = "qualified_dash_active_view";
   /** Persist Tier-A browser poll alerts on/off (requires Notification permission). */
   const LS_TIER_A_ALERTS_ENABLED = "qualified_dash_tier_a_alerts_enabled";
+  /** ``qualified`` = list + filtered table OS alerts; ``watchlist`` = pinned symbols in/out of qualified set only. */
+  const LS_TIER_A_NOTIFY_SCOPE = "qualified_dash_tier_a_notify_scope_v1";
   /** Session: hide scan health / relay / regime strip cluster until tab closes. */
   const LS_SNAPSHOT_TELEMETRY_DISMISSED = "qualified_dash_snapshot_telemetry_dismissed";
   /** Milliseconds: operational feed items at or before this time count as read (Logs tab badge). */
@@ -96,6 +98,8 @@
     "volaccel",
     "venue",
     "vol24h",
+    "rvol7",
+    "mdd30",
   ]);
   const VOL_MIN_FILTER_OPTIONS = [
     { v: 100000, label: "$100k" },
@@ -244,6 +248,16 @@
   const elWatchlistBadge = document.getElementById("watchlistBadge");
   const elEmptyBanner = document.getElementById("emptyBanner");
   const elStaleBanner = document.getElementById("staleBanner");
+  const elSnapshotValidationBanner = document.getElementById("snapshotValidationBanner");
+  const elCompareBar = document.getElementById("compareBar");
+  const elCompareBarLabel = document.getElementById("compareBarLabel");
+  const elCompareOpenBtn = document.getElementById("compareOpenBtn");
+  const elCompareClearBtn = document.getElementById("compareClearBtn");
+  const elCompareDialog = document.getElementById("compareDialog");
+  const elCompareDialogClose = document.getElementById("compareDialogClose");
+  const elCompareDialogBody = document.getElementById("compareDialogBody");
+  /** @type {string[]} max two pin keys `SYMBOL|exchange` */
+  let comparePickKeys = [];
   const elHealthStrip = document.getElementById("healthStrip");
   const elRelayHealthStrip = document.getElementById("relayHealthStrip");
   const elRegimeStrip = document.getElementById("regimeStrip");
@@ -726,6 +740,23 @@
 
   populatePollIntervalSelect();
   restoreUiPreferences();
+  const elTierANotifyScopeSelect = document.getElementById("tierANotifyScopeSelect");
+  function syncTierANotifyScopeSelect() {
+    if (!elTierANotifyScopeSelect) return;
+    elTierANotifyScopeSelect.value = tierANotifyScope();
+  }
+  syncTierANotifyScopeSelect();
+  if (elTierANotifyScopeSelect) {
+    elTierANotifyScopeSelect.addEventListener("change", () => {
+      const v = elTierANotifyScopeSelect.value === "watchlist" ? "watchlist" : "qualified";
+      try {
+        localStorage.setItem(LS_TIER_A_NOTIFY_SCOPE, v);
+      } catch {
+        /* ignore */
+      }
+      resetTierAPollBaselineIfAlerts();
+    });
+  }
   syncHealthMinSelect();
   syncUniformityMinSelect();
   syncVolAccelFilterSelect();
@@ -1299,6 +1330,29 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function coinRiskHv7(c) {
+    const r = c.risk_context;
+    if (!r || typeof r !== "object") return null;
+    const v = r.hv_7d_annualized_pct;
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  }
+
+  function coinRiskMdd30(c) {
+    const r = c.risk_context;
+    if (!r || typeof r !== "object") return null;
+    const v = r.max_drawdown_30d_pct;
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  }
+
+  function tierANotifyScope() {
+    try {
+      const v = localStorage.getItem(LS_TIER_A_NOTIFY_SCOPE);
+      return v === "watchlist" ? "watchlist" : "qualified";
+    } catch {
+      return "qualified";
+    }
+  }
+
   /** Public icon CDN; may miss some symbols, so callers should provide visual fallback. */
   function coinLogoUrl(c) {
     const sym = String(c.symbol || "").trim().toLowerCase();
@@ -1639,6 +1693,18 @@
             (b.volUsd != null && Number.isFinite(b.volUsd) ? b.volUsd : -1);
           break;
         }
+        case "rvol7": {
+          const na = coinRiskHv7(ca);
+          const nb = coinRiskHv7(cb);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
+        }
+        case "mdd30": {
+          const na = coinRiskMdd30(ca);
+          const nb = coinRiskMdd30(cb);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
+        }
         case "health":
         default: {
           const ha = coinHealth(ca);
@@ -1797,6 +1863,51 @@
       appendOpsFeedDeduped(`stale|${iso}`, iso, elStaleBanner.textContent);
     }
     lastStaleBannerShown = stale;
+  }
+
+  function getSnapshotValidation(data) {
+    const embedded = data && data.snapshot_validation && typeof data.snapshot_validation === "object"
+      ? data.snapshot_validation
+      : null;
+    if (embedded) return embedded;
+    const issues = [];
+    if (!data || typeof data !== "object") issues.push("snapshot is not an object");
+    if (!Array.isArray(data && data.coins)) issues.push("coins is not an array");
+    const coins = Array.isArray(data && data.coins) ? data.coins : [];
+    let nSym = 0;
+    for (const c of coins) {
+      if (c && String(c.symbol || "").trim()) nSym += 1;
+    }
+    if (coins.length > 0 && nSym < coins.length) issues.push("some coin rows lack symbol");
+    const iso = data && data.updated_at ? String(data.updated_at) : "";
+    if (!iso.trim()) issues.push("missing updated_at");
+    else if (!isValidSnapshotTimeMs(Date.parse(iso))) issues.push("updated_at not a valid timestamp");
+    const level = issues.length ? "warn" : "ok";
+    return {
+      schema_version: 1,
+      ok: issues.length === 0,
+      level,
+      issues,
+      stats: { coin_count: coins.length, coins_with_symbol: nSym },
+    };
+  }
+
+  function updateSnapshotValidationBanner(data) {
+    if (!elSnapshotValidationBanner) return;
+    const v = getSnapshotValidation(data);
+    const issues = Array.isArray(v.issues) ? v.issues : [];
+    if (!issues.length && v.level === "ok") {
+      elSnapshotValidationBanner.hidden = true;
+      elSnapshotValidationBanner.textContent = "";
+      elSnapshotValidationBanner.classList.remove("snapshot-validation-banner--warn", "snapshot-validation-banner--error");
+      return;
+    }
+    elSnapshotValidationBanner.hidden = false;
+    elSnapshotValidationBanner.classList.toggle("snapshot-validation-banner--error", v.level === "error");
+    elSnapshotValidationBanner.classList.toggle("snapshot-validation-banner--warn", v.level === "warn");
+    const head =
+      v.level === "error" ? "Snapshot validation error: " : "Snapshot quality warning: ";
+    elSnapshotValidationBanner.textContent = head + issues.join(" · ");
   }
 
   function formatApiCostPanelLines(panel) {
@@ -2916,7 +3027,99 @@
     return `<div class="bt-cell">${parts.join("")}</div>`;
   }
 
-  const COL_COUNT = 14;
+  const COL_COUNT = 17;
+
+  function syncCompareUi() {
+    if (!elCompareBar || !elCompareBarLabel) return;
+    const n = comparePickKeys.length;
+    if (n === 0) {
+      elCompareBar.hidden = true;
+      elCompareBarLabel.textContent = "";
+      return;
+    }
+    elCompareBar.hidden = false;
+    const labels = comparePickKeys.map((pk) => rowPinKeyDisplayLabel(pk));
+    elCompareBarLabel.textContent =
+      n === 1 ? `Compare: ${labels[0]} (pick one more row)` : `Compare: ${labels[0]} vs ${labels[1]}`;
+    if (elCompareOpenBtn) elCompareOpenBtn.disabled = n < 2;
+  }
+
+  function toggleComparePick(pk, checked) {
+    const key = String(pk || "");
+    if (!key) return;
+    if (checked) {
+      const next = comparePickKeys.filter((k) => k !== key);
+      next.push(key);
+      while (next.length > 2) next.shift();
+      comparePickKeys = next;
+    } else {
+      comparePickKeys = comparePickKeys.filter((k) => k !== key);
+    }
+    syncCompareUi();
+  }
+
+  function clearComparePicks() {
+    comparePickKeys = [];
+    syncCompareUi();
+    applyTableView();
+  }
+
+  function findViewRowByPinKey(pk) {
+    const want = String(pk || "");
+    if (!want) return null;
+    const rows = getFilteredSortedViewRows();
+    for (const r of rows) {
+      if (rowViewPinKey(r) === want) return r;
+    }
+    return null;
+  }
+
+  function buildCompareColumnHtml(r) {
+    const c = r.coin;
+    const sym = String(c.symbol || "").toUpperCase();
+    const name = String(c.name || "").trim();
+    const g = c.gains || {};
+    const g7 = typeof g["7d"] === "number" ? `${g["7d"].toFixed(1)}%` : "—";
+    const g30 = typeof g["30d"] === "number" ? `${g["30d"].toFixed(1)}%` : "—";
+    const hv = coinRiskHv7(c);
+    const mdd = coinRiskMdd30(c);
+    const h = coinHealth(c);
+    const u = coinUniformity(c);
+    const hi7 = rowG7Hi(r);
+    const hi30 = rowG30Hi(r);
+    const spark7 = effectiveSparklineCloses7d(c);
+    const spark30 = effectiveSparklineCloses(c);
+    const m7 = spark7 && spark7.length >= 2 ? sparklineMarkup(spark7, 200, 48) : null;
+    const m30 = spark30 && spark30.length >= 2 ? sparklineMarkup(spark30, 200, 48) : null;
+    const title = name ? `${sym} · ${name}` : sym;
+    let dl = `<dl>
+      <dt>7d %</dt><dd>${escapeHtml(g7)}</dd>
+      <dt>30d %</dt><dd>${escapeHtml(g30)}</dd>
+      <dt>HV 7d ann.</dt><dd>${hv != null ? escapeHtml(`${hv.toFixed(1)}%`) : "—"}</dd>
+      <dt>Max DD 30d</dt><dd>${mdd != null ? escapeHtml(`${mdd.toFixed(1)}%`) : "—"}</dd>
+      <dt>Health</dt><dd>${h != null ? escapeHtml(String(h.toFixed(1))) : "—"}</dd>
+      <dt>Uniformity</dt><dd>${u != null ? escapeHtml(String(u.toFixed(1))) : "—"}</dd>
+      <dt>% below high 7d</dt><dd>${hi7 != null ? escapeHtml(`${hi7.toFixed(1)}%`) : "—"}</dd>
+      <dt>% below high 30d</dt><dd>${hi30 != null ? escapeHtml(`${hi30.toFixed(1)}%`) : "—"}</dd>
+    </dl>`;
+    let sparks = "";
+    if (m7 && m7.svgHtml) {
+      sparks += `<div class="compare-spark-wrap"><div class="spark-cell-inner" aria-hidden="true">${m7.svgHtml}</div><span class="cell-muted">7d</span></div>`;
+    }
+    if (m30 && m30.svgHtml) {
+      sparks += `<div class="compare-spark-wrap"><div class="spark-cell-inner" aria-hidden="true">${m30.svgHtml}</div><span class="cell-muted">30d</span></div>`;
+    }
+    return `<div class="compare-col"><h3>${escapeHtml(title)}</h3>${dl}${sparks}</div>`;
+  }
+
+  function openCompareDialog() {
+    if (!elCompareDialog || !elCompareDialogBody || comparePickKeys.length < 2) return;
+    const a = findViewRowByPinKey(comparePickKeys[0]);
+    const b = findViewRowByPinKey(comparePickKeys[1]);
+    if (!a || !b) return;
+    elCompareDialogBody.innerHTML = buildCompareColumnHtml(a) + buildCompareColumnHtml(b);
+    if (typeof elCompareDialog.showModal === "function") elCompareDialog.showModal();
+  }
 
   function renderRowsHtml(viewRows, pinnedSet, pinEnterSet, scoreRanges) {
     if (!viewRows.length) {
@@ -2959,6 +3162,7 @@
           if (isPinEnter) wlRowClass.push("coin-row--pin-enter");
           return `<tr class="${wlRowClass.join(" ")}" data-symbol="${escapeAttr(rawSym)}" data-exchange="${exAttr}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner" title="${escapeAttr(sym || "Unknown symbol")}">${pinBtn}${logoHtml}</span></td>
+          <td headers="col-compare" class="compare-td">${dash}</td>
           <td headers="col-name"><span class="cell-muted" title="Symbol not in the current qualified snapshot">Not in snapshot</span></td>
           <td headers="col-g7pct" class="num">${dash}</td>
           <td headers="col-g7chart" class="num">${dash}</td>
@@ -2968,6 +3172,8 @@
           <td headers="col-btvbh" class="num">${dash}</td>
           <td headers="col-uniformity" class="num">${dash}</td>
           <td headers="col-health" class="num">${dash}</td>
+          <td headers="col-rvol7" class="num">${dash}</td>
+          <td headers="col-mdd30" class="num">${dash}</td>
           <td headers="col-volaccel" class="num">${dash}</td>
           <td headers="col-venue" class="exch-col">${venueCell}</td>
           <td headers="col-vol24h" class="num">${dash}</td>
@@ -3067,8 +3273,17 @@
             ? `<span class="gain-pos" title="${escapeAttr(btvbhTitle)}">+${btvbhGap.toFixed(1)}%</span>`
             : dash;
         const exAttr = r.exchangeId ? escapeAttr(r.exchangeId) : "";
+        const hv = coinRiskHv7(c);
+        const mdd = coinRiskMdd30(c);
+        const hvStr = hv != null ? `${hv.toFixed(1)}%` : "—";
+        const mddStr = mdd != null ? `${mdd.toFixed(1)}%` : "—";
+        const hvTitle = "Annualized hist. vol. from ~7d hourly closes (snapshot risk_context)";
+        const mddTitle = "Max peak-to-trough drawdown % over ~30d hourly closes";
+        const cmpChecked = comparePickKeys.includes(pk);
+        const compareCell = `<td headers="col-compare" class="compare-td"><input type="checkbox" class="compare-cb" data-compare-pk="${escapeAttr(pk)}" ${cmpChecked ? "checked" : ""} aria-label="Select ${escapeAttr(rowPinKeyDisplayLabel(pk))} for compare" title="Compare (max 2)" /></td>`;
         return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}" data-exchange="${exAttr}">
           <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}${logoHtml}${badge}</span></td>
+          ${compareCell}
           <td headers="col-name" class="name-col">${nameCell}</td>
           <td headers="col-g7pct" class="num"><span class="visually-hidden">7-day gain </span><span class="${gain7Class}" title="${escapeAttr(g7Title)}">${g7}%</span></td>
           <td headers="col-g7chart" class="num spark-td" title="${escapeAttr(g7Title)}">${spark7Cell}</td>
@@ -3078,6 +3293,8 @@
           <td headers="col-btvbh" class="num"><span class="visually-hidden">Bot vs buy and hold </span>${btvbhCell}</td>
           <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${uniformChip}</span></td>
           <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${healthChip}</span></td>
+          <td headers="col-rvol7" class="num" title="${escapeAttr(hvTitle)}">${escapeHtml(hvStr)}</td>
+          <td headers="col-mdd30" class="num" title="${escapeAttr(mddTitle)}">${escapeHtml(mddStr)}</td>
           <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span><span title="Volume vs baseline window from snapshot">${volStr}</span></td>
           <td headers="col-venue" class="exch-col">${venueCell}</td>
           <td headers="col-vol24h" class="num">${volCell}</td>
@@ -3095,6 +3312,7 @@
     elTbody.innerHTML = renderRowsHtml(filtered, pinned, pinEnterFlashSet, scoreRanges);
     updateKpiStrip(filtered);
     updateSortHeaderClasses();
+    syncCompareUi();
     if (pinEnterFlashSet.size > 0) {
       window.clearTimeout(pinEnterClearTimer);
       pinEnterClearTimer = window.setTimeout(() => {
@@ -3155,6 +3373,8 @@
       "chart_30d_pct_below_high",
       "uniformity",
       "health",
+      "hv_7d_annualized_pct",
+      "max_drawdown_30d_pct",
       "volume_acceleration_pct",
       "volume_acceleration_window_days",
       "listed_on",
@@ -3170,6 +3390,8 @@
       const hi30 = rowG30Hi(r);
       const u = typeof c.uniformity_score === "number" ? c.uniformity_score : "";
       const h = c.health_score != null && c.health_score !== "" ? c.health_score : "";
+      const hv = coinRiskHv7(c);
+      const mdd = coinRiskMdd30(c);
       const vac = c.volume_acceleration_pct;
       const vwd = c.volume_acceleration_window_days;
       const lo = Array.isArray(c.listed_on) ? c.listed_on.join("|") : "";
@@ -3188,6 +3410,8 @@
           hi30 != null ? Number(hi30.toFixed(4)) : "",
           u,
           h,
+          hv != null ? Number(hv.toFixed(4)) : "",
+          mdd != null ? Number(mdd.toFixed(4)) : "",
           vac,
           vwd,
           lo,
@@ -3305,7 +3529,11 @@
       exitReasonBySym,
     );
     renderCoinAlertsList();
-    if (notifyAlertsEnabled && (listNotifyDelta.enters.length || listNotifyDelta.exits.length)) {
+    if (
+      notifyAlertsEnabled &&
+      tierANotifyScope() === "qualified" &&
+      (listNotifyDelta.enters.length || listNotifyDelta.exits.length)
+    ) {
       const stamp = String(updatedRaw || "snap").replace(/[^a-z0-9]+/gi, "").slice(0, 24);
       void (async () => {
         for (const sym of listNotifyDelta.enters) {
@@ -3332,6 +3560,7 @@
       })();
     }
     updateStaleBanner(data);
+    updateSnapshotValidationBanner(data);
     updateHealthStrip(data);
     updateRegimeStrip(data.regime_gate);
     void refreshRelayHealthStrip();
@@ -3349,6 +3578,14 @@
   }
 
   if (elTbody) {
+    elTbody.addEventListener("change", (ev) => {
+      const t = ev.target;
+      if (t && t.classList && t.classList.contains("compare-cb")) {
+        const pk = t.getAttribute("data-compare-pk") || "";
+        toggleComparePick(pk, t.checked);
+        applyTableView();
+      }
+    });
     elTbody.addEventListener("click", (ev) => {
       const pinBtn = ev.target.closest(".pin-btn");
       if (pinBtn) {
@@ -3387,6 +3624,18 @@
     });
   }
 
+  if (elCompareOpenBtn) {
+    elCompareOpenBtn.addEventListener("click", () => openCompareDialog());
+  }
+  if (elCompareClearBtn) {
+    elCompareClearBtn.addEventListener("click", () => clearComparePicks());
+  }
+  if (elCompareDialogClose && elCompareDialog) {
+    elCompareDialogClose.addEventListener("click", () => {
+      if (typeof elCompareDialog.close === "function") elCompareDialog.close();
+    });
+  }
+
   async function digestHex(text) {
     if (window.crypto && crypto.subtle) {
       const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -3409,8 +3658,9 @@
     const body = String(opts.body || "");
     const tag = opts.tag != null ? String(opts.tag) : "qualified-dash";
     const sym = String(opts.symbol || "").trim().toLowerCase();
+    const iconBase = sym === "con" ? "con_win" : sym;
     const icon = sym
-      ? notificationAssetUrl(`./icons/coins/${encodeURIComponent(sym)}.png`)
+      ? notificationAssetUrl(`./icons/coins/${encodeURIComponent(iconBase)}.png`)
       : notificationAssetUrl("./icons/icon-192.png");
     const badge = notificationAssetUrl("./icons/icon-192.png");
     const options = {
@@ -3443,6 +3693,7 @@
    * @returns {Promise<boolean>} true if a list-change notification was shown
    */
   async function notifySnapshotChangedFiltered(data, nextDigest) {
+    if (tierANotifyScope() !== "qualified") return false;
     const coins = Array.isArray(data.coins) ? data.coins : [];
     const exploded = explodeCoinRowsForTable(coins);
     const filtered = applyFiltersToViewRows(exploded);
@@ -3521,6 +3772,7 @@
 
   /** Tier-A: notify when a watched symbol enters or leaves the full qualified set (independent of table filters). */
   async function notifyPinnedWatch(entered, left) {
+    if (tierANotifyScope() !== "watchlist") return;
     if (!notifyAlertsEnabled || (!entered.length && !left.length)) return;
     const coins = Array.isArray(lastPayload?.coins) ? lastPayload.coins : [];
     const exploded = explodeCoinRowsForTable(coins);
@@ -3617,8 +3869,13 @@
       render(data);
       const snapDigest = await digestHex(text);
       if (forNotify && notifyAlertsEnabled) {
-        await notifySnapshotChangedFiltered(data, snapDigest);
-        await notifyPinnedWatch(lastPinWatchDelta.entered, lastPinWatchDelta.left);
+        const scope = tierANotifyScope();
+        if (scope === "qualified") {
+          await notifySnapshotChangedFiltered(data, snapDigest);
+        }
+        if (scope === "watchlist") {
+          await notifyPinnedWatch(lastPinWatchDelta.entered, lastPinWatchDelta.left);
+        }
         try {
           localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
         } catch {
@@ -3667,7 +3924,7 @@
   }
 
   async function forceResetDashboardCachesOnce() {
-    const KEY = "dash_sw_cache_reset_v95_done";
+    const KEY = "dash_sw_cache_reset_v98_done";
     if (!("serviceWorker" in navigator) || !("caches" in window)) return;
     try {
       if (sessionStorage.getItem(KEY) === "1") return;

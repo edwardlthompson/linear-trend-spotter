@@ -188,6 +188,7 @@
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
       <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
       <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
+      <div id="snapshotValidationBanner" class="snapshot-validation-banner" role="status" hidden></div>
       <section id="kpiStrip" class="kpi-strip" aria-label="Qualified list summary metrics">
         <article class="kpi-card" title="Number of rows currently in the qualified/watchlist table after filters">
           <p class="kpi-label">Qualified coins</p>
@@ -206,6 +207,15 @@
           <p id="kpiMexcCount" class="kpi-value">—</p>
         </article>
       </section>
+      <div id="compareBar" class="compare-bar" role="region" aria-label="Compare two coins" hidden>
+        <span id="compareBarLabel" class="compare-bar-label"></span>
+        <button type="button" id="compareOpenBtn" class="secondary" title="Open side-by-side comparison for two selected rows">
+          Compare
+        </button>
+        <button type="button" id="compareClearBtn" class="secondary" title="Clear compare selection">
+          Clear
+        </button>
+      </div>
       <div id="snapshotLoadingOverlay" class="snapshot-loading-overlay" role="status" aria-live="polite" aria-busy="true">
         <div class="snapshot-loading-inner">
           <span class="snapshot-loading-spinner" aria-hidden="true"></span>
@@ -232,6 +242,9 @@
                 >
                   Logo
                 </button>
+              </th>
+              <th scope="col" id="col-compare" class="th-compare" title="Select up to two rows, then Compare">
+                <span class="th-compare-label">Cmp</span>
               </th>
               <th scope="col" id="col-name" title="Asset name with token abbreviation and listing link when available">
                 <button
@@ -395,6 +408,28 @@
                   </select>
                 </div>
               </th>
+              <th scope="col" id="col-rvol7" title="Annualized historical volatility from ~7d of hourly closes (risk context)">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="rvol7"
+                  aria-label="Sort by 7-day horizon volatility"
+                  title="Sort by annualized vol estimated from last 168 hourly closes"
+                >
+                  HV 7d
+                </button>
+              </th>
+              <th scope="col" id="col-mdd30" title="Peak-to-trough drawdown over ~30d of hourly closes">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="mdd30"
+                  aria-label="Sort by 30-day max drawdown percent"
+                  title="Sort by max drawdown % from last 720 hourly closes"
+                >
+                  Max DD
+                </button>
+              </th>
               <th scope="col" id="col-volaccel" title="Volume acceleration vs baseline window and optional filters">
                 <div class="th-split th-split--volaccel">
                   <button
@@ -553,9 +588,21 @@
       <section class="settings-section" aria-labelledby="settingsAlertsHeading">
         <h3 id="settingsAlertsHeading" class="settings-section-title">Tier-A update alerts</h3>
         <p class="settings-section-hint">
-          Browser notifications when your filtered Qualified table changes (column filters). Watchlist
-          in/out uses the full qualified set.
+          Browser notifications: choose qualified-list / table membership changes, or only watchlist (starred) symbols
+          entering or leaving the qualified set. Poll interval applies to Tier-A re-fetch.
         </p>
+        <label class="settings-field">
+          <span class="settings-label">Notify about</span>
+          <select
+            id="tierANotifyScopeSelect"
+            class="toolbar-select settings-select"
+            title="Qualified list + filtered table vs watchlist-only alerts"
+            aria-label="Tier-A notification scope"
+          >
+            <option value="qualified">Qualified list &amp; filtered table</option>
+            <option value="watchlist">Watchlist only</option>
+          </select>
+        </label>
         <label class="settings-field">
           <span class="settings-label">Alert poll</span>
           <select
@@ -719,6 +766,18 @@
         </header>
         <div id="chartFsStats" class="chart-fs-stats"></div>
         <div id="chartFsSvg" class="chart-fs-svg-wrap"></div>
+      </div>
+    </dialog>
+
+    <dialog id="compareDialog" class="compare-dialog">
+      <div class="compare-dialog-box">
+        <header class="compare-dialog-head">
+          <h2 class="compare-dialog-title">Compare coins</h2>
+          <button type="button" class="compare-dialog-close" id="compareDialogClose" aria-label="Close compare" title="Close">
+            ×
+          </button>
+        </header>
+        <div id="compareDialogBody" class="compare-dialog-body"></div>
       </div>
     </dialog>
 

@@ -11,6 +11,7 @@ from api.coingecko_mapper import CoinGeckoMapper
 from api.coinmarketcap import CoinMarketCapClient
 from api.price_history_fallback import PriceHistoryFallbackClient
 from api.tradingview_mapper import TradingViewMapper
+from utils.provider_circuit import circuit_from_settings
 from utils.provider_rate_limit import MinIntervalGate
 from database.cache import PriceCache
 from database.models import ActiveCoinsDatabase, HistoryDatabase
@@ -38,6 +39,8 @@ def initialize_runtime_components(settings: Any) -> dict[str, Any]:
         cmc_api_key=settings.cmc_api_key,
         cmc_rate_gate=cmc_gate,
         polygon_calls_per_minute=settings.polygon_calls_per_minute,
+        polygon_circuit=circuit_from_settings(settings, "polygon"),
+        cmc_circuit=circuit_from_settings(settings, "cmc_ohlcv_fallback"),
     )
     app_logger.info("✅ OHLCV fallback chain initialized (Polygon + CMC hourly/daily tertiary)")
 

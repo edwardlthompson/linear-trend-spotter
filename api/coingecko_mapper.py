@@ -13,6 +13,7 @@ import logging
 import requests
 
 from utils.coingecko_usage import record_coingecko_http
+from utils.provider_rate_limit import backoff_seconds_for_attempt
 
 
 class CoinGeckoMapper:
@@ -98,23 +99,37 @@ class CoinGeckoMapper:
         Fetch the complete coin list from CoinGecko
         Returns list of dicts with id, symbol, name
         """
-        try:
-            self._rate_limit()
-            url = f"{self.BASE_URL}/coins/list"
-            response = self.session.get(url, timeout=15)
-            
-            if response.status_code == 200:
-                record_coingecko_http(response.url)
-                data = response.json()
-                self.logger.info(f"✅ Fetched {len(data)} coins from CoinGecko")
-                return data
-            else:
-                self.logger.error(f"❌ Failed to fetch coin list: {response.status_code}")
+        url = f"{self.BASE_URL}/coins/list"
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                self._rate_limit()
+                response = self.session.get(url, timeout=15)
+
+                if response.status_code == 200:
+                    record_coingecko_http(response.url)
+                    data = response.json()
+                    self.logger.info("✅ Fetched %s coins from CoinGecko", len(data))
+                    return data
+                if response.status_code == 429 and attempt < max_retries - 1:
+                    wait_s = backoff_seconds_for_attempt(attempt, response=response)
+                    self.logger.warning("CoinGecko /coins/list 429; sleeping %.1fs", wait_s)
+                    time.sleep(wait_s)
+                    continue
+                if response.status_code in (408, 500, 502, 503, 504) and attempt < max_retries - 1:
+                    wait_s = min(5 * (2**attempt), 60) + 0.25
+                    self.logger.warning("CoinGecko /coins/list HTTP %s; retry in %.1fs", response.status_code, wait_s)
+                    time.sleep(wait_s)
+                    continue
+                self.logger.error("❌ Failed to fetch coin list: %s", response.status_code)
                 return None
-                
-        except Exception as e:
-            self.logger.error(f"❌ Error fetching coin list: {e}")
-            return None
+
+            except Exception as e:
+                self.logger.error("❌ Error fetching coin list (attempt %s): %s", attempt + 1, e)
+                if attempt >= max_retries - 1:
+                    return None
+                time.sleep(min(5 * (2**attempt), 45) + 0.25)
+        return None
     
     def update_mappings(self) -> int:
         """

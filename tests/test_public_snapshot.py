@@ -21,6 +21,8 @@ def test_full_field_set_includes_scan_interval_and_backtest() -> None:
     ]
     payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=1800)
     assert payload["scan_interval_seconds"] == 1800
+    assert "snapshot_validation" in payload
+    assert payload["snapshot_validation"].get("level") in ("ok", "warn", "error")
     assert payload["coins"][0]["backtest_top_strategies"] == [{"rank": 1}]
     assert payload["coins"][0]["backtest_buy_hold"] == {"return_pct": 1.2}
 

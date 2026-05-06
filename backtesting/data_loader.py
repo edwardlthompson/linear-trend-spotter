@@ -13,6 +13,7 @@ import pandas as pd
 from api.coingecko import CoinGeckoClient
 from api.price_history_fallback import PriceHistoryFallbackClient
 from database.cache import PriceCache
+from utils.provider_circuit import circuit_from_settings
 from utils.provider_rate_limit import MinIntervalGate
 
 from .params import BacktestLoaderParams, loader_params_from_settings
@@ -42,6 +43,13 @@ class BacktestDataLoader:
         self.coingecko = CoinGeckoClient(calls_per_minute=self._lp.coingecko_calls_per_minute)
         cmc_gate = MinIntervalGate(self._lp.cmc_calls_per_minute)
         poly_gate = MinIntervalGate(self._lp.polygon_calls_per_minute)
+        try:
+            from config.settings import settings as _settings
+
+            _poly_c = circuit_from_settings(_settings, "polygon")
+            _cmc_c = circuit_from_settings(_settings, "cmc_ohlcv_fallback")
+        except Exception:
+            _poly_c = _cmc_c = None
         self.price_fallback = PriceHistoryFallbackClient(
             polygon_api_key=os.getenv("POLYGON_API_KEY", ""),
             cmc_api_key=self._lp.cmc_api_key or "",
@@ -49,6 +57,8 @@ class BacktestDataLoader:
             polygon_rate_gate=poly_gate,
             cmc_calls_per_minute=self._lp.cmc_calls_per_minute,
             polygon_calls_per_minute=self._lp.polygon_calls_per_minute,
+            polygon_circuit=_poly_c,
+            cmc_circuit=_cmc_c,
         )
         self.max_cache_age_hours = max_cache_age_hours
         self.ram_cache: OrderedDict[str, LoadResult] = OrderedDict()

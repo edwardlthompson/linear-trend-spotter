@@ -562,6 +562,25 @@ def run_scanner():
         
         metrics.save(settings.metrics_file)
 
+        try:
+            snap = metrics.get_summary()
+            app_logger.info(
+                "scan_telemetry %s",
+                json.dumps(
+                    {
+                        "event": "scan_complete",
+                        "duration_s": round(float(snap.get("duration") or 0), 3),
+                        "counts": snap.get("counts") or {},
+                        "cache_hits": snap.get("cache_hits") or {},
+                        "cache_misses": snap.get("cache_misses") or {},
+                        "errors": snap.get("errors") or {},
+                    },
+                    default=str,
+                )[:8000],
+            )
+        except Exception as tel_err:
+            app_logger.debug("scan_telemetry log skipped: %s", tel_err)
+
         if settings.scan_costs_enabled:
             try:
                 write_scan_costs_file(

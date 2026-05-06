@@ -95,6 +95,11 @@ def _safe_icon_filename(symbol: str) -> str:
 def download_icon(coin: dict, cmc_rows: list[dict]) -> bool:
     symbol = str(coin.get("symbol") or "").lower()
     out = OUT_DIR / _safe_icon_filename(symbol)
+    try:
+        if out.is_file() and out.stat().st_size > 32:
+            return True
+    except OSError:
+        pass
     snap_id = coin.get("cmc_id")
     cmc_id = snap_id if isinstance(snap_id, int) else None
     if cmc_id is None and isinstance(snap_id, str) and snap_id.strip().isdigit():

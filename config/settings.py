@@ -31,6 +31,8 @@ class Settings:
             loaded_config = self._load_config()
             if loaded_config:
                 self._config.update(loaded_config)
+        except ValueError:
+            raise
         except Exception as e:
             _logger.warning("Could not load config file: %s", e)
 
@@ -436,17 +438,17 @@ class Settings:
         return normalized
     
     def _load_config(self) -> Dict[str, Any]:
-        """Load non-sensitive settings from config.json"""
-        try:
-            if not self.config_path.exists():
-                return {}
-                
-            with open(self.config_path, 'r') as f:
-                return json.load(f)
-                
-        except Exception as e:
-            _logger.error("Error loading config: %s", e)
+        """Load non-sensitive settings from config.json.
+
+        If the file exists but is not valid JSON, raise ValueError (fail-fast).
+        """
+        if not self.config_path.exists():
             return {}
+        try:
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in config file {self.config_path}: {e}") from e
     
     @property
     def cmc_api_key(self) -> str:

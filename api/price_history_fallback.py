@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 import requests
 
+from utils.provider_circuit import ProviderCallCircuit
 from utils.provider_http_usage import record_cmc_http, record_polygon_http
 from utils.provider_rate_limit import MinIntervalGate, backoff_seconds_for_attempt
 
@@ -29,6 +30,8 @@ class PriceHistoryFallbackClient:
         polygon_rate_gate: MinIntervalGate | None = None,
         cmc_calls_per_minute: int = 30,
         polygon_calls_per_minute: int = 5,
+        polygon_circuit: ProviderCallCircuit | None = None,
+        cmc_circuit: ProviderCallCircuit | None = None,
     ):
         self.polygon_api_key = polygon_api_key or ""
         self.cmc_api_key = cmc_api_key or ""
@@ -47,6 +50,8 @@ class PriceHistoryFallbackClient:
                 "Accept": "application/json",
             }
         )
+        self._polygon_circuit = polygon_circuit
+        self._cmc_circuit = cmc_circuit
 
     def _polygon_http_get(
         self,
@@ -58,12 +63,16 @@ class PriceHistoryFallbackClient:
         label: str = "",
     ) -> Optional[requests.Response]:
         """Paced Polygon GET with 429 / transient backoff."""
+        if self._polygon_circuit and not self._polygon_circuit.allow():
+            return None
         for attempt in range(max_retries):
             self._polygon_gate.wait()
             try:
                 response = self.polygon_session.get(url, params=params, timeout=timeout)
                 record_polygon_http(url)
                 if response.status_code == 200:
+                    if self._polygon_circuit:
+                        self._polygon_circuit.record_success()
                     return response
                 if response.status_code == 429 and attempt < max_retries - 1:
                     wait_s = backoff_seconds_for_attempt(attempt, response=response)
@@ -75,17 +84,25 @@ class PriceHistoryFallbackClient:
                     self.logger.warning("Polygon HTTP %s%s; retry in %.1fs", response.status_code, label, wait_s)
                     time.sleep(wait_s)
                     continue
+                if self._polygon_circuit and response.status_code != 200:
+                    self._polygon_circuit.record_failure()
                 return response
             except requests.exceptions.Timeout:
                 if attempt >= max_retries - 1:
                     self.logger.warning("Polygon timeout%s (giving up)", label)
+                    if self._polygon_circuit:
+                        self._polygon_circuit.record_failure()
                     return None
                 time.sleep(min(5 * (2**attempt), 45))
             except Exception as exc:
                 self.logger.debug("Polygon request error%s: %s", label, exc)
                 if attempt >= max_retries - 1:
+                    if self._polygon_circuit:
+                        self._polygon_circuit.record_failure()
                     return None
                 time.sleep(min(3 * (2**attempt), 30))
+        if self._polygon_circuit:
+            self._polygon_circuit.record_failure()
         return None
 
     def _cmc_http_get(
@@ -98,12 +115,16 @@ class PriceHistoryFallbackClient:
         label: str = "",
     ) -> Optional[requests.Response]:
         """Paced CMC GET with 429 / transient backoff (shares gate with ``CoinMarketCapClient`` when injected)."""
+        if self._cmc_circuit and not self._cmc_circuit.allow():
+            return None
         for attempt in range(max_retries):
             self._cmc_gate.wait()
             try:
                 response = self.cmc_session.get(url, params=params, timeout=timeout)
                 record_cmc_http(url)
                 if response.status_code == 200:
+                    if self._cmc_circuit:
+                        self._cmc_circuit.record_success()
                     return response
                 if response.status_code == 429 and attempt < max_retries - 1:
                     wait_s = backoff_seconds_for_attempt(attempt, response=response)
@@ -115,17 +136,25 @@ class PriceHistoryFallbackClient:
                     self.logger.warning("CMC HTTP %s%s; retry in %.1fs", response.status_code, label, wait_s)
                     time.sleep(wait_s)
                     continue
+                if self._cmc_circuit and response.status_code != 200:
+                    self._cmc_circuit.record_failure()
                 return response
             except requests.exceptions.Timeout:
                 if attempt >= max_retries - 1:
                     self.logger.warning("CMC timeout%s (giving up)", label)
+                    if self._cmc_circuit:
+                        self._cmc_circuit.record_failure()
                     return None
                 time.sleep(min(5 * (2**attempt), 45))
             except Exception as exc:
                 self.logger.debug("CMC request error%s: %s", label, exc)
                 if attempt >= max_retries - 1:
+                    if self._cmc_circuit:
+                        self._cmc_circuit.record_failure()
                     return None
                 time.sleep(min(3 * (2**attempt), 30))
+        if self._cmc_circuit:
+            self._cmc_circuit.record_failure()
         return None
 
     def get_30d_prices(self, symbol: str) -> tuple[Optional[list[float]], str]:

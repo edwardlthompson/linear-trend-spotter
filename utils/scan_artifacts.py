@@ -10,6 +10,47 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from utils.snapshot_validation import validate_public_snapshot
+
+
+def _risk_context_from_hourly_closes(closes: list[float]) -> dict[str, Any] | None:
+    """Rough risk context from hourly closes: 7d annualized hist vol, 30d max drawdown %."""
+    if len(closes) < 8:
+        return None
+    tail7 = closes[-min(168, len(closes)) :]
+    tail30 = closes[-min(720, len(closes)) :]
+
+    lr7: list[float] = []
+    for i in range(1, len(tail7)):
+        a, b = tail7[i - 1], tail7[i]
+        if a > 0 and b > 0:
+            lr7.append(math.log(b / a))
+
+    hv7_ann: float | None = None
+    if len(lr7) >= 2:
+        m = sum(lr7) / len(lr7)
+        var = sum((x - m) ** 2 for x in lr7) / (len(lr7) - 1)
+        std = math.sqrt(max(0.0, var))
+        hv7_ann = std * math.sqrt(24 * 365) * 100
+        if not math.isfinite(hv7_ann):
+            hv7_ann = None
+
+    peak = tail30[0]
+    max_dd = 0.0
+    for v in tail30:
+        if v > peak:
+            peak = v
+        if peak > 0:
+            dd = (peak - v) / peak * 100
+            if dd > max_dd:
+                max_dd = dd
+
+    out: dict[str, Any] = {}
+    if hv7_ann is not None:
+        out["hv_7d_annualized_pct"] = round(float(hv7_ann), 2)
+    out["max_drawdown_30d_pct"] = round(float(max_dd), 2)
+    return out
+
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,6 +208,9 @@ def build_public_qualified_snapshot(
                     hnums = [float(x) for x in tail]
                     if all(math.isfinite(x) for x in hnums):
                         coin["closes_1h"] = hnums
+                        rc = _risk_context_from_hourly_closes(hnums)
+                        if rc:
+                            coin["risk_context"] = rc
                 except (TypeError, ValueError):
                     pass
         coins_out.append(coin)
@@ -186,6 +230,7 @@ def build_public_qualified_snapshot(
     qe = _public_qualification_exits(qualification_exits)
     if qe:
         body["qualification_exits"] = qe
+    body["snapshot_validation"] = validate_public_snapshot(body)
     return body
 
 
