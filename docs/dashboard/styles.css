@@ -89,13 +89,14 @@ body.dashboard-body {
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  /* Fill the padded body; avoid max-content + overflow:hidden clipping KPI/header on narrow viewports. */
-  width: 100%;
-  max-width: 100%;
+  /* Center the dashboard column; inner panels handle scrolling. */
+  width: max-content;
+  max-width: calc(100vw - 2.75rem);
   min-width: 0;
   margin-inline: auto;
   box-sizing: border-box;
-  overflow: hidden;
+  /* Avoid clipping KPI cards / bell badge at narrow widths. */
+  overflow: visible;
 }
 
 .dashboard-shell > .site-header-bar,
