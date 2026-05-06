@@ -89,8 +89,10 @@ body.dashboard-body {
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  width: max-content;
-  max-width: calc(100vw - 2.75rem);
+  /* Fill the padded body; avoid max-content + overflow:hidden clipping KPI/header on narrow viewports. */
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin-inline: auto;
   box-sizing: border-box;
   overflow: hidden;
@@ -205,6 +207,8 @@ h1 {
   flex: 0 0 auto;
   min-width: 0;
   margin-left: auto;
+  /* Room for notification badge (positioned past the button edge) */
+  padding-inline-end: 0.35rem;
 }
 
 .theme-toggle-btn {
@@ -1103,11 +1107,13 @@ th.sort-desc .sort-btn::after {
 
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(10rem, 1fr));
+  /* minmax(10rem,1fr) forces ~40rem minimum row width and gets clipped when shell is overflow:hidden */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.55rem;
   margin: 0 0 0.75rem;
   width: 100%;
   max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -1116,6 +1122,7 @@ th.sort-desc .sort-btn::after {
   border-radius: 10px;
   background: color-mix(in srgb, var(--color-surface) 82%, #0ea5e9 18%);
   padding: 0.5rem 0.65rem 0.55rem;
+  min-width: 0;
 }
 
 html[data-theme="dark"] .kpi-card {
@@ -1344,6 +1351,7 @@ html[data-theme="dark"] tr.coin-row--pin-enter td {
   align-items: center;
   gap: 0.5rem 0.75rem;
   margin-bottom: 0.65rem;
+  min-width: 0;
   padding: 0.4rem 0.55rem;
   border-radius: 8px;
   border: 1px solid var(--border-subtle, #334155);
@@ -2631,18 +2639,28 @@ html[data-theme="dark"] .tab-badge--alert {
 
 @media (max-width: 1200px) {
   .kpi-strip {
-    grid-template-columns: repeat(3, minmax(10rem, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   .kpi-strip {
-    grid-template-columns: repeat(2, minmax(9rem, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   table.qualified-grid thead th#col-name,
   table.qualified-grid td.name-col {
     min-width: 0;
     max-width: min(16rem, 72vw);
+  }
+}
+
+@media (max-width: 420px) {
+  .site-header-bar {
+    flex-wrap: wrap;
+  }
+  .site-header-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
   }
 }

@@ -3924,7 +3924,7 @@
   }
 
   async function forceResetDashboardCachesOnce() {
-    const KEY = "dash_sw_cache_reset_v98_done";
+    const KEY = "dash_sw_cache_reset_v99_done";
     if (!("serviceWorker" in navigator) || !("caches" in window)) return;
     try {
       if (sessionStorage.getItem(KEY) === "1") return;
