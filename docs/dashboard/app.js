@@ -2902,6 +2902,7 @@
         const c = r.coin;
         const rawSym = String(c.symbol || "").toUpperCase();
         const watchOnly = c._watchlist_only === true;
+        const dash = '<span class="cell-muted">\u2014</span>';
         if (watchOnly) {
           const pk = rowViewPinKey(r);
           const sym = escapeHtml(String(c.symbol || ""));
@@ -2914,7 +2915,6 @@
           const pinLab = rowPinKeyDisplayLabel(pk);
           const pinLabel = `Remove ${pinLab} from watchlist`;
           const pinBtn = `<button type="button" class="pin-btn" data-pin-key="${escapeAttr(pk)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">\u2605</button>`;
-          const dash = '<span class="cell-muted">\u2014</span>';
           const exchTitle = r.exchangeId ? EXCHANGE_LABELS[r.exchangeId] || r.exchangeId : "";
           const exLogoUrl = r.exchangeId ? exchangeLogoUrl(r.exchangeId) : "";
           const exLogo = exLogoUrl
@@ -3644,7 +3644,7 @@
   }
 
   async function forceResetDashboardCachesOnce() {
-    const KEY = "dash_sw_cache_reset_v93_done";
+    const KEY = "dash_sw_cache_reset_v94_done";
     if (!("serviceWorker" in navigator) || !("caches" in window)) return;
     try {
       if (sessionStorage.getItem(KEY) === "1") return;
