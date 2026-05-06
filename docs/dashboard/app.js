@@ -2987,7 +2987,6 @@
             : "—";
         const listing = coinListingUrl(c);
         const exchTitle = r.exchangeId ? EXCHANGE_LABELS[r.exchangeId] || r.exchangeId : "";
-        const venueParen = r.exchangeId && exchTitle ? `<span class="name-venue" title="Venue for this row">${escapeHtml(exchTitle)}</span>` : "";
         const nameCore = listing
           ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}" title="Open listing or reference page in a new tab">${name}</a>`
           : `<span title="Name from snapshot (no listing URL)">${name}</span>`;
@@ -2997,7 +2996,7 @@
         const logoHtml = logoUrl
           ? `<img class="coin-logo" src="${escapeAttr(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeAttr(logoFallback)}" data-fallback-svg="${escapeAttr(logoMonogram)}" onerror="if(this.dataset.fallbackStage!=='1'&&this.dataset.fallbackSrc){this.dataset.fallbackStage='1';this.src=this.dataset.fallbackSrc;return;}if(this.dataset.fallbackSvg){this.src=this.dataset.fallbackSvg;this.dataset.fallbackSrc='';return;}this.style.display='none'" />`
           : `<span class="coin-logo coin-logo--fallback" aria-hidden="true"></span>`;
-        const nameCell = `<span class="name-col-wrap"><span class="coin-name-line">${nameCore}</span>${symbolTag}${venueParen}</span>`;
+        const nameCell = `<span class="name-col-wrap"><span class="coin-name-line">${nameCore}</span>${symbolTag}</span>`;
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
@@ -3644,7 +3643,7 @@
   }
 
   async function forceResetDashboardCachesOnce() {
-    const KEY = "dash_sw_cache_reset_v94_done";
+    const KEY = "dash_sw_cache_reset_v95_done";
     if (!("serviceWorker" in navigator) || !("caches" in window)) return;
     try {
       if (sessionStorage.getItem(KEY) === "1") return;

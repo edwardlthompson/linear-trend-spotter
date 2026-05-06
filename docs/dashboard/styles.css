@@ -1483,9 +1483,18 @@ table.qualified-grid tbody td {
 }
 
 .name-col {
-  min-width: 14rem;
-  max-width: 24rem;
+  box-sizing: border-box;
+  min-width: min(11rem, 34vw);
+  max-width: min(22rem, 88vw);
   white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+table.qualified-grid thead th#col-name {
+  box-sizing: border-box;
+  min-width: min(11rem, 34vw);
+  max-width: min(22rem, 88vw);
 }
 
 .name-col-wrap {
@@ -1494,12 +1503,21 @@ table.qualified-grid tbody td {
   align-items: flex-start;
   gap: 0.12rem;
   min-width: 0;
+  max-width: 100%;
 }
 
 .coin-name-line {
   min-width: 0;
+  max-width: 100%;
   white-space: normal;
-  line-height: 1.2;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.coin-name-line .coin-listing-link {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .coin-token {
@@ -1520,14 +1538,6 @@ table.qualified-grid tbody td {
 
 .coin-logo--fallback {
   background: color-mix(in srgb, var(--color-border) 78%, transparent);
-}
-
-.name-venue {
-  font-weight: 500;
-  color: var(--color-muted);
-  font-size: 0.76rem;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
 }
 
 .venue-cell {
@@ -2481,5 +2491,11 @@ html[data-theme="dark"] .tab-badge--alert {
 @media (max-width: 760px) {
   .kpi-strip {
     grid-template-columns: repeat(2, minmax(9rem, 1fr));
+  }
+
+  table.qualified-grid thead th#col-name,
+  table.qualified-grid td.name-col {
+    min-width: 0;
+    max-width: min(16rem, 72vw);
   }
 }
