@@ -54,9 +54,16 @@ def attach_coin_gecko_ids_and_learn(
             if pref:
                 cg_id = pref
         if not cg_id:
-            cg_id = cg_mapper.get_coin_id(coin["symbol"])
+            name_hint = str(coin.get("name") or "").strip()
+            cg_id = cg_mapper.get_coin_id_with_name_hint(
+                coin["symbol"],
+                name_hint if name_hint else None,
+            )
         if not cg_id and coin.get("cmc_symbol"):
-            cg_id = cg_mapper.get_coin_id(str(coin["cmc_symbol"]))
+            cg_id = cg_mapper.get_coin_id_with_name_hint(
+                str(coin["cmc_symbol"]),
+                str(coin.get("name") or "").strip() or None,
+            )
             if cg_id:
                 app_logger.info(
                     f"   ↪️ {coin['symbol']}: CoinGecko ID resolved via CMC symbol {coin['cmc_symbol']}"

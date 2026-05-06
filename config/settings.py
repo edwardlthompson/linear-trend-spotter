@@ -47,7 +47,7 @@ class Settings:
             'UNIFORMITY_MIN_SCORE': 55,
             'UNIFORMITY_PERIOD': 30,
             'TOP_COINS_LIMIT': 4000,
-            'TOP_COINS_PROVIDER': 'coingecko',
+            'TOP_COINS_PROVIDER': 'cmc',
             'ENTRY_NOTIFICATIONS': True,
             'EXIT_NOTIFICATIONS': True,
             'NO_CHANGE_NOTIFICATIONS': False,
@@ -491,7 +491,7 @@ class Settings:
 
     @property
     def top_coins_provider(self) -> str:
-        return str(self._config.get('TOP_COINS_PROVIDER', 'coingecko')).strip().lower()
+        return str(self._config.get('TOP_COINS_PROVIDER', 'cmc')).strip().lower()
     
     @property
     def entry_notifications(self) -> bool:

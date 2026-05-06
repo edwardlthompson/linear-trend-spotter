@@ -10,7 +10,7 @@
     />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Linear Trend Spotter" />
-    <meta property="og:title" content="Qualified Coins Dashboard - Live Trend Scanner" />
+    <meta property="og:title" content="Linear Trend Spotter" />
     <meta
       property="og:description"
       content="Track qualified coins with sortable momentum/health metrics, clickable 7d/30d charts, and backtest strategy comparisons."
@@ -27,10 +27,10 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Qualified Coins Dashboard social preview with charts, metrics, and backtest badges"
+      content="Linear Trend Spotter dashboard preview with charts, metrics, and backtest badges"
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Qualified Coins Dashboard - Live Trend Scanner" />
+    <meta name="twitter:title" content="Linear Trend Spotter" />
     <meta
       name="twitter:description"
       content="Live qualified-coin list with venue filters, 7d/30d charts, and backtest strategy snapshots."
@@ -42,10 +42,12 @@
     <link rel="icon" href="./icons/icon-32.png" type="image/png" sizes="32x32" />
     <link rel="icon" href="./icons/app-icon.svg" type="image/svg+xml" sizes="any" />
     <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="application-name" content="Linear Trend Spotter" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-title" content="LTS" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <title>Qualified coins</title>
+    <title>Linear Trend Spotter</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body class="dashboard-body">
@@ -53,6 +55,26 @@
     <header class="site-header-bar" title="Page title and list notifications">
       <h1 id="mainHeading" title="Current view">Qualified list</h1>
       <div class="site-header-actions">
+        <button
+          type="button"
+          id="themeToggleBtn"
+          class="theme-toggle-btn theme-toggle-btn--system"
+          aria-label="Theme: follow system. Click to switch theme."
+          title="Switch theme: system, light, or dark (saved in this browser)"
+        >
+          <svg class="theme-toggle-svg theme-toggle-svg--system" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <svg class="theme-toggle-svg theme-toggle-svg--light" hidden xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          </svg>
+          <svg class="theme-toggle-svg theme-toggle-svg--dark" hidden xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
         <div id="coinAlertsDropdownRoot" class="coin-alerts-dropdown-root" title="Qualified-list changes (not scanner logs)">
           <button
             type="button"
@@ -68,7 +90,7 @@
               <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
               <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
             </svg>
-            <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread list messages">0</span>
+            <span id="coinAlertsBadge" class="tab-badge tab-badge--alert coin-alerts-badge" hidden title="Unread list messages"></span>
           </button>
           <div
             id="coinAlertsPopover"
@@ -145,7 +167,7 @@
           title="Scanner health, relay, regime, stale snapshot, and rolling log history"
         >
           Logs
-          <span id="opsTabBadge" class="tab-badge tab-badge--alert" hidden title="New log entries since you last opened Logs or marked read">0</span>
+          <span id="opsTabBadge" class="tab-badge tab-badge--alert" hidden title="New log entries since you last opened Logs or marked read"></span>
         </button>
         <button
           type="button"
@@ -166,17 +188,41 @@
     <div id="mainDataPanel" role="tabpanel" aria-labelledby="tabQualified">
       <div id="error" class="error" hidden title="Load or parse error for the snapshot"></div>
       <p id="meta" class="meta" title="Snapshot timestamp, coin count, watchlist size, and next scan hint"></p>
+      <section id="kpiStrip" class="kpi-strip" aria-label="Qualified list summary metrics">
+        <article class="kpi-card" title="Number of rows currently in the qualified/watchlist table after filters">
+          <p class="kpi-label">Qualified coins</p>
+          <p id="kpiQualifiedCount" class="kpi-value">—</p>
+        </article>
+        <article class="kpi-card" title="Number of qualified rows listed on Coinbase after filters">
+          <p class="kpi-label">Coinbase coins</p>
+          <p id="kpiCoinbaseCount" class="kpi-value">—</p>
+        </article>
+        <article class="kpi-card" title="Number of qualified rows listed on Kraken after filters">
+          <p class="kpi-label">Kraken coins</p>
+          <p id="kpiKrakenCount" class="kpi-value">—</p>
+        </article>
+        <article class="kpi-card" title="Number of qualified rows listed on MEXC after filters">
+          <p class="kpi-label">MEXC coins</p>
+          <p id="kpiMexcCount" class="kpi-value">—</p>
+        </article>
+      </section>
+      <div id="snapshotLoadingOverlay" class="snapshot-loading-overlay" role="status" aria-live="polite" aria-busy="true">
+        <div class="snapshot-loading-inner">
+          <span class="snapshot-loading-spinner" aria-hidden="true"></span>
+          <span>Loading qualified snapshot...</span>
+        </div>
+      </div>
       <div class="table-scroll">
         <table class="qualified-grid">
           <caption class="visually-hidden">
             Qualified or watchlist snapshot rows: one table row per coin per exchange venue when listings exist. Sort
             column headers; 7d and 30d split into percent columns and sparkline columns (distance from window high as %
-            beside each chart). Star a symbol on Qualified to watch it. Use #symbol=BTC to highlight rows for that
-            symbol. Column filters refine the grid; Settings exports the current filtered view.
+            beside each chart). Star a symbol on Qualified to watch it. Column filters refine the grid; Settings exports
+            the current filtered view.
           </caption>
           <thead>
             <tr>
-              <th scope="col" id="col-symbol" title="Ticker and watchlist star">
+              <th scope="col" id="col-symbol" title="Coin logo and watchlist star">
                 <button
                   type="button"
                   class="sort-btn"
@@ -184,10 +230,10 @@
                   aria-label="Sort by symbol"
                   title="Sort by symbol A–Z or Z–A"
                 >
-                  Symbol
+                  Logo
                 </button>
               </th>
-              <th scope="col" id="col-name" title="Asset name (venue in parentheses) and listing link when available">
+              <th scope="col" id="col-name" title="Asset name with token abbreviation and listing link when available">
                 <button
                   type="button"
                   class="sort-btn"
@@ -275,6 +321,32 @@
                     <option value="15">Ex ≥15%</option>
                   </select>
                 </div>
+              </th>
+              <th scope="col" id="col-btbest" title="Highest backtest net percent for this coin (top strategy or buy/hold)">
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="btbest"
+                  aria-label="Sort by highest backtest net percent"
+                  title="Sort by highest backtest net percent available for the coin"
+                >
+                  Best BT %
+                </button>
+              </th>
+              <th
+                scope="col"
+                id="col-btvbh"
+                title="Edge of the best optimizer strategy over buy & hold net % (shown only when strategy beats B&amp;H)"
+              >
+                <button
+                  type="button"
+                  class="sort-btn"
+                  data-sort="btvbh"
+                  aria-label="Sort by Bot vs buy and hold edge"
+                  title="Sort by how much the best non–buy/hold strategy beats buy & hold (positive values only)"
+                >
+                  Bot vs B&amp;H
+                </button>
               </th>
               <th scope="col" id="col-uniformity" title="OHLCV uniformity score and optional minimum filter">
                 <div class="th-split th-split--uniformity">
@@ -428,24 +500,25 @@
     </div>
 
     <div id="opsPanel" role="tabpanel" aria-labelledby="tabLogs" class="ops-panel" hidden>
-      <p class="ops-panel-lead" title="Scanner and relay messages are summarized here and in the log list">
-        Operational messages from the scanner run, relay, regime gate, and snapshot age. List changes (new
-        or dropped symbols) use the bell next to the tabs. Log history is kept in this browser (local storage), survives
-        refresh, and entries older than 24 hours are removed automatically.
-      </p>
-      <p class="ops-panel-actions">
-        <button type="button" id="opsMarkReadBtn" class="secondary" title="Clear the Logs tab badge (counts entries since you last marked read)">
-          Mark all read
-        </button>
-        <button
-          type="button"
-          id="telemetryStripDismiss"
-          class="secondary"
-          title="Hide scan / relay / regime strips for this browser tab until you clear site data (session)"
-        >
-          Hide scan strips
-        </button>
-      </p>
+      <div class="ops-panel-intro">
+        <div class="ops-panel-lead-stack" title="Scanner/relay/regime/snapshot here; list changes on the bell; 24h local log">
+          <p class="ops-panel-lead-line">Scanner, relay, regime, and snapshot lines appear in the strips and in the feed.</p>
+          <p class="ops-panel-lead-line">Header bell: qualified list changes · Feed: saved in this browser, 24h retention.</p>
+        </div>
+        <p class="ops-panel-actions">
+          <button type="button" id="opsMarkReadBtn" class="secondary" title="Clear the Logs tab badge (counts entries since you last marked read)">
+            Mark all read
+          </button>
+          <button
+            type="button"
+            id="telemetryStripDismiss"
+            class="secondary"
+            title="Hide scan / relay / regime strips for this browser tab until you clear site data (session)"
+          >
+            Hide scan strips
+          </button>
+        </p>
+      </div>
       <div id="snapshotTelemetryPanel" class="snapshot-telemetry-panel">
         <div id="healthStrip" class="health-strip" role="status" hidden></div>
         <div id="relayHealthStrip" class="health-strip relay-health-strip" role="status" hidden></div>
@@ -464,10 +537,10 @@
       <h2 class="settings-panel-title">Settings</h2>
       <section class="settings-section" aria-labelledby="settingsApiBudgetHeading">
         <h3 id="settingsApiBudgetHeading" class="settings-section-title">API usage &amp; budget</h3>
-        <p class="settings-section-hint">
-          Per-vendor HTTP counts from the scanner metrics snapshot (<code>api_cost_panel</code>) and projected monthly caps when caps are set in config.
-          Optional <code>SCAN_COSTS_ENABLED</code> only adds <code>scan_costs.json</code> on disk.
-          CoinGecko Demo credits start from <strong>3,650</strong> (baseline in <code>app.js</code>); each <strong>new</strong> snapshot adds this scan’s CoinGecko HTTP count as estimated credits, stored in this browser. Reference rate limit <strong>30</strong> req/min.
+        <p class="settings-section-hint settings-section-hint--compact">
+          Usage comes from <code>api_cost_panel</code> in the snapshot (and optional <code>scan_costs.json</code> if <code>SCAN_COSTS_ENABLED</code>).
+          <br />
+          CoinGecko Demo estimate: baseline <strong>3,650</strong> credits; each new snapshot adds this scan’s CoinGecko HTTP count. Cap reference: <strong>30</strong> req/min.
         </p>
         <div
           id="apiBudgetPanelSettings"
@@ -517,19 +590,6 @@
             title="Subscribe or unsubscribe from list-change push notifications"
           >
             List change push…
-          </button>
-        </p>
-      </section>
-      <section class="settings-section" aria-labelledby="settingsThemeHeading">
-        <h3 id="settingsThemeHeading" class="settings-section-title">Appearance</h3>
-        <p class="settings-actions">
-          <button
-            id="themeCycleBtn"
-            type="button"
-            class="secondary"
-            title="Cycle theme: system → light → dark (saved in this browser)"
-          >
-            Theme: system
           </button>
         </p>
       </section>
@@ -635,6 +695,19 @@
       </p>
     </footer>
     </div>
+
+    <dialog id="notifyPromptDialog" class="notify-prompt-dialog">
+      <div class="notify-prompt-box">
+        <h2 class="notify-prompt-title">Enable notifications?</h2>
+        <p class="notify-prompt-text">
+          Get browser alerts when coins enter or leave the qualified list. You can turn this off anytime in Settings.
+        </p>
+        <div class="notify-prompt-actions">
+          <button type="button" id="notifyPromptEnable" class="notify-prompt-enable">Enable</button>
+          <button type="button" id="notifyPromptLater" class="secondary">Not now</button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog id="chartFsDialog" class="chart-fs-dialog">
       <div class="chart-fs-box">

@@ -1,6 +1,6 @@
 {
-  "name": "Linear Trend Spotter — Qualified coins",
-  "short_name": "Qualified",
+  "name": "Linear Trend Spotter",
+  "short_name": "LTS",
   "description": "Read-only dashboard for the scanner qualified-coin JSON snapshot.",
   "start_url": "./index.html",
   "scope": "./",

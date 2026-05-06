@@ -12,15 +12,17 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 
 - **Scanner worker:** scheduled runs (e.g. Render), SQLite caches, CoinGecko/CMC/Polygon as configured, anomaly hints in logs.
 - **Qualified snapshot:** JSON consumed by the static UI under `docs/dashboard/`; relay POST optional.
-- **Dashboard:** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot—distinct styling for 7d vs 30d), optional **per-chart % below high** filters on **7d chart** and **30d chart** headers (each excludes rows independently using that window’s distance-from-high), watchlist pins, CSV/JSON export, **List changes** bell feed with a **timestamp on each line**, Tier-A poll alerts, Tier-B push—see **`docs/WEB_DASHBOARD.md`**.
+- **Dashboard (static PWA):** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot), optional **per-chart % below high** filters on **7d** / **30d** chart headers, watchlist pins, CSV/JSON export, **List changes** bell + **Logs** tab badges (hidden when zero), theme toggle (**LTS** short name / **Linear Trend Spotter** full title in manifest), Tier-A poll alerts, Tier-B push—see **`docs/WEB_DASHBOARD.md`**.
 - **Backtesting:** per-coin strategy sweep artifacts (`backtest_results.json`, checkpoints)—library boundary documented in **`docs/BACKTESTING_LIBRARY.md`**.
 
 ## Quick start
 
 1. **Python 3.11+**, `pip install -r requirements.txt` (use **`requirements-ci.txt`** where CI does).
-2. Copy **`.env.example`** → `.env`; set at least **`CMC_API_KEY`** (and optional **`COINGECKO_API_KEY`** for production-grade CoinGecko).
+2. Copy **`.env.example`** → `.env`; set at least **`CMC_API_KEY`** (and optional **`COINGECKO_API_KEY`** for production-grade CoinGecko—still used for OHLCV, tickers, and the `/coins/list` id mapper).
 3. Optional **`config.json`** from **`config.json.example`**—sensible defaults already live in **`config/settings.py`**.
 4. Run **`python main.py`** (or your scheduler) from repo root; snapshot lands under **`DATA_DIR`** / **`qualified_public_snapshot.json`** when enabled.
+
+**API budget:** defaults use **`TOP_COINS_PROVIDER`: `"cmc"`** so the **ranked universe** comes from **one** CoinMarketCap `listings/latest` call per scan instead of many CoinGecko `/coins/markets` pages. CoinGecko ids for OHLCV and exchange tickers are resolved via the local mapper (including **name-aware** matching when CMC supplies symbol + name). To spend CoinGecko credits last on hourly bars, set **`OHLCV_UNIFORMITY_SOURCE_ORDER`** (e.g. `cmc,polygon,coingecko`)—see **`docs/COIN_API_CREDIT_STRATEGY.md`**.
 
 **Live dashboard JSON:** set **`QUALIFIED_SNAPSHOT_RELAY_URL`** + **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on the worker and deploy **`snapshot_server/`** (see **`render.yaml`** fragment).
 
@@ -51,7 +53,7 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 - **`docs/API_PROVIDER_DEEP_ANALYSIS.md`** — which API fits which pipeline stage  
 - **`docs/CROSS_PROVIDER_IDENTITY.md`** — translating ids/slugs across vendors; **`identity`** on qualified snapshot rows  
 
-Optional **`config.json`** keys include **`COINGECKO_CALLS_PER_MINUTE`**, **`CMC_CALLS_PER_MINUTE`**, **`POLYGON_CALLS_PER_MINUTE`** (see **`config.json.example`**).
+Optional **`config.json`** keys include **`TOP_COINS_PROVIDER`** (`cmc` or `coingecko`), **`OHLCV_UNIFORMITY_SOURCE_ORDER`**, **`COINGECKO_CALLS_PER_MINUTE`**, **`CMC_CALLS_PER_MINUTE`**, **`POLYGON_CALLS_PER_MINUTE`** (see **`config.json.example`**).
 
 ## Contributing / CI
 

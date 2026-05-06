@@ -2,8 +2,12 @@
  * Qualified dashboard service worker (Milestone Q8).
  * Bump CACHE_VERSION when static assets change so deploys pick up fresh shells.
  */
-const CACHE_VERSION = "qualified-dash-v76";
+const CACHE_VERSION = "qualified-dash-v93";
 const CACHE_NAME = `qualified-dash-assets-${CACHE_VERSION}`;
+const REMOTE_IMAGE_HOSTS = new Set([
+  "cdn.jsdelivr.net",
+  "coinicons-api.vercel.app",
+]);
 const ASSETS = [
   "./index.html",
   "./app.js",
@@ -14,6 +18,12 @@ const ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/app-icon.svg",
+  "./icons/exchanges/coinbase.svg",
+  "./icons/exchanges/kraken.svg",
+  "./icons/exchanges/mexc.svg",
+  "./icons/exchanges/coinbase.png",
+  "./icons/exchanges/kraken.png",
+  "./icons/exchanges/mexc.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -93,6 +103,22 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) {
+    if (req.destination === "image" && REMOTE_IMAGE_HOSTS.has(url.hostname)) {
+      event.respondWith(
+        caches.match(req).then((hit) => {
+          if (hit) return hit;
+          return fetch(req).then((resp) => {
+            if (!resp) return resp;
+            const okToCache = resp.type === "opaque" || resp.ok;
+            if (okToCache) {
+              const copy = resp.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+            }
+            return resp;
+          });
+        }),
+      );
+    }
     return;
   }
   /* Same-origin JSON only (e.g. mirrored snapshot); never serve from cache. */

@@ -186,7 +186,30 @@ class CoinGeckoMapper:
         if result:
             return result[0]
         return None
-    
+
+    def get_coin_id_with_name_hint(self, symbol: str, name: Optional[str]) -> Optional[str]:
+        """
+        Resolve CoinGecko id for a ticker, preferring a row whose ``name`` matches (for duplicate symbols).
+        Used when ``TOP_COINS_PROVIDER`` is CMC: listings carry symbol + name but not CoinGecko id.
+        """
+        if not symbol:
+            return None
+        sym = symbol.upper()
+        nm = str(name or "").strip()
+        if nm:
+            cursor = self._execute(
+                """
+                SELECT coingecko_id FROM symbol_mapping
+                WHERE symbol = ? AND lower(trim(coalesce(name, ''))) = lower(trim(?))
+                LIMIT 1
+                """,
+                (sym, nm),
+            )
+            row = cursor.fetchone()
+            if row:
+                return row[0]
+        return self.get_coin_id(sym)
+
     def get_coin_ids_batch(self, symbols: List[str]) -> Dict[str, str]:
         """
         Get CoinGecko IDs for multiple symbols in one query

@@ -21,6 +21,8 @@
   const LS_PREV_SYMBOLS = "qualified_dash_prev_symbols_json";
   const LS_PREV_SCHEMA = "qualified_dash_prev_schema_version";
   const LS_THEME = "qualified_dash_theme";
+  /** Last measured `#mainDataPanel` width so Logs/Settings match the qualified column when it is hidden. */
+  const LS_SHELL_MIN_W = "qualified_dash_shell_min_w_v1";
   /** Tier-A poll: previous filtered symbol list under current UI filters (JSON array string). */
   /** Tier-A: JSON array of `SYMBOL|exchangeId` row keys for filtered table diff (v2). */
   const LS_POLL_FILTERED_ROWS = "qualified_dash_poll_filtered_rows_v2";
@@ -72,6 +74,8 @@
   const DASHBOARD_COINGECKO_DEMO_RPM = 30;
   const LS_CG_CREDITS_USED = "qualified_dash_cg_credits_used_v2";
   const LS_CG_LAST_SNAP_ISO = "qualified_dash_cg_last_snapshot_iso_v2";
+  /** First-visit prompt for browser notifications (Tier-A); dismissed after user chooses. */
+  const LS_NOTIFY_FIRST_PROMPT_DONE = "qualified_dash_notify_first_prompt_done_v1";
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
   /** Treat snapshot timestamps before this as invalid for age/stale (epoch placeholders, corrupt data). */
@@ -85,6 +89,8 @@
     "g7hi",
     "g30pct",
     "g30hi",
+    "btbest",
+    "btvbh",
     "uniformity",
     "health",
     "volaccel",
@@ -167,13 +173,22 @@
     if (meta) meta.setAttribute("content", eff === "dark" ? "#0f172a" : "#f8fafc");
   }
 
-  function themeModeLabel() {
-    return getSavedThemeMode();
-  }
-
   function updateThemeButtonLabel() {
-    const el = document.getElementById("themeCycleBtn");
-    if (el) el.textContent = `Theme: ${themeModeLabel()}`;
+    const el = document.getElementById("themeToggleBtn");
+    if (!el) return;
+    const mode = getSavedThemeMode();
+    const m = mode === "light" || mode === "dark" ? mode : "system";
+    el.classList.remove("theme-toggle-btn--system", "theme-toggle-btn--light", "theme-toggle-btn--dark");
+    el.classList.add(`theme-toggle-btn--${m}`);
+    for (const svg of el.querySelectorAll(".theme-toggle-svg")) {
+      svg.hidden = true;
+    }
+    const active = el.querySelector(`.theme-toggle-svg--${mode}`) || el.querySelector(".theme-toggle-svg--system");
+    if (active) active.hidden = false;
+    const labels = { system: "follow system", light: "light", dark: "dark" };
+    const lab = labels[mode] || mode;
+    el.setAttribute("aria-label", `Theme: ${lab}. Click to switch (system → light → dark).`);
+    el.title = `Theme: ${lab}. Click to cycle: system, light, dark (saved in this browser).`;
   }
 
   function cycleThemeMode() {
@@ -200,6 +215,11 @@
 
   const elError = document.getElementById("error");
   const elMeta = document.getElementById("meta");
+  const elKpiQualifiedCount = document.getElementById("kpiQualifiedCount");
+  const elKpiCoinbaseCount = document.getElementById("kpiCoinbaseCount");
+  const elKpiKrakenCount = document.getElementById("kpiKrakenCount");
+  const elKpiMexcCount = document.getElementById("kpiMexcCount");
+  const elSnapshotLoadingOverlay = document.getElementById("snapshotLoadingOverlay");
   const elApiBudgetPanelSettings = document.getElementById("apiBudgetPanelSettings");
   const elExchangeFilterDetails = document.getElementById("exchangeFilterDetails");
   const elExchangeFilterApply = document.getElementById("exchangeFilterApply");
@@ -230,6 +250,10 @@
   const elSnapshotTelemetryPanel = document.getElementById("snapshotTelemetryPanel");
   const elTelemetryStripDismiss = document.getElementById("telemetryStripDismiss");
   const elOpsMarkReadBtn = document.getElementById("opsMarkReadBtn");
+  const elThemeToggle = document.getElementById("themeToggleBtn");
+  const elNotifyPromptDialog = document.getElementById("notifyPromptDialog");
+  const elNotifyPromptEnable = document.getElementById("notifyPromptEnable");
+  const elNotifyPromptLater = document.getElementById("notifyPromptLater");
   const elCoinAlertsBell = document.getElementById("coinAlertsBell");
   const elCoinAlertsPopover = document.getElementById("coinAlertsPopover");
   const elCoinAlertsDropdownRoot = document.getElementById("coinAlertsDropdownRoot");
@@ -237,7 +261,6 @@
   const elOpsTabBadge = document.getElementById("opsTabBadge");
   const elNotify = document.getElementById("notifyBtn");
   const elPollInterval = document.getElementById("pollIntervalSelect");
-  const elThemeCycle = document.getElementById("themeCycleBtn");
   const elExportBtn = document.getElementById("exportBtn");
   const elExportFormatSelect = document.getElementById("exportFormatSelect");
   const elPushTierB = document.getElementById("pushTierBBtn");
@@ -317,7 +340,12 @@
     if (!elOpsTabBadge) return;
     const ack = getOpsLastAckMs();
     const unread = opsFeedItems.filter((i) => i.t > ack).length;
-    elOpsTabBadge.hidden = unread === 0;
+    if (unread === 0) {
+      elOpsTabBadge.hidden = true;
+      elOpsTabBadge.textContent = "";
+      return;
+    }
+    elOpsTabBadge.hidden = false;
     elOpsTabBadge.textContent = unread > 99 ? "99+" : String(unread);
   }
 
@@ -485,6 +513,59 @@
     elWatchlistBadge.hidden = n === 0;
   }
 
+  /** Tier-A: turn notifications on or off (same logic as Settings “Enable update alerts”). */
+  async function toggleTierANotifications() {
+    if (!("Notification" in window)) {
+      showError("Browser notifications are not supported here.");
+      return;
+    }
+    if (notifyAlertsEnabled) {
+      stopPoll();
+      notifyAlertsEnabled = false;
+      try {
+        localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
+        localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
+      } catch {
+        /* ignore */
+      }
+      syncNotifyTierAButton();
+      if (lastPayload) render(lastPayload);
+      return;
+    }
+    let perm = Notification.permission;
+    if (perm === "default") {
+      perm = await Notification.requestPermission();
+    }
+    if (perm !== "granted") {
+      showError(
+        "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
+      );
+      syncNotifyTierAButton();
+      return;
+    }
+    await registerServiceWorker();
+    notifyAlertsEnabled = true;
+    try {
+      localStorage.setItem(LS_TIER_A_ALERTS_ENABLED, "1");
+    } catch {
+      /* ignore */
+    }
+    persistPollIntervalFromUi();
+    localStorage.removeItem(LS_POLL_FILTERED_ROWS);
+    localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
+    try {
+      localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
+    } catch {
+      /* ignore */
+    }
+    clearError();
+    await loadSnapshot({ showErrors: true, forNotify: false });
+    startPoll();
+    syncPushTierBVisibility();
+    void refreshPushTierBLabel();
+    syncNotifyTierAButton();
+  }
+
   function syncNotifyTierAButton() {
     if (!elNotify) return;
     const perm = "Notification" in window ? Notification.permission : "denied";
@@ -515,7 +596,55 @@
     syncCoinBellBadge();
   }
 
+  function readCachedShellMinWidth() {
+    try {
+      const v = parseFloat(localStorage.getItem(LS_SHELL_MIN_W));
+      return Number.isFinite(v) && v > 0 ? v : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function persistShellMinWidth(w) {
+    try {
+      localStorage.setItem(LS_SHELL_MIN_W, String(Math.round(w)));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function capShellWidthToBody(px) {
+    const shell = document.querySelector(".dashboard-shell");
+    if (!shell || !Number.isFinite(px)) return px;
+    const host = shell.parentElement;
+    const cap = host ? host.getBoundingClientRect().width : document.documentElement.clientWidth;
+    return Math.min(Math.max(0, px), cap);
+  }
+
+  /** Keep `.dashboard-shell` at least as wide as the main data column (KPI + table), including when that panel is hidden. */
+  function refreshDashboardShellWidth() {
+    const shell = document.querySelector(".dashboard-shell");
+    if (!shell) return;
+    const mainP = document.getElementById("mainDataPanel");
+    let w = null;
+    if (mainP && !mainP.hidden) {
+      const rw = mainP.getBoundingClientRect().width;
+      if (rw > 0) {
+        w = rw;
+        persistShellMinWidth(rw);
+      }
+    }
+    if (w == null) w = readCachedShellMinWidth();
+    if (w != null && w > 0) {
+      shell.style.minWidth = `${Math.ceil(capShellWidthToBody(w))}px`;
+    }
+  }
+
   function syncTabVisuals() {
+    const mainPPre = document.getElementById("mainDataPanel");
+    if (mainPPre && !mainPPre.hidden) {
+      refreshDashboardShellWidth();
+    }
     const onQ = activeView === "qualified";
     const onW = activeView === "watchlist";
     const onLogs = activeView === "logs";
@@ -524,7 +653,7 @@
     const tw = document.getElementById("tabWatchlist");
     const tLogs = document.getElementById("tabLogs");
     const tSettings = document.getElementById("tabSettings");
-    const mainP = document.getElementById("mainDataPanel");
+    const mainP = mainPPre || document.getElementById("mainDataPanel");
     const opsP = document.getElementById("opsPanel");
     const settingsP = document.getElementById("settingsPanel");
     if (tq && tw && tLogs && tSettings) {
@@ -556,6 +685,13 @@
     syncOpsTabBadge();
     syncCoinBellBadge();
     syncNotifyTierAButton();
+    if (mainP && !mainP.hidden) {
+      window.requestAnimationFrame(() => {
+        refreshDashboardShellWidth();
+      });
+    } else {
+      refreshDashboardShellWidth();
+    }
   }
 
   function setActiveView(view) {
@@ -616,6 +752,18 @@
   syncTabVisuals();
   renderCoinAlertsList();
   updateSortHeaderClasses();
+
+  const elMainDataPanelRo = document.getElementById("mainDataPanel");
+  if (typeof ResizeObserver !== "undefined" && elMainDataPanelRo) {
+    const shellRo = new ResizeObserver(() => {
+      refreshDashboardShellWidth();
+    });
+    shellRo.observe(elMainDataPanelRo);
+  }
+  window.addEventListener("resize", () => {
+    refreshDashboardShellWidth();
+  });
+  refreshDashboardShellWidth();
 
   function getSnapshotUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -1151,6 +1299,104 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  /** Public icon CDN; may miss some symbols, so callers should provide visual fallback. */
+  function coinLogoUrl(c) {
+    const sym = String(c.symbol || "").trim().toLowerCase();
+    if (!sym) return "";
+    return `./icons/coins/${encodeURIComponent(sym)}.png`;
+  }
+
+  function coinLogoFallbackUrl(c) {
+    const sym = String(c.symbol || "").trim().toLowerCase();
+    if (!sym) return "";
+    return `https://coinicons-api.vercel.app/api/icon/${encodeURIComponent(sym)}`;
+  }
+
+  function coinLogoMonogramDataUrl(symbol) {
+    const raw = String(symbol || "").trim().toUpperCase();
+    const label = (raw || "?").slice(0, 3);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" rx="64" ry="64" fill="#1f2937"/><text x="50%" y="55%" text-anchor="middle" font-family="Arial,sans-serif" font-size="44" font-weight="700" fill="#f8fafc">${label}</text></svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  }
+
+  function exchangeLogoUrl(exchangeId) {
+    const ex = String(exchangeId || "").trim().toLowerCase();
+    if (ex === "coinbase") return "./icons/exchanges/coinbase.png";
+    if (ex === "kraken") return "./icons/exchanges/kraken.png";
+    if (ex === "mexc") return "./icons/exchanges/mexc.png";
+    return "";
+  }
+
+  function rowBestBacktestNetPct(r) {
+    const c = r.coin;
+    const vals = [];
+    const rows = Array.isArray(c.backtest_top_strategies) ? c.backtest_top_strategies : [];
+    for (const x of rows) {
+      const n = Number(x && x.net_pct);
+      if (Number.isFinite(n)) vals.push(n);
+    }
+    if (c.backtest_buy_hold && typeof c.backtest_buy_hold === "object") {
+      const b = Number(c.backtest_buy_hold.net_pct);
+      if (Number.isFinite(b)) vals.push(b);
+    }
+    if (!vals.length) return null;
+    return Math.max(...vals);
+  }
+
+  function rowBuyHoldNetPct(r) {
+    const c = r.coin;
+    if (!c.backtest_buy_hold || typeof c.backtest_buy_hold !== "object") return null;
+    const n = Number(c.backtest_buy_hold.net_pct);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Max `net_pct` among `backtest_top_strategies` rows that are not buy-and-hold (B&H comes from `backtest_buy_hold`). */
+  function rowBestStrategyNetPctExcludingBh(r) {
+    const c = r.coin;
+    const rows = Array.isArray(c.backtest_top_strategies) ? c.backtest_top_strategies : [];
+    let best = null;
+    for (const x of rows) {
+      if (!x || typeof x !== "object") continue;
+      if (String(x.indicator || "").trim() === "B&H") continue;
+      const n = Number(x.net_pct);
+      if (!Number.isFinite(n)) continue;
+      best = best == null ? n : Math.max(best, n);
+    }
+    return best;
+  }
+
+  /** Positive gap (strategy net % minus buy & hold) when the best strategy beats B&H; otherwise null. */
+  function rowBotVsBhPositiveGap(r) {
+    const bh = rowBuyHoldNetPct(r);
+    const strat = rowBestStrategyNetPctExcludingBh(r);
+    if (bh == null || strat == null) return null;
+    const gap = strat - bh;
+    if (!Number.isFinite(gap) || gap <= 0) return null;
+    return gap;
+  }
+
+  function computeScoreRanges(viewRows) {
+    const rows = Array.isArray(viewRows) ? viewRows : [];
+    const finiteStats = (vals) => {
+      const nums = vals.filter((n) => Number.isFinite(n));
+      if (!nums.length) return { min: null, max: null };
+      return { min: Math.min(...nums), max: Math.max(...nums) };
+    };
+    return {
+      health: finiteStats(rows.map((r) => coinHealth(r.coin))),
+      uniformity: finiteStats(rows.map((r) => coinUniformity(r.coin))),
+      btBest: finiteStats(rows.map((r) => rowBestBacktestNetPct(r))),
+    };
+  }
+
+  function pctInRange(val, range) {
+    if (!Number.isFinite(val)) return null;
+    if (!range || !Number.isFinite(range.min) || !Number.isFinite(range.max)) return null;
+    if (range.max <= range.min) return 100;
+    const pct = ((val - range.min) / (range.max - range.min)) * 100;
+    return Math.max(0, Math.min(100, pct));
+  }
+
   function formatUsdVolDisplay(val) {
     if (val == null || val === "" || val === "N/A") return "—";
     if (typeof val === "number" && Number.isFinite(val)) {
@@ -1325,6 +1571,18 @@
           cmp = (fa != null ? fa : -1e9) - (fb != null ? fb : -1e9);
           break;
         }
+        case "btbest": {
+          const na = rowBestBacktestNetPct(a);
+          const nb = rowBestBacktestNetPct(b);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
+        }
+        case "btvbh": {
+          const na = rowBotVsBhPositiveGap(a);
+          const nb = rowBotVsBhPositiveGap(b);
+          cmp = (na != null ? na : -1e9) - (nb != null ? nb : -1e9);
+          break;
+        }
         case "volaccel": {
           const na = coinVolAccelPct(ca);
           const nb = coinVolAccelPct(cb);
@@ -1420,13 +1678,7 @@
   }
 
   function getSymbolFromUrl() {
-    const h = window.location.hash.replace(/^#/, "");
-    if (h.startsWith("symbol=")) {
-      const v = h.slice("symbol=".length).trim();
-      return v ? v.toUpperCase() : "";
-    }
-    const q = new URLSearchParams(window.location.search).get("symbol");
-    return q ? String(q).trim().toUpperCase() : "";
+    return "";
   }
 
   function applyHashHighlight() {
@@ -2228,7 +2480,7 @@
     const show = !drawerOpen && (feedN > 0 || bannerUnread);
     elCoinAlertsBadge.hidden = !show;
     if (!show) {
-      elCoinAlertsBadge.textContent = "0";
+      elCoinAlertsBadge.textContent = "";
       return;
     }
     if (feedN > 0) {
@@ -2630,9 +2882,9 @@
     return `<div class="bt-cell">${parts.join("")}</div>`;
   }
 
-  const COL_COUNT = 12;
+  const COL_COUNT = 14;
 
-  function renderRowsHtml(viewRows, pinnedSet, pinEnterSet) {
+  function renderRowsHtml(viewRows, pinnedSet, pinEnterSet, scoreRanges) {
     if (!viewRows.length) {
       let msg;
       if (activeView === "watchlist") {
@@ -2653,26 +2905,38 @@
         if (watchOnly) {
           const pk = rowViewPinKey(r);
           const sym = escapeHtml(String(c.symbol || ""));
+          const logoUrl = coinLogoUrl(c);
+          const logoFallback = coinLogoFallbackUrl(c);
+          const logoMonogram = coinLogoMonogramDataUrl(c.symbol);
+          const logoHtml = logoUrl
+            ? `<img class="coin-logo" src="${escapeAttr(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeAttr(logoFallback)}" data-fallback-svg="${escapeAttr(logoMonogram)}" onerror="if(this.dataset.fallbackStage!=='1'&&this.dataset.fallbackSrc){this.dataset.fallbackStage='1';this.src=this.dataset.fallbackSrc;return;}if(this.dataset.fallbackSvg){this.src=this.dataset.fallbackSvg;this.dataset.fallbackSrc='';return;}this.style.display='none'" />`
+            : `<span class="coin-logo coin-logo--fallback" aria-hidden="true"></span>`;
           const pinLab = rowPinKeyDisplayLabel(pk);
           const pinLabel = `Remove ${pinLab} from watchlist`;
           const pinBtn = `<button type="button" class="pin-btn" data-pin-key="${escapeAttr(pk)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">\u2605</button>`;
           const dash = '<span class="cell-muted">\u2014</span>';
           const exchTitle = r.exchangeId ? EXCHANGE_LABELS[r.exchangeId] || r.exchangeId : "";
+          const exLogoUrl = r.exchangeId ? exchangeLogoUrl(r.exchangeId) : "";
+          const exLogo = exLogoUrl
+            ? `<img class="exchange-logo" src="${escapeAttr(exLogoUrl)}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'" />`
+            : "";
           const venueCell =
             r.exchangeId && exchTitle
-              ? `<span class="venue-cell" title="${escapeAttr(`Watchlist pin for ${exchTitle}`)}">${escapeHtml(exchTitle)}</span>`
+              ? `<span class="venue-cell exchange-chip exchange-chip--${escapeAttr(r.exchangeId)}" title="${escapeAttr(`Watchlist pin for ${exchTitle}`)}">${exLogo}<span>${escapeHtml(exchTitle)}</span></span>`
               : dash;
           const exAttr = r.exchangeId ? escapeAttr(r.exchangeId) : "";
           const isPinEnter = pinEnterSet.has(pk);
           const wlRowClass = ["coin-row", "coin-row--watchlist-only"];
           if (isPinEnter) wlRowClass.push("coin-row--pin-enter");
           return `<tr class="${wlRowClass.join(" ")}" data-symbol="${escapeAttr(rawSym)}" data-exchange="${exAttr}">
-          <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong></span></td>
+          <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner" title="${escapeAttr(sym || "Unknown symbol")}">${pinBtn}${logoHtml}</span></td>
           <td headers="col-name"><span class="cell-muted" title="Symbol not in the current qualified snapshot">Not in snapshot</span></td>
           <td headers="col-g7pct" class="num">${dash}</td>
           <td headers="col-g7chart" class="num">${dash}</td>
           <td headers="col-g30pct" class="num">${dash}</td>
           <td headers="col-g30chart" class="num">${dash}</td>
+          <td headers="col-btbest" class="num">${dash}</td>
+          <td headers="col-btvbh" class="num">${dash}</td>
           <td headers="col-uniformity" class="num">${dash}</td>
           <td headers="col-health" class="num">${dash}</td>
           <td headers="col-volaccel" class="num">${dash}</td>
@@ -2690,6 +2954,7 @@
         const sym = escapeHtml(String(c.symbol || ""));
         const nameRaw = String(c.name || "");
         const name = escapeHtml(nameRaw);
+        const logoUrl = coinLogoUrl(c);
         const g = c.gains || {};
         const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
         const g30pct = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
@@ -2722,14 +2987,17 @@
             : "—";
         const listing = coinListingUrl(c);
         const exchTitle = r.exchangeId ? EXCHANGE_LABELS[r.exchangeId] || r.exchangeId : "";
-        const venueParen =
-          r.exchangeId && exchTitle
-            ? ` <span class="name-venue" title="Venue for this row">(${escapeHtml(exchTitle)})</span>`
-            : "";
+        const venueParen = r.exchangeId && exchTitle ? `<span class="name-venue" title="Venue for this row">${escapeHtml(exchTitle)}</span>` : "";
         const nameCore = listing
           ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}" title="Open listing or reference page in a new tab">${name}</a>`
           : `<span title="Name from snapshot (no listing URL)">${name}</span>`;
-        const nameCell = `<span class="name-col-wrap">${nameCore}${venueParen}</span>`;
+        const symbolTag = sym ? `<span class="coin-token">${sym}</span>` : "";
+        const logoFallback = coinLogoFallbackUrl(c);
+        const logoMonogram = coinLogoMonogramDataUrl(c.symbol);
+        const logoHtml = logoUrl
+          ? `<img class="coin-logo" src="${escapeAttr(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeAttr(logoFallback)}" data-fallback-svg="${escapeAttr(logoMonogram)}" onerror="if(this.dataset.fallbackStage!=='1'&&this.dataset.fallbackSrc){this.dataset.fallbackStage='1';this.src=this.dataset.fallbackSrc;return;}if(this.dataset.fallbackSvg){this.src=this.dataset.fallbackSvg;this.dataset.fallbackSrc='';return;}this.style.display='none'" />`
+          : `<span class="coin-logo coin-logo--fallback" aria-hidden="true"></span>`;
+        const nameCell = `<span class="name-col-wrap"><span class="coin-name-line">${nameCore}</span>${symbolTag}${venueParen}</span>`;
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
           : "";
@@ -2737,22 +3005,56 @@
         const pinLabel = isPinned ? `Remove ${pinLab} from watchlist` : `Add ${pinLab} to watchlist`;
         const pinChar = isPinned ? "\u2605" : "\u2606";
         const pinBtn = `<button type="button" class="pin-btn" data-pin-key="${escapeAttr(pk)}" aria-pressed="${isPinned ? "true" : "false"}" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">${pinChar}</button>`;
+        const exLogoUrl = r.exchangeId ? exchangeLogoUrl(r.exchangeId) : "";
+        const exLogo = exLogoUrl
+          ? `<img class="exchange-logo" src="${escapeAttr(exLogoUrl)}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'" />`
+          : "";
         const venueCell =
           r.exchangeId && exchTitle
-            ? `<span class="venue-cell" title="${escapeAttr(`24h volume row for ${exchTitle}`)}">${escapeHtml(exchTitle)}</span>`
+            ? `<span class="venue-cell exchange-chip exchange-chip--${escapeAttr(r.exchangeId)}" title="${escapeAttr(`24h volume row for ${exchTitle}`)}">${exLogo}<span>${escapeHtml(exchTitle)}</span></span>`
             : '<span class="cell-muted">—</span>';
         const volCell = `<span title="Approximate 24h USD volume on this venue from snapshot">${escapeHtml(formatUsdVolDisplay(r.volUsd))}</span>`;
         const btHtml = backtestCellHtml(c);
+        const btBest = rowBestBacktestNetPct(r);
+        const btBestText = btBest != null ? `${btBest >= 0 ? "+" : ""}${btBest.toFixed(1)}%` : "—";
+        const gain7Class = g7 !== "—" && Number(g7) > 0 ? "gain-pos" : "";
+        const gain30Class = g30pct !== "—" && Number(g30pct) > 0 ? "gain-pos" : "";
+        const healthVal = coinHealth(c);
+        const healthPct = healthVal != null ? pctInRange(healthVal, scoreRanges && scoreRanges.health) : null;
+        const healthChip =
+          healthVal != null && healthPct != null
+            ? `<span class="health-chip"><span class="health-ring" style="--pct:${healthPct.toFixed(1)}"></span><span>${h}</span></span>`
+            : `<span>${h}</span>`;
+        const uniformVal = coinUniformity(c);
+        const uniformPct = uniformVal != null ? pctInRange(uniformVal, scoreRanges && scoreRanges.uniformity) : null;
+        const uniformChip =
+          uniformVal != null && uniformPct != null
+            ? `<span class="health-chip"><span class="health-ring health-ring--uniformity" style="--pct:${uniformPct.toFixed(1)}"></span><span>${u}</span></span>`
+            : `<span>${u}</span>`;
+        const btBestPctRaw = btBest != null ? pctInRange(btBest, scoreRanges && scoreRanges.btBest) : null;
+        const btBestPct = btBestPctRaw == null ? 0 : btBestPctRaw;
+        const btCellClass = `btbest-cell${btBest == null ? " btbest-cell--na" : ""}`;
+        const btTextClass = btBest != null && btBestPct >= 56 ? "btbest-text--dark" : "btbest-text--light";
+        const btBestStyle = ` style="--pct:${btBestPct.toFixed(1)}"`;
+        const btvbhGap = rowBotVsBhPositiveGap(r);
+        const btvbhTitle =
+          "Best non–buy/hold strategy net % minus buy & hold (shown only when the strategy wins)";
+        const btvbhCell =
+          btvbhGap != null
+            ? `<span class="gain-pos" title="${escapeAttr(btvbhTitle)}">+${btvbhGap.toFixed(1)}%</span>`
+            : dash;
         const exAttr = r.exchangeId ? escapeAttr(r.exchangeId) : "";
         return `<tr class="${rowClasses.join(" ")}" data-symbol="${escapeAttr(rawSym)}" data-exchange="${exAttr}">
-          <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}<strong>${sym}</strong>${badge}</span></td>
+          <td headers="col-symbol" class="sym-cell"><span class="sym-cell-inner">${pinBtn}${logoHtml}${badge}</span></td>
           <td headers="col-name" class="name-col">${nameCell}</td>
-          <td headers="col-g7pct" class="num"><span class="visually-hidden">7-day gain </span><span title="${escapeAttr(g7Title)}">${g7}%</span></td>
+          <td headers="col-g7pct" class="num"><span class="visually-hidden">7-day gain </span><span class="${gain7Class}" title="${escapeAttr(g7Title)}">${g7}%</span></td>
           <td headers="col-g7chart" class="num spark-td" title="${escapeAttr(g7Title)}">${spark7Cell}</td>
-          <td headers="col-g30pct" class="num"><span class="visually-hidden">30-day gain </span><span title="${escapeAttr(g30Title)}">${g30pct}%</span></td>
+          <td headers="col-g30pct" class="num"><span class="visually-hidden">30-day gain </span><span class="${gain30Class}" title="${escapeAttr(g30Title)}">${g30pct}%</span></td>
           <td headers="col-g30chart" class="num spark-td" title="${escapeAttr(g30Title)}">${spark30Cell}</td>
-          <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${u}</span></td>
-          <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${h}</span></td>
+          <td headers="col-btbest" class="num ${btCellClass}"${btBestStyle}><span class="${btTextClass}" title="Highest backtest net percent">${btBestText}</span></td>
+          <td headers="col-btvbh" class="num"><span class="visually-hidden">Bot vs buy and hold </span>${btvbhCell}</td>
+          <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${uniformChip}</span></td>
+          <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${healthChip}</span></td>
           <td headers="col-volaccel" class="num"><span class="visually-hidden">Volume acceleration </span><span title="Volume vs baseline window from snapshot">${volStr}</span></td>
           <td headers="col-venue" class="exch-col">${venueCell}</td>
           <td headers="col-vol24h" class="num">${volCell}</td>
@@ -2766,15 +3068,39 @@
     if (!lastPayload) return;
     const filtered = getFilteredSortedViewRows();
     const pinned = getPinnedRowKeySet();
-    elTbody.innerHTML = renderRowsHtml(filtered, pinned, pinEnterFlashSet);
+    const scoreRanges = computeScoreRanges(filtered);
+    elTbody.innerHTML = renderRowsHtml(filtered, pinned, pinEnterFlashSet, scoreRanges);
+    updateKpiStrip(filtered);
     updateSortHeaderClasses();
-    applyHashHighlight();
     if (pinEnterFlashSet.size > 0) {
       window.clearTimeout(pinEnterClearTimer);
       pinEnterClearTimer = window.setTimeout(() => {
         document.querySelectorAll("tr.coin-row--pin-enter").forEach((r) => r.classList.remove("coin-row--pin-enter"));
       }, 12000);
     }
+  }
+
+  function setSnapshotLoadingVisible(show) {
+    if (!elSnapshotLoadingOverlay) return;
+    elSnapshotLoadingOverlay.hidden = !show;
+    elSnapshotLoadingOverlay.setAttribute("aria-busy", show ? "true" : "false");
+  }
+
+  function updateKpiStrip(viewRows) {
+    if (!elKpiQualifiedCount) return;
+    const rows = Array.isArray(viewRows) ? viewRows : [];
+    const count = rows.filter((r) => !r.coin._watchlist_only).length;
+    const exchangeCounts = { coinbase: 0, kraken: 0, mexc: 0 };
+    for (const r of rows) {
+      if (r.coin && r.coin._watchlist_only) continue;
+      if (r.exchangeId && Object.prototype.hasOwnProperty.call(exchangeCounts, r.exchangeId)) {
+        exchangeCounts[r.exchangeId] += 1;
+      }
+    }
+    elKpiQualifiedCount.textContent = count.toLocaleString("en-US");
+    if (elKpiCoinbaseCount) elKpiCoinbaseCount.textContent = exchangeCounts.coinbase.toLocaleString("en-US");
+    if (elKpiKrakenCount) elKpiKrakenCount.textContent = exchangeCounts.kraken.toLocaleString("en-US");
+    if (elKpiMexcCount) elKpiMexcCount.textContent = exchangeCounts.mexc.toLocaleString("en-US");
   }
 
   function downloadBlob(filename, mime, body) {
@@ -2964,6 +3290,7 @@
             title: `Entered: ${sym}`,
             body: `${sym} entered the qualified list.`,
             tag: `qfeed-ent-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
+            symbol: sym,
           });
         }
         for (const sym of listNotifyDelta.exits) {
@@ -2976,6 +3303,7 @@
             title: `Left: ${sym}`,
             body,
             tag: `qfeed-out-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
+            symbol: sym,
           });
         }
       })();
@@ -2992,6 +3320,9 @@
     applyTableView();
     updateWatchlistBadge();
     writeSnapshotVisitState(data);
+    window.requestAnimationFrame(() => {
+      refreshDashboardShellWidth();
+    });
   }
 
   if (elTbody) {
@@ -3031,20 +3362,7 @@
         if (coin) openSparkFullscreen(coin, kind);
       }
     });
-    elTbody.addEventListener("focusin", (ev) => {
-      const row = ev.target.closest("tr.coin-row");
-      if (!row) return;
-      const sym = row.getAttribute("data-symbol");
-      if (!sym) return;
-      const nextHash = `#symbol=${encodeURIComponent(sym)}`;
-      const path = window.location.pathname + window.location.search;
-      if (window.location.hash !== nextHash) {
-        history.replaceState(null, "", path + nextHash);
-      }
-    });
   }
-
-  window.addEventListener("hashchange", () => applyHashHighlight());
 
   async function digestHex(text) {
     if (window.crypto && crypto.subtle) {
@@ -3067,7 +3385,10 @@
     const title = String(opts.title || "Qualified dashboard");
     const body = String(opts.body || "");
     const tag = opts.tag != null ? String(opts.tag) : "qualified-dash";
-    const icon = notificationAssetUrl("./icons/icon-192.png");
+    const sym = String(opts.symbol || "").trim().toLowerCase();
+    const icon = sym
+      ? notificationAssetUrl(`./icons/coins/${encodeURIComponent(sym)}.png`)
+      : notificationAssetUrl("./icons/icon-192.png");
     const badge = notificationAssetUrl("./icons/icon-192.png");
     const options = {
       body,
@@ -3154,18 +3475,22 @@
     const stamp = Date.now();
     for (let i = 0; i < added.length; i += 1) {
       const k = added[i];
+      const sym = String(k).split("|")[0] || "";
       await showDashboardNotification({
         title: "Qualified list updated",
         body: `New in filtered view: ${rowKeyLabel(k)} (${keys.length} row(s)${exchHint})`,
         tag: `qf-new-${String(k).replace(/[^a-z0-9]+/gi, "").slice(0, 48)}-${stamp}-${i}`.slice(0, 64),
+        symbol: sym,
       });
     }
     for (let i = 0; i < removed.length; i += 1) {
       const k = removed[i];
+      const sym = String(k).split("|")[0] || "";
       await showDashboardNotification({
         title: "Qualified list updated",
         body: `Removed from filtered view: ${rowKeyLabel(k)} (${keys.length} row(s)${exchHint})`,
         tag: `qf-out-${String(k).replace(/[^a-z0-9]+/gi, "").slice(0, 48)}-${stamp}-${i}`.slice(0, 64),
+        symbol: sym,
       });
     }
     return added.length > 0 || removed.length > 0;
@@ -3192,13 +3517,16 @@
         title: "Watch: entered qualified set",
         body: `${sym} entered the qualified list (matches your watch + filters).`,
         tag: `watch-in-${sym}-${stamp}-${n++}`.slice(0, 64),
+        symbol: sym,
       });
     }
     for (const k of left) {
+      const sym = parseRowPinKey(String(k || "")).sym || "";
       await showDashboardNotification({
         title: "Watch: left qualified set",
         body: `${rowPinKeyDisplayLabel(k)} left the qualified list.`,
         tag: `watch-out-${String(k).replace(/[^a-z0-9]+/gi, "").slice(0, 32)}-${stamp}-${n++}`.slice(0, 64),
+        symbol: sym,
       });
     }
   }
@@ -3206,11 +3534,14 @@
   async function loadSnapshot(options) {
     const showErrors = options && options.showErrors;
     const forNotify = options && options.forNotify;
+    const shouldShowLoading = !forNotify && !lastPayload;
+    if (shouldShowLoading) setSnapshotLoadingVisible(true);
     const url = getSnapshotUrl();
     if (!url || !url.trim()) {
       if (showErrors) {
         showError("Set a snapshot JSON URL (?api=…) or define window.__SNAPSHOT_URL__ in docs/dashboard/config.js.");
       }
+      if (shouldShowLoading) setSnapshotLoadingVisible(false);
       return;
     }
     try {
@@ -3298,6 +3629,8 @@
           " Often CORS, a bad URL, or pointing at the worker — use the snapshot web relay (not the background worker), HTTPS, and CORS allowing this origin.";
       }
       showError(raw + hint);
+    } finally {
+      if (shouldShowLoading) setSnapshotLoadingVisible(false);
     }
   }
 
@@ -3307,6 +3640,26 @@
       await navigator.serviceWorker.register("./sw.js", { scope: "./" });
     } catch (e) {
       console.warn("Service worker registration failed", e);
+    }
+  }
+
+  async function forceResetDashboardCachesOnce() {
+    const KEY = "dash_sw_cache_reset_v93_done";
+    if (!("serviceWorker" in navigator) || !("caches" in window)) return;
+    try {
+      if (sessionStorage.getItem(KEY) === "1") return;
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      const names = await caches.keys();
+      await Promise.all(
+        names
+          .filter((n) => String(n).startsWith("qualified-dash-assets-"))
+          .map((n) => caches.delete(n)),
+      );
+      sessionStorage.setItem(KEY, "1");
+      window.location.reload();
+    } catch (e) {
+      console.warn("Cache reset skipped", e);
     }
   }
 
@@ -3534,8 +3887,8 @@
     });
   }
 
-  if (elThemeCycle) {
-    elThemeCycle.addEventListener("click", () => cycleThemeMode());
+  if (elThemeToggle) {
+    elThemeToggle.addEventListener("click", () => cycleThemeMode());
   }
 
   if (elExportBtn) {
@@ -3558,56 +3911,62 @@
   }
 
   if (elNotify) {
-    elNotify.addEventListener("click", async () => {
+    elNotify.addEventListener("click", () => {
+      void toggleTierANotifications();
+    });
+  }
+
+  function dismissNotifyFirstPrompt() {
+    try {
+      localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+    } catch {
+      /* ignore */
+    }
+    if (elNotifyPromptDialog && elNotifyPromptDialog.open) elNotifyPromptDialog.close();
+  }
+
+  function maybeShowNotifyFirstPrompt() {
+    try {
+      if (localStorage.getItem(LS_NOTIFY_FIRST_PROMPT_DONE) === "1") return;
       if (!("Notification" in window)) {
-        showError("Browser notifications are not supported here.");
+        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+        return;
+      }
+      if (Notification.permission !== "default") {
+        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
         return;
       }
       if (notifyAlertsEnabled) {
-        stopPoll();
-        notifyAlertsEnabled = false;
+        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+        return;
+      }
+      if (!elNotifyPromptDialog || typeof elNotifyPromptDialog.showModal !== "function") return;
+      window.setTimeout(() => {
         try {
-          localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
-          localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
+          if (!elNotifyPromptDialog.open) elNotifyPromptDialog.showModal();
         } catch {
           /* ignore */
         }
-        syncNotifyTierAButton();
-        if (lastPayload) render(lastPayload);
-        return;
-      }
-      let perm = Notification.permission;
-      if (perm === "default") {
-        perm = await Notification.requestPermission();
-      }
-      if (perm !== "granted") {
-        showError(
-          "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
-        );
-        syncNotifyTierAButton();
-        return;
-      }
-      await registerServiceWorker();
-      notifyAlertsEnabled = true;
-      try {
-        localStorage.setItem(LS_TIER_A_ALERTS_ENABLED, "1");
-      } catch {
-        /* ignore */
-      }
-      persistPollIntervalFromUi();
-      localStorage.removeItem(LS_POLL_FILTERED_ROWS);
-      localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
-      try {
-        localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
-      } catch {
-        /* ignore */
-      }
-      clearError();
-      await loadSnapshot({ showErrors: true, forNotify: false });
-      startPoll();
-      syncPushTierBVisibility();
-      void refreshPushTierBLabel();
-      syncNotifyTierAButton();
+      }, 500);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (elNotifyPromptLater) {
+    elNotifyPromptLater.addEventListener("click", () => dismissNotifyFirstPrompt());
+  }
+  if (elNotifyPromptEnable) {
+    elNotifyPromptEnable.addEventListener("click", () => {
+      void (async () => {
+        await toggleTierANotifications();
+        dismissNotifyFirstPrompt();
+      })();
+    });
+  }
+  if (elNotifyPromptDialog) {
+    elNotifyPromptDialog.addEventListener("click", (ev) => {
+      if (ev.target === elNotifyPromptDialog) dismissNotifyFirstPrompt();
     });
   }
 
@@ -3648,10 +4007,12 @@
 
   window.addEventListener("load", () => {
     void (async () => {
+      await forceResetDashboardCachesOnce();
       await registerServiceWorker();
       syncPushTierBVisibility();
       await refreshPushTierBLabel();
       syncNotifyTierAButton();
+      maybeShowNotifyFirstPrompt();
     })();
   });
 
