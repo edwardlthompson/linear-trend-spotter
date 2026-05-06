@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 import urllib.parse
 import urllib.request
@@ -22,8 +23,19 @@ def load_snapshot_coins() -> list[dict]:
         c = coin or {}
         sym = str(c.get("symbol") or "").strip().lower()
         slug = str(c.get("slug") or "").strip().lower()
+        identity = c.get("identity") if isinstance(c.get("identity"), dict) else {}
+        raw_cmc = identity.get("cmc_id") if identity else None
+        if raw_cmc is None:
+            raw_cmc = c.get("cmc_id")
+        cmc_id: int | None
+        if isinstance(raw_cmc, int):
+            cmc_id = raw_cmc
+        elif isinstance(raw_cmc, str) and raw_cmc.strip().isdigit():
+            cmc_id = int(raw_cmc.strip())
+        else:
+            cmc_id = None
         if sym:
-            out.append({"symbol": sym, "slug": slug})
+            out.append({"symbol": sym, "slug": slug, "cmc_id": cmc_id})
     return out
 
 
@@ -72,10 +84,23 @@ def download_url(url: str, out: Path) -> bool:
         return False
 
 
+def _safe_icon_filename(symbol: str) -> str:
+    """Avoid Windows reserved device names (e.g. CON) so git and tooling can open files."""
+    s = symbol.strip().lower()
+    if s == "con":
+        return "con_win.png"
+    return f"{s}.png"
+
+
 def download_icon(coin: dict, cmc_rows: list[dict]) -> bool:
     symbol = str(coin.get("symbol") or "").lower()
-    out = OUT_DIR / f"{symbol}.png"
-    cmc_id = cmc_id_for_coin(coin, cmc_rows)
+    out = OUT_DIR / _safe_icon_filename(symbol)
+    snap_id = coin.get("cmc_id")
+    cmc_id = snap_id if isinstance(snap_id, int) else None
+    if cmc_id is None and isinstance(snap_id, str) and snap_id.strip().isdigit():
+        cmc_id = int(snap_id.strip())
+    if cmc_id is None:
+        cmc_id = cmc_id_for_coin(coin, cmc_rows)
     if cmc_id is not None:
         cmc_url = CMC_BASE_URL.format(id=cmc_id)
         if download_url(cmc_url, out):
@@ -85,19 +110,59 @@ def download_icon(coin: dict, cmc_rows: list[dict]) -> bool:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Fetch coin PNGs into docs/dashboard/icons/coins for the qualified dashboard.",
+    )
+    parser.add_argument(
+        "--all-cmc-map",
+        action="store_true",
+        help=(
+            "Download one icon per row in cmc_cryptocurrency_map_cache.json (thousands of files). "
+            "Default is snapshot symbols plus a small base set."
+        ),
+    )
+    args = parser.parse_args()
+
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    snapshot_coins = load_snapshot_coins()
     cmc_rows = load_cmc_rows()
-    base_symbols = {"btc", "eth", "sol", "xrp"}
-    symbols = sorted({c["symbol"] for c in snapshot_coins} | base_symbols)
     ok = 0
     fail = 0
-    for sym in symbols:
-        coin = next((c for c in snapshot_coins if c["symbol"] == sym), {"symbol": sym, "slug": ""})
-        if download_icon(coin, cmc_rows):
-            ok += 1
-        else:
-            fail += 1
+
+    if args.all_cmc_map:
+        seen: set[str] = set()
+        for row in cmc_rows:
+            rid = row.get("id")
+            if not isinstance(rid, int):
+                continue
+            sym = str(row.get("symbol") or "").strip().lower()
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            coin = {
+                "symbol": sym,
+                "slug": str(row.get("slug") or "").strip().lower(),
+                "cmc_id": rid,
+            }
+            if download_icon(coin, cmc_rows):
+                ok += 1
+            else:
+                fail += 1
+        print("Mode: --all-cmc-map")
+    else:
+        snapshot_coins = load_snapshot_coins()
+        base_symbols = {"btc", "eth", "sol", "xrp"}
+        symbols = sorted({c["symbol"] for c in snapshot_coins} | base_symbols)
+        for sym in symbols:
+            coin = next(
+                (c for c in snapshot_coins if c["symbol"] == sym),
+                {"symbol": sym, "slug": "", "cmc_id": None},
+            )
+            if download_icon(coin, cmc_rows):
+                ok += 1
+            else:
+                fail += 1
+        print("Mode: snapshot + base symbols")
+
     print(f"Downloaded: {ok}")
     print(f"Failed: {fail}")
     print(f"Output dir: {OUT_DIR}")

@@ -2,11 +2,12 @@
  * Qualified dashboard service worker (Milestone Q8).
  * Bump CACHE_VERSION when static assets change so deploys pick up fresh shells.
  */
-const CACHE_VERSION = "qualified-dash-v95";
+const CACHE_VERSION = "qualified-dash-v97";
 const CACHE_NAME = `qualified-dash-assets-${CACHE_VERSION}`;
 const REMOTE_IMAGE_HOSTS = new Set([
   "cdn.jsdelivr.net",
   "coinicons-api.vercel.app",
+  "s2.coinmarketcap.com",
 ]);
 const ASSETS = [
   "./index.html",

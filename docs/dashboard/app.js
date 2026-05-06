@@ -1303,13 +1303,47 @@
   function coinLogoUrl(c) {
     const sym = String(c.symbol || "").trim().toLowerCase();
     if (!sym) return "";
-    return `./icons/coins/${encodeURIComponent(sym)}.png`;
+    /* Windows reserves CON; batch download stores that ticker as con_win.png. */
+    const fileBase = sym === "con" ? "con_win" : sym;
+    return `./icons/coins/${encodeURIComponent(fileBase)}.png`;
   }
 
-  function coinLogoFallbackUrl(c) {
+  function coinIdentityCmcId(c) {
+    if (!c || typeof c !== "object") return null;
+    const id =
+      c.identity && c.identity.cmc_id != null ? c.identity.cmc_id : c.cmc_id;
+    if (typeof id === "number" && Number.isFinite(id)) return id;
+    if (typeof id === "string" && /^\d+$/.test(id.trim())) return Number(id.trim());
+    return null;
+  }
+
+  /** Remote URLs tried in order after the local bundled PNG fails (see coinLogoImgHtml). */
+  function coinLogoRemoteFallbackUrls(c) {
+    const urls = [];
+    const cmcId = coinIdentityCmcId(c);
+    if (cmcId != null) {
+      urls.push(`https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcId}.png`);
+    }
     const sym = String(c.symbol || "").trim().toLowerCase();
-    if (!sym) return "";
-    return `https://coinicons-api.vercel.app/api/icon/${encodeURIComponent(sym)}`;
+    if (sym) {
+      urls.push(`https://coinicons-api.vercel.app/api/icon/${encodeURIComponent(sym)}`);
+      urls.push(
+        `https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color/${encodeURIComponent(sym)}.png`,
+      );
+    }
+    return urls;
+  }
+
+  function coinLogoImgHtml(c) {
+    const logoUrl = coinLogoUrl(c);
+    if (!logoUrl) {
+      return '<span class="coin-logo coin-logo--fallback" aria-hidden="true"></span>';
+    }
+    const chain = coinLogoRemoteFallbackUrls(c).join("|");
+    const logoMonogram = coinLogoMonogramDataUrl(c.symbol);
+    const onerr =
+      "(function(el){var ch=(el.dataset.fallbackChain||'').split('|').filter(Boolean);var i=Number(el.dataset.logoStep||0)||0;if(i<ch.length){el.dataset.logoStep=String(i+1);el.src=ch[i];return;}if(el.dataset.fallbackSvg){el.src=el.dataset.fallbackSvg;return;}el.style.display='none';})(this)";
+    return `<img class="coin-logo" src="${escapeAttr(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-chain="${escapeAttr(chain)}" data-fallback-svg="${escapeAttr(logoMonogram)}" data-logo-step="0" onerror="${onerr}" />`;
   }
 
   function coinLogoMonogramDataUrl(symbol) {
@@ -2906,12 +2940,7 @@
         if (watchOnly) {
           const pk = rowViewPinKey(r);
           const sym = escapeHtml(String(c.symbol || ""));
-          const logoUrl = coinLogoUrl(c);
-          const logoFallback = coinLogoFallbackUrl(c);
-          const logoMonogram = coinLogoMonogramDataUrl(c.symbol);
-          const logoHtml = logoUrl
-            ? `<img class="coin-logo" src="${escapeAttr(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeAttr(logoFallback)}" data-fallback-svg="${escapeAttr(logoMonogram)}" onerror="if(this.dataset.fallbackStage!=='1'&&this.dataset.fallbackSrc){this.dataset.fallbackStage='1';this.src=this.dataset.fallbackSrc;return;}if(this.dataset.fallbackSvg){this.src=this.dataset.fallbackSvg;this.dataset.fallbackSrc='';return;}this.style.display='none'" />`
-            : `<span class="coin-logo coin-logo--fallback" aria-hidden="true"></span>`;
+          const logoHtml = coinLogoImgHtml(c);
           const pinLab = rowPinKeyDisplayLabel(pk);
           const pinLabel = `Remove ${pinLab} from watchlist`;
           const pinBtn = `<button type="button" class="pin-btn" data-pin-key="${escapeAttr(pk)}" aria-pressed="true" aria-label="${escapeAttr(pinLabel)}" title="${escapeAttr(pinLabel)}">\u2605</button>`;
@@ -2954,7 +2983,6 @@
         const sym = escapeHtml(String(c.symbol || ""));
         const nameRaw = String(c.name || "");
         const name = escapeHtml(nameRaw);
-        const logoUrl = coinLogoUrl(c);
         const g = c.gains || {};
         const g7 = typeof g["7d"] === "number" ? g["7d"].toFixed(1) : "—";
         const g30pct = typeof g["30d"] === "number" ? g["30d"].toFixed(1) : "—";
@@ -2991,11 +3019,7 @@
           ? `<a href="${escapeAttr(listing)}" class="coin-listing-link" rel="noopener noreferrer" target="_blank" data-symbol="${escapeAttr(rawSym)}" title="Open listing or reference page in a new tab">${name}</a>`
           : `<span title="Name from snapshot (no listing URL)">${name}</span>`;
         const symbolTag = sym ? `<span class="coin-token">${sym}</span>` : "";
-        const logoFallback = coinLogoFallbackUrl(c);
-        const logoMonogram = coinLogoMonogramDataUrl(c.symbol);
-        const logoHtml = logoUrl
-          ? `<img class="coin-logo" src="${escapeAttr(logoUrl)}" alt="" loading="lazy" decoding="async" data-fallback-src="${escapeAttr(logoFallback)}" data-fallback-svg="${escapeAttr(logoMonogram)}" onerror="if(this.dataset.fallbackStage!=='1'&&this.dataset.fallbackSrc){this.dataset.fallbackStage='1';this.src=this.dataset.fallbackSrc;return;}if(this.dataset.fallbackSvg){this.src=this.dataset.fallbackSvg;this.dataset.fallbackSrc='';return;}this.style.display='none'" />`
-          : `<span class="coin-logo coin-logo--fallback" aria-hidden="true"></span>`;
+        const logoHtml = coinLogoImgHtml(c);
         const nameCell = `<span class="name-col-wrap"><span class="coin-name-line">${nameCore}</span>${symbolTag}</span>`;
         const badge = lastAddedSet.has(rawSym)
           ? '<span class="badge badge-new" title="New since last visit">New</span>'
