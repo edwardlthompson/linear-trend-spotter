@@ -142,6 +142,27 @@ def _read_snapshot_bytes(path: Path) -> bytes | None:
         return None
 
 
+def _read_response_limited(resp: Any, max_bytes: int) -> bytes:
+    cap = max(1024, int(max_bytes))
+    headers = getattr(resp, "headers", None)
+    content_length = None
+    if headers is not None:
+        try:
+            content_length = headers.get("Content-Length")
+        except AttributeError:
+            content_length = None
+    if content_length:
+        try:
+            if int(content_length) > cap:
+                raise ValueError("fallback snapshot response exceeds byte limit")
+        except ValueError as exc:
+            raise ValueError("fallback snapshot response has invalid or oversized Content-Length") from exc
+    raw = resp.read(cap + 1)
+    if len(raw) > cap:
+        raise ValueError("fallback snapshot response exceeds byte limit")
+    return raw
+
+
 def _write_snapshot_bytes(path: Path, raw: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -179,12 +200,12 @@ def _try_fetch_fallback_snapshot() -> bytes | None:
     )
     try:
         with urlopen(req, timeout=15) as resp:
-            raw = resp.read()
+            raw = _read_response_limited(resp, _max_bytes())
         if not raw:
             return None
         json.loads(raw.decode("utf-8"))
         return raw
-    except (HTTPError, URLError, OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (HTTPError, URLError, OSError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
         return None
 
 
