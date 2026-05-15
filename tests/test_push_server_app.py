@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from typing import Any
 
 import push_server.app as push_app
 
 
-def _read_subscriptions(path):
+def _read_subscriptions(path: Path) -> list[dict[str, Any]]:
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 
