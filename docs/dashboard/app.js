@@ -123,12 +123,34 @@
     return n;
   }
 
-  function getPollIntervalMs() {
+  function safeLocalStorageGetItem(key) {
     try {
-      return parseStoredPollMs(localStorage.getItem(LS_POLL_INTERVAL_MS));
+      return window.localStorage.getItem(key);
     } catch {
-      return DEFAULT_POLL_MS;
+      return null;
     }
+  }
+
+  function safeLocalStorageSetItem(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function safeLocalStorageRemoveItem(key) {
+    try {
+      window.localStorage.removeItem(key);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function getPollIntervalMs() {
+    return parseStoredPollMs(safeLocalStorageGetItem(LS_POLL_INTERVAL_MS));
   }
 
   /** @param {number} ms */
@@ -154,12 +176,12 @@
   function persistPollIntervalFromUi() {
     if (!elPollInterval) return;
     const ms = parseStoredPollMs(elPollInterval.value);
-    localStorage.setItem(LS_POLL_INTERVAL_MS, String(ms));
+    safeLocalStorageSetItem(LS_POLL_INTERVAL_MS, String(ms));
     elPollInterval.value = String(ms);
   }
 
   function getSavedThemeMode() {
-    const v = localStorage.getItem(LS_THEME);
+    const v = safeLocalStorageGetItem(LS_THEME);
     if (v === "light" || v === "dark" || v === "system") return v;
     return "system";
   }
@@ -200,7 +222,7 @@
     const cur = getSavedThemeMode();
     const ix = Math.max(0, order.indexOf(cur));
     const next = order[(ix + 1) % order.length];
-    localStorage.setItem(LS_THEME, next);
+    safeLocalStorageSetItem(LS_THEME, next);
     applyDomTheme();
     updateThemeButtonLabel();
   }
@@ -330,7 +352,7 @@
 
   function getOpsLastAckMs() {
     try {
-      const n = Number(localStorage.getItem(LS_OPS_LAST_ACK_MS));
+      const n = Number(safeLocalStorageGetItem(LS_OPS_LAST_ACK_MS));
       return Number.isFinite(n) && n > 0 ? n : 0;
     } catch {
       return 0;
@@ -339,7 +361,7 @@
 
   function setOpsLastAckToNow() {
     try {
-      localStorage.setItem(LS_OPS_LAST_ACK_MS, String(Date.now()));
+      safeLocalStorageSetItem(LS_OPS_LAST_ACK_MS, String(Date.now()));
     } catch (e) {
       console.warn("ops ack", e);
     }
@@ -367,8 +389,8 @@
   function resetTierAPollBaselineIfAlerts() {
     if (!notifyAlertsEnabled) return;
     try {
-      localStorage.removeItem(LS_POLL_FILTERED_ROWS);
-      localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
+      safeLocalStorageRemoveItem(LS_POLL_FILTERED_ROWS);
+      safeLocalStorageRemoveItem(LS_POLL_FILTERED_SYMS_LEGACY);
     } catch (e) {
       console.warn("reset poll baseline", e);
     }
@@ -376,33 +398,33 @@
 
   function persistUiPreferences() {
     try {
-      localStorage.setItem(LS_UI_SORT_KEY, sortKey);
-      localStorage.setItem(LS_UI_SORT_DIR, String(sortDir));
-      if (filterHealthMin == null) localStorage.removeItem(LS_UI_HEALTH_MIN);
-      else localStorage.setItem(LS_UI_HEALTH_MIN, String(filterHealthMin));
-      if (filterUniformityMin == null) localStorage.removeItem(LS_UI_UNIFORMITY_MIN);
-      else localStorage.setItem(LS_UI_UNIFORMITY_MIN, String(filterUniformityMin));
-      if (!filterVolAccel) localStorage.removeItem(LS_UI_VOL_ACCEL);
-      else localStorage.setItem(LS_UI_VOL_ACCEL, filterVolAccel);
-      if (filterVolMinUsd == null) localStorage.removeItem(LS_UI_VOL_MIN_USD);
-      else localStorage.setItem(LS_UI_VOL_MIN_USD, String(filterVolMinUsd));
-      if (filterChartDistMax7 == null) localStorage.removeItem(LS_UI_CHART_DIST_MAX_7);
-      else localStorage.setItem(LS_UI_CHART_DIST_MAX_7, String(filterChartDistMax7));
-      if (filterChartDistMax30 == null) localStorage.removeItem(LS_UI_CHART_DIST_MAX_30);
-      else localStorage.setItem(LS_UI_CHART_DIST_MAX_30, String(filterChartDistMax30));
+      safeLocalStorageSetItem(LS_UI_SORT_KEY, sortKey);
+      safeLocalStorageSetItem(LS_UI_SORT_DIR, String(sortDir));
+      if (filterHealthMin == null) safeLocalStorageRemoveItem(LS_UI_HEALTH_MIN);
+      else safeLocalStorageSetItem(LS_UI_HEALTH_MIN, String(filterHealthMin));
+      if (filterUniformityMin == null) safeLocalStorageRemoveItem(LS_UI_UNIFORMITY_MIN);
+      else safeLocalStorageSetItem(LS_UI_UNIFORMITY_MIN, String(filterUniformityMin));
+      if (!filterVolAccel) safeLocalStorageRemoveItem(LS_UI_VOL_ACCEL);
+      else safeLocalStorageSetItem(LS_UI_VOL_ACCEL, filterVolAccel);
+      if (filterVolMinUsd == null) safeLocalStorageRemoveItem(LS_UI_VOL_MIN_USD);
+      else safeLocalStorageSetItem(LS_UI_VOL_MIN_USD, String(filterVolMinUsd));
+      if (filterChartDistMax7 == null) safeLocalStorageRemoveItem(LS_UI_CHART_DIST_MAX_7);
+      else safeLocalStorageSetItem(LS_UI_CHART_DIST_MAX_7, String(filterChartDistMax7));
+      if (filterChartDistMax30 == null) safeLocalStorageRemoveItem(LS_UI_CHART_DIST_MAX_30);
+      else safeLocalStorageSetItem(LS_UI_CHART_DIST_MAX_30, String(filterChartDistMax30));
       try {
-        localStorage.removeItem(LS_UI_CHART_DIST_MAX_LEGACY);
+        safeLocalStorageRemoveItem(LS_UI_CHART_DIST_MAX_LEGACY);
       } catch {
         /* ignore */
       }
       if (filterExchangeSet.size === 0) {
-        localStorage.removeItem(LS_UI_EXCHANGES_JSON);
-        localStorage.removeItem(LS_UI_EXCHANGE);
+        safeLocalStorageRemoveItem(LS_UI_EXCHANGES_JSON);
+        safeLocalStorageRemoveItem(LS_UI_EXCHANGE);
       } else {
-        localStorage.setItem(LS_UI_EXCHANGES_JSON, JSON.stringify([...filterExchangeSet].sort()));
-        localStorage.removeItem(LS_UI_EXCHANGE);
+        safeLocalStorageSetItem(LS_UI_EXCHANGES_JSON, JSON.stringify([...filterExchangeSet].sort()));
+        safeLocalStorageRemoveItem(LS_UI_EXCHANGE);
       }
-      localStorage.setItem(LS_UI_ACTIVE_VIEW, activeView);
+      safeLocalStorageSetItem(LS_UI_ACTIVE_VIEW, activeView);
     } catch (e) {
       console.warn("persistUiPreferences", e);
     }
@@ -410,13 +432,13 @@
 
   function restoreUiPreferences() {
     try {
-      const sk = localStorage.getItem(LS_UI_SORT_KEY);
+      const sk = safeLocalStorageGetItem(LS_UI_SORT_KEY);
       if (sk === "g7") sortKey = "g7pct";
       else if (sk === "g30") sortKey = "g30pct";
       else if (sk && ALLOWED_SORT_KEYS.has(sk)) sortKey = sk;
-      const sd = localStorage.getItem(LS_UI_SORT_DIR);
+      const sd = safeLocalStorageGetItem(LS_UI_SORT_DIR);
       if (sd === "1" || sd === "-1") sortDir = Number(sd);
-      const hm = localStorage.getItem(LS_UI_HEALTH_MIN);
+      const hm = safeLocalStorageGetItem(LS_UI_HEALTH_MIN);
       if (hm === null || hm === "") filterHealthMin = null;
       else {
         const n = Number(hm);
@@ -424,7 +446,7 @@
         else if (n === 60 || n === 65 || n === 70) filterHealthMin = n;
         else filterHealthMin = null;
       }
-      const um = localStorage.getItem(LS_UI_UNIFORMITY_MIN);
+      const um = safeLocalStorageGetItem(LS_UI_UNIFORMITY_MIN);
       if (um === null || um === "") filterUniformityMin = null;
       else {
         const nu = Number(um);
@@ -432,10 +454,10 @@
         else if (nu === 60 || nu === 65) filterUniformityMin = nu;
         else filterUniformityMin = null;
       }
-      const vac = localStorage.getItem(LS_UI_VOL_ACCEL);
+      const vac = safeLocalStorageGetItem(LS_UI_VOL_ACCEL);
       if (vac === "pos" || vac === "25" || vac === "50") filterVolAccel = vac;
       else filterVolAccel = "";
-      const vmin = localStorage.getItem(LS_UI_VOL_MIN_USD);
+      const vmin = safeLocalStorageGetItem(LS_UI_VOL_MIN_USD);
       filterVolMinUsd = null;
       if (vmin != null && vmin !== "") {
         const vn = Number(vmin);
@@ -443,12 +465,12 @@
       }
       filterChartDistMax7 = null;
       filterChartDistMax30 = null;
-      const c7 = localStorage.getItem(LS_UI_CHART_DIST_MAX_7);
-      const c30 = localStorage.getItem(LS_UI_CHART_DIST_MAX_30);
+      const c7 = safeLocalStorageGetItem(LS_UI_CHART_DIST_MAX_7);
+      const c30 = safeLocalStorageGetItem(LS_UI_CHART_DIST_MAX_30);
       if (c7 === "5" || c7 === "10" || c7 === "15") filterChartDistMax7 = Number(c7);
       if (c30 === "5" || c30 === "10" || c30 === "15") filterChartDistMax30 = Number(c30);
       if (filterChartDistMax7 == null && filterChartDistMax30 == null) {
-        const legacy = localStorage.getItem(LS_UI_CHART_DIST_MAX_LEGACY);
+        const legacy = safeLocalStorageGetItem(LS_UI_CHART_DIST_MAX_LEGACY);
         if (legacy === "5" || legacy === "10" || legacy === "15") {
           const n = Number(legacy);
           filterChartDistMax7 = n;
@@ -456,7 +478,7 @@
         }
       }
       filterExchangeSet = new Set();
-      const exJson = localStorage.getItem(LS_UI_EXCHANGES_JSON);
+      const exJson = safeLocalStorageGetItem(LS_UI_EXCHANGES_JSON);
       if (exJson) {
         try {
           const arr = JSON.parse(exJson);
@@ -471,13 +493,13 @@
         }
       }
       if (filterExchangeSet.size === 0) {
-        const exLegacy = localStorage.getItem(LS_UI_EXCHANGE);
+        const exLegacy = safeLocalStorageGetItem(LS_UI_EXCHANGE);
         if (exLegacy && String(exLegacy).trim()) {
           const id = String(exLegacy).trim().toLowerCase();
           if (TARGET_EXCHANGE_IDS.has(id)) filterExchangeSet.add(id);
         }
       }
-      const av = localStorage.getItem(LS_UI_ACTIVE_VIEW);
+      const av = safeLocalStorageGetItem(LS_UI_ACTIVE_VIEW);
       if (av === "watchlist" || av === "qualified" || av === "logs" || av === "settings") activeView = av;
       else if (av === "alerts") activeView = "logs";
     } catch (e) {
@@ -537,8 +559,8 @@
       stopPoll();
       notifyAlertsEnabled = false;
       try {
-        localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
-        localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
+        safeLocalStorageRemoveItem(LS_TIER_A_ALERTS_ENABLED);
+        safeLocalStorageRemoveItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
       } catch {
         /* ignore */
       }
@@ -560,15 +582,15 @@
     await registerServiceWorker();
     notifyAlertsEnabled = true;
     try {
-      localStorage.setItem(LS_TIER_A_ALERTS_ENABLED, "1");
+      safeLocalStorageSetItem(LS_TIER_A_ALERTS_ENABLED, "1");
     } catch {
       /* ignore */
     }
     persistPollIntervalFromUi();
-    localStorage.removeItem(LS_POLL_FILTERED_ROWS);
-    localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
+    safeLocalStorageRemoveItem(LS_POLL_FILTERED_ROWS);
+    safeLocalStorageRemoveItem(LS_POLL_FILTERED_SYMS_LEGACY);
     try {
-      localStorage.removeItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
+      safeLocalStorageRemoveItem(LS_LAST_POLL_SNAPSHOT_DIGEST);
     } catch {
       /* ignore */
     }
@@ -586,7 +608,7 @@
     if (notifyAlertsEnabled && perm !== "granted") {
       notifyAlertsEnabled = false;
       try {
-        localStorage.removeItem(LS_TIER_A_ALERTS_ENABLED);
+        safeLocalStorageRemoveItem(LS_TIER_A_ALERTS_ENABLED);
       } catch {
         /* ignore */
       }
@@ -612,7 +634,7 @@
 
   function readCachedShellMinWidth() {
     try {
-      const v = parseFloat(localStorage.getItem(LS_SHELL_MIN_W));
+      const v = parseFloat(safeLocalStorageGetItem(LS_SHELL_MIN_W));
       return Number.isFinite(v) && v > 0 ? v : null;
     } catch {
       return null;
@@ -621,7 +643,7 @@
 
   function persistShellMinWidth(w) {
     try {
-      localStorage.setItem(LS_SHELL_MIN_W, String(Math.round(w)));
+      safeLocalStorageSetItem(LS_SHELL_MIN_W, String(Math.round(w)));
     } catch {
       /* ignore */
     }
@@ -750,7 +772,7 @@
     elTierANotifyScopeSelect.addEventListener("change", () => {
       const v = elTierANotifyScopeSelect.value === "watchlist" ? "watchlist" : "qualified";
       try {
-        localStorage.setItem(LS_TIER_A_NOTIFY_SCOPE, v);
+        safeLocalStorageSetItem(LS_TIER_A_NOTIFY_SCOPE, v);
       } catch {
         /* ignore */
       }
@@ -766,7 +788,7 @@
   updateExchangeFilterSummary();
   try {
     if (
-      localStorage.getItem(LS_TIER_A_ALERTS_ENABLED) === "1" &&
+      safeLocalStorageGetItem(LS_TIER_A_ALERTS_ENABLED) === "1" &&
       typeof Notification !== "undefined" &&
       Notification.permission === "granted"
     ) {
@@ -1035,7 +1057,7 @@
 
   function readPrevSymbolSet() {
     try {
-      const raw = localStorage.getItem(LS_PREV_SYMBOLS);
+      const raw = safeLocalStorageGetItem(LS_PREV_SYMBOLS);
       if (!raw) return new Set();
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) return new Set();
@@ -1050,8 +1072,8 @@
     const sorted = [
       ...new Set(coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean)),
     ].sort();
-    localStorage.setItem(LS_PREV_SYMBOLS, JSON.stringify(sorted));
-    localStorage.setItem(LS_PREV_SCHEMA, String(data.schema_version ?? ""));
+    safeLocalStorageSetItem(LS_PREV_SYMBOLS, JSON.stringify(sorted));
+    safeLocalStorageSetItem(LS_PREV_SCHEMA, String(data.schema_version ?? ""));
   }
 
   function normalizeWatchSymbol(raw) {
@@ -1116,16 +1138,16 @@
       if (!rows.length) keys.add(`${sym}|`);
     }
     const sorted = [...keys].sort();
-    if (sorted.length) localStorage.setItem(LS_PINNED_ROW_KEYS_JSON, JSON.stringify(sorted));
-    else localStorage.removeItem(LS_PINNED_ROW_KEYS_JSON);
-    localStorage.removeItem(LS_PINNED_SYMBOLS_JSON);
+    if (sorted.length) safeLocalStorageSetItem(LS_PINNED_ROW_KEYS_JSON, JSON.stringify(sorted));
+    else safeLocalStorageRemoveItem(LS_PINNED_ROW_KEYS_JSON);
+    safeLocalStorageRemoveItem(LS_PINNED_SYMBOLS_JSON);
   }
 
   /** Pinned table row keys `SYMBOL|venue` (after optional one-time migration from symbol-only storage). */
   function getPinnedRowKeySet() {
     const coins = Array.isArray(lastPayload?.coins) ? lastPayload.coins : [];
     try {
-      const rawNew = localStorage.getItem(LS_PINNED_ROW_KEYS_JSON);
+      const rawNew = safeLocalStorageGetItem(LS_PINNED_ROW_KEYS_JSON);
       if (rawNew) {
         const arr = JSON.parse(rawNew);
         if (Array.isArray(arr) && arr.length) {
@@ -1136,12 +1158,12 @@
       /* fall through */
     }
     try {
-      const rawLeg = localStorage.getItem(LS_PINNED_SYMBOLS_JSON);
+      const rawLeg = safeLocalStorageGetItem(LS_PINNED_SYMBOLS_JSON);
       if (rawLeg && coins.length) {
         const leg = JSON.parse(rawLeg);
         if (Array.isArray(leg) && leg.length) {
           migrateLegacyPinsToRowKeys(coins, leg);
-          const raw2 = localStorage.getItem(LS_PINNED_ROW_KEYS_JSON);
+          const raw2 = safeLocalStorageGetItem(LS_PINNED_ROW_KEYS_JSON);
           if (raw2) {
             const arr2 = JSON.parse(raw2);
             if (Array.isArray(arr2) && arr2.length) {
@@ -1159,15 +1181,15 @@
   function persistPinnedRowKeys(set) {
     const sorted = [...set].map(normalizeRowPinKey).filter(Boolean).sort();
     if (!sorted.length) {
-      localStorage.removeItem(LS_PINNED_ROW_KEYS_JSON);
+      safeLocalStorageRemoveItem(LS_PINNED_ROW_KEYS_JSON);
       return;
     }
-    localStorage.setItem(LS_PINNED_ROW_KEYS_JSON, JSON.stringify(sorted));
+    safeLocalStorageSetItem(LS_PINNED_ROW_KEYS_JSON, JSON.stringify(sorted));
   }
 
   function readPinnedWasQualObject() {
     try {
-      const raw = localStorage.getItem(LS_PINNED_WAS_QUALIFIED_JSON);
+      const raw = safeLocalStorageGetItem(LS_PINNED_WAS_QUALIFIED_JSON);
       if (!raw) return {};
       const o = JSON.parse(raw);
       return o && typeof o === "object" && !Array.isArray(o) ? o : {};
@@ -1178,8 +1200,8 @@
 
   function writePinnedWasQualObject(o) {
     const keys = Object.keys(o);
-    if (!keys.length) localStorage.removeItem(LS_PINNED_WAS_QUALIFIED_JSON);
-    else localStorage.setItem(LS_PINNED_WAS_QUALIFIED_JSON, JSON.stringify(o));
+    if (!keys.length) safeLocalStorageRemoveItem(LS_PINNED_WAS_QUALIFIED_JSON);
+    else safeLocalStorageSetItem(LS_PINNED_WAS_QUALIFIED_JSON, JSON.stringify(o));
   }
 
   /**
@@ -1346,7 +1368,7 @@
 
   function tierANotifyScope() {
     try {
-      const v = localStorage.getItem(LS_TIER_A_NOTIFY_SCOPE);
+      const v = safeLocalStorageGetItem(LS_TIER_A_NOTIFY_SCOPE);
       return v === "watchlist" ? "watchlist" : "qualified";
     } catch {
       return "qualified";
@@ -1940,7 +1962,7 @@
 
   function getCgCreditsStoredOrBaseline() {
     try {
-      const raw = localStorage.getItem(LS_CG_CREDITS_USED);
+      const raw = safeLocalStorageGetItem(LS_CG_CREDITS_USED);
       if (raw != null && raw !== "") {
         const n = Math.round(Number(raw));
         if (Number.isFinite(n)) {
@@ -1963,7 +1985,7 @@
     const cap = DASHBOARD_COINGECKO_DEMO_CREDITS_MONTHLY;
     let lastIso = "";
     try {
-      lastIso = localStorage.getItem(LS_CG_LAST_SNAP_ISO) || "";
+      lastIso = safeLocalStorageGetItem(LS_CG_LAST_SNAP_ISO) || "";
     } catch {
       /* ignore */
     }
@@ -1972,8 +1994,8 @@
     const usedBefore = getCgCreditsStoredOrBaseline();
     if (lastIso === "") {
       try {
-        localStorage.setItem(LS_CG_CREDITS_USED, String(Math.min(cap, usedBefore)));
-        localStorage.setItem(LS_CG_LAST_SNAP_ISO, iso);
+        safeLocalStorageSetItem(LS_CG_CREDITS_USED, String(Math.min(cap, usedBefore)));
+        safeLocalStorageSetItem(LS_CG_LAST_SNAP_ISO, iso);
       } catch {
         /* ignore */
       }
@@ -1981,8 +2003,8 @@
     }
     const next = Math.min(cap, usedBefore + add);
     try {
-      localStorage.setItem(LS_CG_CREDITS_USED, String(next));
-      localStorage.setItem(LS_CG_LAST_SNAP_ISO, iso);
+      safeLocalStorageSetItem(LS_CG_CREDITS_USED, String(next));
+      safeLocalStorageSetItem(LS_CG_LAST_SNAP_ISO, iso);
     } catch {
       /* ignore */
     }
@@ -2314,7 +2336,7 @@
           html: it.html,
           k: typeof it.k === "string" ? it.k : "",
         }));
-        localStorage.setItem(LS_OPS_FEED_STORE, JSON.stringify(serial));
+        safeLocalStorageSetItem(LS_OPS_FEED_STORE, JSON.stringify(serial));
       } catch (e) {
         console.warn("persist ops feed", e);
       }
@@ -2323,7 +2345,7 @@
 
   function loadOpsFeedFromStorage() {
     try {
-      const raw = localStorage.getItem(LS_OPS_FEED_STORE);
+      const raw = safeLocalStorageGetItem(LS_OPS_FEED_STORE);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return;
@@ -2435,7 +2457,7 @@
   /** @returns {{ id: string, t: number, line: string }[]} */
   function readCoinAlertFeed() {
     try {
-      const raw = localStorage.getItem(LS_COIN_ALERT_FEED_JSON);
+      const raw = safeLocalStorageGetItem(LS_COIN_ALERT_FEED_JSON);
       if (!raw) return [];
       const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) return [];
@@ -2451,7 +2473,7 @@
   function writeCoinAlertFeed(items) {
     try {
       const trimmed = items.slice(-COIN_ALERT_FEED_MAX);
-      localStorage.setItem(LS_COIN_ALERT_FEED_JSON, JSON.stringify(trimmed));
+      safeLocalStorageSetItem(LS_COIN_ALERT_FEED_JSON, JSON.stringify(trimmed));
     } catch (e) {
       console.warn("coin alert feed", e);
     }
@@ -2465,7 +2487,7 @@
 
   function clearCoinAlertFeed() {
     try {
-      localStorage.removeItem(LS_COIN_ALERT_FEED_JSON);
+      safeLocalStorageRemoveItem(LS_COIN_ALERT_FEED_JSON);
     } catch (e) {
       console.warn("coin alert feed clear", e);
     }
@@ -2601,7 +2623,7 @@
 
   function readCoinAlertsAckDigest() {
     try {
-      return localStorage.getItem(LS_COIN_ALERTS_ACK_DIGEST) || "";
+      return safeLocalStorageGetItem(LS_COIN_ALERTS_ACK_DIGEST) || "";
     } catch {
       return "";
     }
@@ -2609,7 +2631,7 @@
 
   function writeCoinAlertsAckDigest(dig) {
     try {
-      localStorage.setItem(LS_COIN_ALERTS_ACK_DIGEST, dig);
+      safeLocalStorageSetItem(LS_COIN_ALERTS_ACK_DIGEST, dig);
     } catch (e) {
       console.warn("coin alerts ack", e);
     }
@@ -3497,7 +3519,7 @@
     }
 
     const prevSyms = readPrevSymbolSet();
-    const prevSchema = localStorage.getItem(LS_PREV_SCHEMA) ?? "";
+    const prevSchema = safeLocalStorageGetItem(LS_PREV_SCHEMA) ?? "";
     const currSet = new Set(
       coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
     );
@@ -3708,20 +3730,20 @@
       .sort();
     const key = JSON.stringify(keys);
     try {
-      localStorage.removeItem(LS_POLL_FILTERED_SYMS_LEGACY);
+      safeLocalStorageRemoveItem(LS_POLL_FILTERED_SYMS_LEGACY);
     } catch {
       /* ignore */
     }
-    const prevFilteredRaw = localStorage.getItem(LS_POLL_FILTERED_ROWS);
-    localStorage.setItem(LS_DIGEST, nextDigest);
+    const prevFilteredRaw = safeLocalStorageGetItem(LS_POLL_FILTERED_ROWS);
+    safeLocalStorageSetItem(LS_DIGEST, nextDigest);
     if (prevFilteredRaw === null || prevFilteredRaw === "") {
-      localStorage.setItem(LS_POLL_FILTERED_ROWS, key);
+      safeLocalStorageSetItem(LS_POLL_FILTERED_ROWS, key);
       return false;
     }
     if (prevFilteredRaw === key) {
       return false;
     }
-    localStorage.setItem(LS_POLL_FILTERED_ROWS, key);
+    safeLocalStorageSetItem(LS_POLL_FILTERED_ROWS, key);
     let prevArr = [];
     try {
       prevArr = JSON.parse(prevFilteredRaw);
@@ -3877,15 +3899,15 @@
           await notifyPinnedWatch(lastPinWatchDelta.entered, lastPinWatchDelta.left);
         }
         try {
-          localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
+          safeLocalStorageSetItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
         } catch {
           /* ignore */
         }
       } else {
-        localStorage.setItem(LS_DIGEST, snapDigest);
+        safeLocalStorageSetItem(LS_DIGEST, snapDigest);
         if (notifyAlertsEnabled) {
           try {
-            localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
+            safeLocalStorageSetItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
           } catch {
             /* ignore */
           }
@@ -4198,7 +4220,7 @@
 
   function dismissNotifyFirstPrompt() {
     try {
-      localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+      safeLocalStorageSetItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
     } catch {
       /* ignore */
     }
@@ -4207,17 +4229,17 @@
 
   function maybeShowNotifyFirstPrompt() {
     try {
-      if (localStorage.getItem(LS_NOTIFY_FIRST_PROMPT_DONE) === "1") return;
+      if (safeLocalStorageGetItem(LS_NOTIFY_FIRST_PROMPT_DONE) === "1") return;
       if (!("Notification" in window)) {
-        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+        safeLocalStorageSetItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
         return;
       }
       if (Notification.permission !== "default") {
-        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+        safeLocalStorageSetItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
         return;
       }
       if (notifyAlertsEnabled) {
-        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+        safeLocalStorageSetItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
         return;
       }
       if (!elNotifyPromptDialog || typeof elNotifyPromptDialog.showModal !== "function") return;
