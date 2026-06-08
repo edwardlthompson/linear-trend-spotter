@@ -613,6 +613,7 @@ def run_scanner():
 
         # Always publish when enabled, including coins=[] (and regime_meta=None when gate is off).
         # Otherwise a zero-qualifier scan never writes or POSTs, and the relay 503s after /tmp loss.
+        snapshot_delivery_ok = not settings.public_qualified_snapshot_enabled
         if settings.public_qualified_snapshot_enabled:
             try:
                 if final_results and str(settings.public_qualified_snapshot_field_set).strip().lower() != "minimal":
@@ -665,14 +666,19 @@ def run_scanner():
                     qualification_exits=exited,
                 )
                 app_logger.info("📤 Public qualified snapshot written")
-                maybe_push_qualified_snapshot_relay(
+                snapshot_delivery_ok = maybe_push_qualified_snapshot_relay(
                     settings.DATA_DIR,
                     settings.public_qualified_snapshot_file,
                 )
             except Exception as snap_err:
+                snapshot_delivery_ok = False
                 app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
 
-        maybe_notify_web_push_qualified_changes(entered, exited)
+        maybe_notify_web_push_qualified_changes(
+            entered,
+            exited,
+            snapshot_delivery_ok=snapshot_delivery_ok,
+        )
 
         app_logger.info("\n✅ Scan complete")
         

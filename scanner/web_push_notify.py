@@ -112,9 +112,18 @@ def build_qualified_change_push_copy(
 def maybe_notify_web_push_qualified_changes(
     entered: list[Mapping[str, Any]] | None,
     exited: list[Mapping[str, Any]] | None,
+    *,
+    snapshot_delivery_ok: bool = True,
 ) -> None:
     """POST to optional push relay when the qualified set gained or lost members."""
     if not (entered or exited):
+        return
+    if not snapshot_delivery_ok:
+        app_logger.warning(
+            "⚠️ Web push skipped because the public snapshot was not published (qualified in=%s out=%s)",
+            len(entered or []),
+            len(exited or []),
+        )
         return
     dashboard_url = os.getenv("WEB_PUSH_DASHBOARD_URL", "").strip()
     title, body = build_qualified_change_push_copy(entered=entered, exited=exited)
