@@ -17,21 +17,25 @@ def _should_retry_http(status: int) -> bool:
     return status in (408, 409, 425, 429, 500, 502, 503, 504)
 
 
-def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> None:
-    """POST file bytes to relay when QUALIFIED_SNAPSHOT_RELAY_* env vars are set."""
+def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> bool:
+    """POST file bytes to relay when QUALIFIED_SNAPSHOT_RELAY_* env vars are set.
+
+    Returns True when no relay is configured or the configured relay accepted the
+    snapshot. Returns False when a configured relay could not be updated.
+    """
     base = os.getenv("QUALIFIED_SNAPSHOT_RELAY_URL", "").strip().rstrip("/")
     secret = os.getenv("QUALIFIED_SNAPSHOT_RELAY_SECRET", "").strip()
     if not base or not secret:
-        return
+        return True
     path = data_dir / filename
     if not path.is_file():
         app_logger.warning("⚠️ Snapshot relay skipped: missing %s", path)
-        return
+        return False
     try:
         body = path.read_bytes()
     except OSError as e:
         app_logger.warning("⚠️ Snapshot relay read failed: %s", e)
-        return
+        return False
 
     def _post_once() -> None:
         req = Request(
@@ -53,7 +57,7 @@ def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> None:
         try:
             _post_once()
             app_logger.info("📡 Qualified snapshot relay updated")
-            return
+            return True
         except HTTPError as he:
             last_exc = he
             code = int(he.code or 0)
@@ -69,7 +73,7 @@ def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> None:
                 sleep_s = min(sleep_s * 2.0, 30.0)
                 continue
             app_logger.warning("⚠️ Snapshot relay HTTP %s: %s", code, he.reason)
-            return
+            return False
         except (URLError, OSError, TimeoutError) as net_err:
             last_exc = net_err
             if attempt < _RELAY_MAX_ATTEMPTS:
@@ -84,10 +88,11 @@ def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> None:
                 sleep_s = min(sleep_s * 2.0, 30.0)
                 continue
             app_logger.warning("⚠️ Snapshot relay failed: %s", net_err)
-            return
+            return False
         except Exception as ex:
             last_exc = ex
             app_logger.warning("⚠️ Snapshot relay failed: %s", ex)
-            return
+            return False
     if last_exc:
         app_logger.warning("⚠️ Snapshot relay exhausted retries: %s", last_exc)
+    return False
