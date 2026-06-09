@@ -53,6 +53,15 @@ class PriceHistoryFallbackClient:
         self._polygon_circuit = polygon_circuit
         self._cmc_circuit = cmc_circuit
 
+    @staticmethod
+    def _is_provider_wide_failure(status_code: int) -> bool:
+        """Return true for errors that indicate a provider outage or global access problem."""
+        if status_code in (408, 429, 401, 403):
+            return True
+        if 500 <= status_code <= 599:
+            return True
+        return False
+
     def _polygon_http_get(
         self,
         url: str,
@@ -84,7 +93,7 @@ class PriceHistoryFallbackClient:
                     self.logger.warning("Polygon HTTP %s%s; retry in %.1fs", response.status_code, label, wait_s)
                     time.sleep(wait_s)
                     continue
-                if self._polygon_circuit and response.status_code != 200:
+                if self._polygon_circuit and self._is_provider_wide_failure(response.status_code):
                     self._polygon_circuit.record_failure()
                 return response
             except requests.exceptions.Timeout:
@@ -136,7 +145,7 @@ class PriceHistoryFallbackClient:
                     self.logger.warning("CMC HTTP %s%s; retry in %.1fs", response.status_code, label, wait_s)
                     time.sleep(wait_s)
                     continue
-                if self._cmc_circuit and response.status_code != 200:
+                if self._cmc_circuit and self._is_provider_wide_failure(response.status_code):
                     self._cmc_circuit.record_failure()
                 return response
             except requests.exceptions.Timeout:
