@@ -3825,7 +3825,7 @@
       let res = await fetch(primary, { credentials: "omit" });
       let text = await res.text();
       let usedRelay503Fallback = false;
-      if (!res.ok && res.status === 503 && fallback && fallback !== primary) {
+      if (!forNotify && !res.ok && res.status === 503 && fallback && fallback !== primary) {
         const resFb = await fetch(fallback, { credentials: "omit" });
         const textFb = await resFb.text();
         if (resFb.ok) {
