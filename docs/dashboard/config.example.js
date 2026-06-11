@@ -1,5 +1,5 @@
-/** Same as committed `config.js`: default is same-origin JSON on GitHub Pages (`../qualified_public_snapshot.json`). */
-window.__SNAPSHOT_URL__ = "../qualified_public_snapshot.json";
+/** Public snapshot JSON. Use the live relay in production; same-origin JSON also works for local/static-only preview. */
+window.__SNAPSHOT_URL__ = "https://YOUR-SNAPSHOT-SERVICE.onrender.com/qualified_public_snapshot.json";
 
 /** Optional: snapshot relay operator JSON (default = same directory as __SNAPSHOT_URL__ + `relay-health`). */
 // window.__RELAY_HEALTH_URL__ = "https://YOUR-SNAPSHOT-SERVICE.onrender.com/relay-health";
