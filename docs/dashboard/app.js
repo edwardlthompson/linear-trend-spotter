@@ -825,9 +825,10 @@
     }
   }
 
-  async function fetchSnapshotWithCommittedFallback(primary) {
+  async function fetchSnapshotWithCommittedFallback(primary, options) {
+    const allowFallback = !options || options.allowFallback !== false;
     const fallback = getCommittedSnapshotFallbackUrl();
-    const canTryFallback = fallback && fallback !== normalizedUrlHref(primary);
+    const canTryFallback = allowFallback && fallback && fallback !== normalizedUrlHref(primary);
     try {
       const res = await fetch(primary, { credentials: "omit" });
       const text = await res.text();
@@ -3875,7 +3876,7 @@
     try {
       const primary = url.trim();
       const { res, text, usedCommittedFallback, fallbackReason } =
-        await fetchSnapshotWithCommittedFallback(primary);
+        await fetchSnapshotWithCommittedFallback(primary, { allowFallback: !forNotify });
       if (!res.ok) {
         if (showErrors) {
           let msg = `HTTP ${res.status} loading snapshot`;
