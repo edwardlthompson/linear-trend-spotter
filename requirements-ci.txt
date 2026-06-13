@@ -106,7 +106,7 @@ multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
-mypy==1.20.2
+mypy==2.1.0
     # via linear-trend-spotter
 mypy-extensions==1.1.0
     # via
@@ -118,7 +118,7 @@ narwhals==2.22.1
     #   scikit-learn
 numba==0.65.1
     # via vectorbt
-numpy==1.26.4
+numpy==2.4.6
     # via
     #   contourpy
     #   imageio
@@ -134,7 +134,7 @@ packaging==26.2
     #   matplotlib
     #   plotly
     #   pytest
-pandas==2.3.3
+pandas==3.0.3
     # via
     #   linear-trend-spotter
     #   vectorbt
@@ -181,7 +181,7 @@ pygments==2.20.0
     #   pytest
 pyparsing==3.3.2
     # via matplotlib
-pytest==8.4.2
+pytest==9.0.3
     # via linear-trend-spotter
 python-dateutil==2.9.0.post0
     # via
@@ -206,7 +206,7 @@ requests==2.34.2
     #   linear-trend-spotter
     #   pywebpush
     #   vectorbt
-ruff==0.12.12
+ruff==0.15.17
     # via linear-trend-spotter
 schedule==1.2.2
     # via vectorbt
@@ -250,7 +250,7 @@ urllib3==2.7.0
     # via
     #   requests
     #   types-requests
-vectorbt==0.28.5
+vectorbt==1.0.0
     # via linear-trend-spotter
 wcwidth==0.8.1
     # via prompt-toolkit
