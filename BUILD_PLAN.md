@@ -1,6 +1,6 @@
 # Build Plan
 
-> Bootstrap adoption and agent-ops task board. Product milestones A–Q live in `docs/EXECUTION_PLAN.md`.
+> Bootstrap adoption and agent-ops task board. Product milestones A-Q live in `docs/EXECUTION_PLAN.md`.
 > Finished items are archived in `COMPLETED_TASKS.md`.
 
 ## Owner Label Legend
@@ -16,13 +16,13 @@
 
 ## Remaining one-time setup
 
-1. [ ] [HUMAN] Enable **Private vulnerability reporting** in GitHub Settings ? Code security (API returns 404; UI-only on this repo)
+1. [ ] [HUMAN] Enable **Private vulnerability reporting** in GitHub Settings -> Code security (API returns 404; UI-only on this repo)
 
 ---
 
 ## Sprint 5 -- Security and Ops (recurring)
 
-- [ ] [HUMAN] Weekly CVE triage (recommended: Monday) — see `docs/SECURITY_TRIAGE.md`
+- [ ] [HUMAN] Weekly CVE triage (recommended: Monday) -- see `docs/SECURITY_TRIAGE.md`
 - [ ] [AGENT] Apply Dependabot bumps as needed
 - [ ] [AUTO] Trivy + CodeQL + CI green after merges (`health-check.yml` weekly)
 
