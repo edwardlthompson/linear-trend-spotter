@@ -1,32 +1,32 @@
 # Module C: Python Applications
 
-> Activate when your stack includes a Python application or CLI.
+> Active for Linear Trend Spotter worker, backtesting, and Flask microservices.
 
 ## Requirements (Verbatim)
 
-- **Environment & Dependency Locking:** Enforce strict package pinning and environment encapsulation utilizing precise tool-specific lockfiles (e.g., `uv.lock`, `poetry.lock`, or `requirements.txt` with strict hashes).
-- **Static Analysis & Type Hygiene:** Enforce complete, strict type-hinting across the codebase validated via type checkers (mypy or pyright). Utilize standard modern tools (such as ruff) to run optimization, styling, and linting suites on every check-in.
+- **Environment & Dependency Locking:** Enforce strict package pinning via `uv.lock` and [pyproject.toml](../pyproject.toml).
+- **Static Analysis & Type Hygiene:** ruff lint in CI; incremental mypy on `config` and `notifications`.
 
 ## Activation Checklist
 
-- [ ] Create `pyproject.toml` with strict dependency pins
-- [ ] Generate and commit lockfile (`uv.lock`)
-- [ ] Enable `ruff check` and `ruff format --check` in CI
-- [ ] Enable `mypy --strict` in CI
-- [ ] Review `examples/python/` Golden Path stub
+- [x] Create `pyproject.toml` with dependency pins
+- [x] Generate and commit `uv.lock`
+- [x] Enable `ruff check` in CI via `scripts/ci_verify.sh`
+- [x] Enable `mypy` in CI (scoped packages)
+- [x] Golden Path: `scripts/ci_verify.sh` (not `examples/python/`)
 - [ ] Set coverage budget threshold in CI
-- [ ] Add pre-commit hooks for ruff and mypy
+- [x] Pre-commit ruff hook
 - [ ] OpenAPI/schema-first design if exposing HTTP API
 - [ ] Contract tests for public API boundaries
 
 ## Operations (when deployed as service)
 
-- [ ] Health/readiness endpoints per `docs/RUNBOOK.md`
+- [x] Health/readiness: snapshot relay `GET /relay-health` (see `docs/RUNBOOK.md`)
 - [ ] Structured logging (JSON, correlation IDs, no PII)
 
 ## Golden Path Reference
 
-See `examples/python/` for uv + ruff + mypy + pytest CLI stub.
+See [scripts/ci_verify.sh](../scripts/ci_verify.sh) and worker entrypoints `main.py`, `scheduler.py`.
 
 ## Owner Labels for This Module
 

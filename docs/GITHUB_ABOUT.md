@@ -10,17 +10,19 @@ crypto scanner backtesting pwa python flask render github-actions foss mit curso
 
 ## Human Setup Checklist
 
-Complete these in GitHub **Settings** (cannot be automated by agents):
+Most settings can be applied via `bash scripts/apply-github-repo-settings.sh` (requires `gh` admin access).
+
+Manual fallback in GitHub **Settings** if the API cannot enable private vulnerability reporting:
 
 1. **Settings → Code security and analysis**
-   - Enable **Dependabot alerts**
-   - Enable **Dependabot security updates**
-   - Enable **Private vulnerability reporting**
+   - Enable **Dependabot alerts** (script: `PUT .../vulnerability-alerts`)
+   - Enable **Dependabot security updates** (script: `PUT .../automated-security-fixes`)
+   - Enable **Private vulnerability reporting** (UI only if POST returns 404)
 2. **Settings → Branches → `main`**
    - Require pull request before merging
-   - Require status checks: **CI**, **CodeQL**, **Security Scan**
-   - Require linear history (optional)
+   - Require status checks: **Verify**, **Trivy FS Scan**, **Analyze (python)**
+   - Enforce for administrators
 3. **Settings → General → Repository details**
-   - Paste description and topics from above
+   - Optional: set `APPLY_GITHUB_ABOUT=1` when running the script to sync from the draft below
 
 See `docs/SECURITY_TRIAGE.md` for weekly CVE triage.

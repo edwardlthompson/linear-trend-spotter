@@ -14,8 +14,6 @@ services:
       POLYGON_API_KEY: ""
       CHART_IMG_API_KEY: ""
     command: >
-      bash -lc "pip install --no-cache-dir -q -r requirements-ci.txt ruff &&
-      ruff check . &&
-      python scripts/check_backtesting_imports.py &&
-      python scripts/verify_backtest_env.py &&
-      python -m compileall -q ."
+      bash -lc "curl -LsSf https://astral.sh/uv/install.sh | sh &&
+      export PATH=\"$$HOME/.local/bin:$$PATH\" &&
+      bash scripts/ci_verify.sh"

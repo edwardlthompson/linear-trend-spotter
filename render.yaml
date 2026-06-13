@@ -4,9 +4,9 @@ services:
     runtime: python
     plan: starter
     autoDeployTrigger: commit
-    # Match GitHub CI: requirements-ci.txt (no TA-Lib sdist), ruff, verify_backtest_env, compileall.
+    # Match GitHub CI: uv sync --extra dev via ci_verify.sh (no TA-Lib sdist).
     buildCommand: bash scripts/ci_verify.sh
-    startCommand: bash scripts/run_render_worker.sh
+    startCommand: bash scripts/render_uv_run.sh bash scripts/run_render_worker.sh
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -51,7 +51,7 @@ services:
     autoDeployTrigger: commit
     rootDir: push_server
     buildCommand: bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && uv sync --locked --extra push --project ..'
-    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    startCommand: bash -c 'bash ../scripts/render_uv_run.sh --project .. gunicorn --chdir push_server --bind 0.0.0.0:$PORT app:app'
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -82,7 +82,7 @@ services:
     autoDeployTrigger: commit
     rootDir: snapshot_server
     buildCommand: bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && uv sync --locked --extra snapshot --project ..'
-    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    startCommand: bash -c 'bash ../scripts/render_uv_run.sh --project .. gunicorn --chdir snapshot_server --bind 0.0.0.0:$PORT app:app'
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11

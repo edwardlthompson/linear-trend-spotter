@@ -23,12 +23,13 @@ dependencies = [
 [project.optional-dependencies]
 talib = ["TA-Lib>=0.4.28,<1"]
 dev = [
-  "pytest>=8.0.0,<9",
+  "pytest>=9.0.3,<10",
   "mypy>=1.8.0,<2",
   "ruff>=0.8.0,<0.13",
   "types-requests>=2.31.0,<3",
   "flask>=3.0.0,<4",
   "pywebpush>=2.0.0,<3",
+  "pip-licenses>=4.5.0,<5",
 ]
 push = [
   "flask>=3.0.0,<4",
