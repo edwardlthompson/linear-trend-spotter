@@ -3479,9 +3479,10 @@
     );
   }
 
-  function render(data) {
+  function render(data, options) {
     clearError();
     lastPayload = data;
+    const suppressSnapshotSideEffects = Boolean(options && options.suppressSnapshotSideEffects);
     const coins = Array.isArray(data.coins) ? data.coins : [];
     const updatedRaw = data.updated_at || "";
     const updatedDisplay = updatedRaw || "—";
@@ -3527,12 +3528,14 @@
       }
     }
 
-    const prevSyms = readPrevSymbolSet();
-    const prevSchema = localStorage.getItem(LS_PREV_SCHEMA) ?? "";
+    const prevSyms = suppressSnapshotSideEffects ? new Set() : readPrevSymbolSet();
+    const prevSchema = suppressSnapshotSideEffects ? "" : localStorage.getItem(LS_PREV_SCHEMA) ?? "";
     const currSet = new Set(
       coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
     );
-    lastPinWatchDelta = reconcilePinnedQualifiedState(currSet);
+    lastPinWatchDelta = suppressSnapshotSideEffects
+      ? { entered: [], left: [] }
+      : reconcilePinnedQualifiedState(currSet);
     pinEnterFlashSet = new Set(lastPinWatchDelta.entered);
     updateWatchLeaveBanner(lastPinWatchDelta.left);
     const added =
@@ -3543,7 +3546,7 @@
 
     const curSchema = String(data.schema_version ?? "");
     const schemaChanged = prevSchema !== "" && prevSchema !== curSchema;
-    if (schemaChanged) {
+    if (!suppressSnapshotSideEffects && schemaChanged) {
       appendOpsFeedDeduped(
         `schema|${prevSchema}|${curSchema}`,
         updatedRaw || "—",
@@ -3553,12 +3556,14 @@
 
     updateCoinListDiffBanner(added, dropped);
     const exitReasonBySym = qualificationExitReasonMap(data);
-    const listNotifyDelta = appendQualifiedListNotifications(
-      added,
-      dropped,
-      prevSyms.size === 0,
-      exitReasonBySym,
-    );
+    const listNotifyDelta = suppressSnapshotSideEffects
+      ? { enters: [], exits: [] }
+      : appendQualifiedListNotifications(
+          added,
+          dropped,
+          prevSyms.size === 0,
+          exitReasonBySym,
+        );
     renderCoinAlertsList();
     if (
       notifyAlertsEnabled &&
@@ -3602,7 +3607,9 @@
 
     applyTableView();
     updateWatchlistBadge();
-    writeSnapshotVisitState(data);
+    if (!suppressSnapshotSideEffects) {
+      writeSnapshotVisitState(data);
+    }
     window.requestAnimationFrame(() => {
       refreshDashboardShellWidth();
     });
@@ -3897,7 +3904,10 @@
         snapshotMetaSuffix = "";
         snapshotLoadWasCommittedFallback = false;
       }
-      render(data);
+      render(data, { suppressSnapshotSideEffects: usedRelay503Fallback });
+      if (usedRelay503Fallback) {
+        return;
+      }
       const snapDigest = await digestHex(text);
       if (forNotify && notifyAlertsEnabled) {
         const scope = tierANotifyScope();
