@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Milestone gate: exit 0 only if the latest GitHub Actions run for `.github/workflows/ci.yml`
-on branch `main` completed successfully.
+Milestone gate: exit 0 only if required GitHub Actions workflows on branch `main`
+completed successfully: CI, Security Scan, CodeQL.
 
 Requires one of:
   - GitHub CLI `gh` in PATH, authenticated (`gh auth login`).
-  - Environment variable `GITHUB_TOKEN` (or `GH_TOKEN`) with `repo` + `actions:read` for private repos;
-    public repos work with fine-grained token scoped to Actions read.
+  - Environment variable `GITHUB_TOKEN` (or `GH_TOKEN`) with `repo` + `actions:read`.
 
 Usage:
   python scripts/check_github_ci.py
   python scripts/check_github_ci.py --branch main
+  python scripts/check_github_ci.py --wait 300
 
-See docs/EXECUTION_PLAN.md (Instructions + Non-regression).
+See docs/EXECUTION_PLAN.md and BUILD_PLAN.md.
 """
 
 from __future__ import annotations
@@ -23,8 +23,11 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
+
+REQUIRED_WORKFLOWS = ("CI", "Security Scan", "CodeQL")
 
 
 def _parse_origin_url(raw: str) -> tuple[str, str] | None:
@@ -55,49 +58,41 @@ def _owner_repo_from_git() -> tuple[str, str]:
     return parsed
 
 
-def _check_via_gh(branch: str) -> tuple[int, str]:
+def _fetch_runs_gh(branch: str) -> list[dict] | None:
     try:
         proc = subprocess.run(
             [
                 "gh",
                 "run",
                 "list",
-                "--workflow=ci.yml",
                 "--branch",
                 branch,
                 "--limit",
-                "1",
+                "30",
                 "--json",
-                "conclusion,status,displayTitle,url",
+                "workflowName,conclusion,status,url,createdAt",
             ],
             capture_output=True,
             text=True,
             timeout=120,
         )
     except FileNotFoundError:
-        return 127, "gh_not_found"
+        return None
     if proc.returncode != 0:
-        return proc.returncode, proc.stderr.strip() or proc.stdout.strip() or "gh_error"
-    rows = json.loads(proc.stdout or "[]")
-    if not rows:
-        return 1, "no_runs_found"
-    r = rows[0]
-    status = str(r.get("status") or "")
-    conclusion = str(r.get("conclusion") or "")
-    title = str(r.get("displayTitle") or "")
-    url = str(r.get("url") or "")
-    if status != "completed":
-        return 2, f"not_completed status={status} title={title!r} url={url}"
-    if conclusion != "success":
-        return 1, f"conclusion={conclusion!r} title={title!r} url={url}"
-    return 0, f"ok conclusion=success title={title!r} url={url}"
+        print(proc.stderr.strip() or proc.stdout.strip() or "gh_error", file=sys.stderr)
+        sys.exit(1)
+    return json.loads(proc.stdout or "[]")
 
 
-def _check_via_api(owner: str, repo: str, branch: str) -> tuple[int, str]:
+def _fetch_runs_api(owner: str, repo: str, branch: str) -> list[dict]:
     token = (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or "").strip()
     if not token:
-        return 127, "no_token"
-    url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs?branch={branch}&per_page=15"
+        print(
+            "FAIL: install GitHub CLI (`gh`) and run `gh auth login`, or set GITHUB_TOKEN / GH_TOKEN.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs?branch={branch}&per_page=30"
     req = urllib.request.Request(
         url,
         headers={
@@ -110,47 +105,92 @@ def _check_via_api(owner: str, repo: str, branch: str) -> tuple[int, str]:
         with urllib.request.urlopen(req, timeout=60) as resp:
             payload = json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
-        return 1, f"api_http_{e.code}: {e.reason}"
+        print(f"FAIL: api_http_{e.code}: {e.reason}", file=sys.stderr)
+        sys.exit(1)
     except OSError as e:
-        return 1, f"api_error: {e}"
-
+        print(f"FAIL: api_error: {e}", file=sys.stderr)
+        sys.exit(1)
     runs = payload.get("workflow_runs") or []
+    return [
+        {
+            "workflowName": r.get("name") or "",
+            "status": r.get("status") or "",
+            "conclusion": r.get("conclusion") or "",
+            "url": r.get("html_url") or "",
+        }
+        for r in runs
+    ]
+
+
+def _latest_by_workflow(runs: list[dict]) -> dict[str, dict]:
+    latest: dict[str, dict] = {}
     for run in runs:
-        if str(run.get("path") or "") != ".github/workflows/ci.yml":
+        name = str(run.get("workflowName") or "")
+        if name not in REQUIRED_WORKFLOWS:
+            continue
+        if name not in latest:
+            latest[name] = run
+    return latest
+
+
+def _evaluate(latest: dict[str, dict]) -> tuple[int, list[str]]:
+    messages: list[str] = []
+    pending = 0
+    failed = 0
+
+    for wf in REQUIRED_WORKFLOWS:
+        run = latest.get(wf)
+        if not run:
+            messages.append(f"WAIT {wf}: no run yet")
+            pending += 1
             continue
         status = str(run.get("status") or "")
         conclusion = str(run.get("conclusion") or "")
-        html = str(run.get("html_url") or "")
-        name = str(run.get("name") or "")
+        url = str(run.get("url") or "")
         if status != "completed":
-            return 2, f"not_completed status={status} name={name!r} url={html}"
+            messages.append(f"WAIT {wf} ({status}): {url}")
+            pending += 1
+            continue
         if conclusion != "success":
-            return 1, f"conclusion={conclusion!r} name={name!r} url={html}"
-        return 0, f"ok conclusion=success name={name!r} url={html}"
-    return 1, "no_ci_workflow_run_in_page"
+            messages.append(f"FAIL {wf} ({conclusion}): {url}")
+            failed += 1
+        else:
+            messages.append(f"OK {wf}: {url}")
+
+    if failed > 0:
+        return 1, messages
+    if pending > 0:
+        return 2, messages
+    return 0, messages
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Verify latest GitHub Actions CI on branch is green.")
+    p = argparse.ArgumentParser(description="Verify required GitHub Actions workflows are green.")
     p.add_argument("--branch", default="main", help="Branch to check (default: main)")
+    p.add_argument("--wait", type=int, default=0, help="Poll up to N seconds for pending runs")
     args = p.parse_args()
-    branch: str = args.branch
 
-    code, msg = _check_via_gh(branch)
-    if code != 127:
-        print(msg)
-        return 0 if code == 0 else code
+    deadline = time.time() + max(0, args.wait)
 
-    owner, repo = _owner_repo_from_git()
-    code, msg = _check_via_api(owner, repo, branch)
-    if code == 127:
-        print(
-            "FAIL: install GitHub CLI (`gh`) and run `gh auth login`, or set GITHUB_TOKEN / GH_TOKEN.",
-            file=sys.stderr,
-        )
-        return 1
-    print(msg)
-    return 0 if code == 0 else code
+    while True:
+        runs = _fetch_runs_gh(args.branch)
+        if runs is None:
+            owner, repo = _owner_repo_from_git()
+            runs = _fetch_runs_api(owner, repo, args.branch)
+
+        code, messages = _evaluate(_latest_by_workflow(runs))
+        for msg in messages:
+            print(msg)
+
+        if code == 0:
+            print(f"All {len(REQUIRED_WORKFLOWS)} required workflows passed on GitHub")
+            return 0
+        if code == 1:
+            return 1
+        if args.wait <= 0 or time.time() >= deadline:
+            print("INCOMPLETE: re-run with --wait 300")
+            return code
+        time.sleep(15)
 
 
 if __name__ == "__main__":

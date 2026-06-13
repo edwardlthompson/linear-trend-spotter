@@ -17,10 +17,10 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 
 ## Quick start
 
-1. **Python 3.11+**, `pip install -r requirements.txt` (use **`requirements-ci.txt`** where CI does).
+1. **Python 3.11+** and [uv](https://docs.astral.sh/uv/): `uv sync --locked --extra dev` (add `--extra talib` for local prod with TA-Lib).
 2. Copy **`.env.example`** → `.env`; set at least **`CMC_API_KEY`** (and optional **`COINGECKO_API_KEY`** for production-grade CoinGecko—still used for OHLCV, tickers, and the `/coins/list` id mapper).
 3. Optional **`config.json`** from **`config.json.example`**—sensible defaults already live in **`config/settings.py`**.
-4. Run **`python main.py`** (or your scheduler) from repo root; snapshot lands under **`DATA_DIR`** / **`qualified_public_snapshot.json`** when enabled.
+4. Run **`uv run python main.py`** (or your scheduler) from repo root; snapshot lands under **`DATA_DIR`** / **`qualified_public_snapshot.json`** when enabled.
 
 **API budget:** defaults use **`TOP_COINS_PROVIDER`: `"cmc"`** so the **ranked universe** comes from **one** CoinMarketCap `listings/latest` call per scan instead of many CoinGecko `/coins/markets` pages. CoinGecko ids for OHLCV and exchange tickers are resolved via the local mapper (including **name-aware** matching when CMC supplies symbol + name). To spend CoinGecko credits last on hourly bars, set **`OHLCV_UNIFORMITY_SOURCE_ORDER`** (e.g. `cmc,polygon,coingecko`)—see **`docs/COIN_API_CREDIT_STRATEGY.md`**.
 
@@ -57,7 +57,15 @@ Optional **`config.json`** keys include **`TOP_COINS_PROVIDER`** (`cmc` or `coin
 
 ## Contributing / CI
 
-`scripts/ci_verify.sh` is the same command Render’s **worker** runs at build time: **ruff**, **`python scripts/check_exchange_print_ascii.py`** (no non-ASCII on `print()` lines under `exchange_data/`), **mypy** on `config` + `notifications`, **`scripts/check_backtesting_imports.py`**, **`scripts/verify_backtest_env.py`**, **`compileall`**, **`pytest tests/`**, plus **`tests/test_render_rootdir_imports.py`** (imports `push_server` / `snapshot_server` `app` with Render-style `rootDir` cwd). Use **`requirements-ci.txt`** in CI and on fresh clones when mirroring the worker install.
+`scripts/ci_verify.sh` is the same command Render’s **worker** runs at build time (`uv sync --locked --extra dev`, then **ruff**, **mypy**, **pytest**, etc.). Legacy **`requirements*.txt`** files are exported from **`uv.lock`** for reference only.
+
+**Agent bootstrap:** read `docs/START_HERE.md` and `AGENTS.md`. Task boards: `BUILD_PLAN.md` (ops) and `docs/EXECUTION_PLAN.md` (product). BUILD_PLAN labels: `AGENT` | `HUMAN` | `AUTO`.
+
+**Template updates:** configure interval in `.template-update.json`; manual check: `pwsh scripts/check-template-updates.ps1`.
+
+**Required GitHub workflows after push to `main`:** CI, Security Scan, CodeQL — poll with `python scripts/check_github_ci.py --wait 300`.
+
+See **`CONTRIBUTING.md`**, **`SECURITY.md`**, and **`docs/SECURITY_TRIAGE.md`**.
 
 **Production diagnostics:** if the dashboard looks empty but the worker ran, check the snapshot relay (`scripts/check_snapshot_relay.py` from a shell that has relay env vars, or open `/relay-health` on the relay host). Worker logs may show **`EXCHANGE_UNIVERSE_FALLBACK`** when exchange listings never populated—often a failed listings refresh (see `exchange_data` logs).
 

@@ -50,7 +50,7 @@ services:
     branch: main
     autoDeployTrigger: commit
     rootDir: push_server
-    buildCommand: pip install -r requirements.txt
+    buildCommand: bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && uv sync --locked --extra push --project ..'
     startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
     envVars:
       - key: PYTHON_VERSION
@@ -81,7 +81,7 @@ services:
     branch: main
     autoDeployTrigger: commit
     rootDir: snapshot_server
-    buildCommand: pip install -r requirements.txt
+    buildCommand: bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh && export PATH="$HOME/.local/bin:$PATH" && uv sync --locked --extra snapshot --project ..'
     startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
     envVars:
       - key: PYTHON_VERSION

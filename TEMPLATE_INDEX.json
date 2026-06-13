@@ -1,0 +1,267 @@
+{
+  "template_version": "0.2.1",
+  "entry_points": {
+    "bootstrap": "docs/START_HERE.md",
+    "reference": "docs/FOR_AGENTS.md",
+    "initialization_prompt": "docs/INITIALIZATION_PROMPT.md"
+  },
+  "files": [
+    {
+      "path": "docs/START_HERE.md",
+      "purpose": "Single entry point; bootstrap vs reference decision tree",
+      "read_when": "session_start",
+      "update_when": "never",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/INITIALIZATION_PROMPT.md",
+      "purpose": "Verbatim project initialization prompt for Cursor agents",
+      "read_when": "bootstrap_session_start",
+      "update_when": "project_customization",
+      "owner": "human+agent"
+    },
+    {
+      "path": "docs/FOR_AGENTS.md",
+      "purpose": "Agent read-order, token budget, parallel guardrails",
+      "read_when": "reference_session_start",
+      "update_when": "never",
+      "owner": "maintainer"
+    },
+    {
+      "path": "AGENTS.md",
+      "purpose": "Living architecture rules and agent router",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "AGENT_MEMORY.md",
+      "purpose": "Tech stack, threat model, retrospectives index",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "BUILD_PLAN.md",
+      "purpose": "Sprint task board with AGENT/HUMAN/ADB/AUTO labels",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "COMPLETED_TASKS.md",
+      "purpose": "Archive of finished BUILD_PLAN items",
+      "read_when": "session_start",
+      "update_when": "task_completion",
+      "owner": "agent"
+    },
+    {
+      "path": "DECISION_LOG.md",
+      "purpose": "Append-only decision register",
+      "read_when": "architectural_decision",
+      "update_when": "architectural_decision",
+      "owner": "agent+human"
+    },
+    {
+      "path": "KNOWLEDGE_BASE.md",
+      "purpose": "Stack-specific edge cases and resolved bugs",
+      "read_when": "debugging",
+      "update_when": "bug_resolved",
+      "owner": "agent"
+    },
+    {
+      "path": "PROMPT_LIBRARY.md",
+      "purpose": "Effective prompt strategies for this repo",
+      "read_when": "prompt_needed",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "README.md",
+      "purpose": "Project overview, quick start, BUILD_PLAN labels, update checker, security",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "purpose": "Contribution guidelines and PR expectations",
+      "read_when": "contributing",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/SECURITY_TRIAGE.md",
+      "purpose": "Dependabot alerts setup, weekly CVE triage, release security gate",
+      "read_when": "security_triage",
+      "update_when": "never",
+      "owner": "maintainer"
+    },
+    {
+      "path": "SECURITY.md",
+      "purpose": "Vulnerability reporting policy and supported versions",
+      "read_when": "security_report",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "CODE_OF_CONDUCT.md",
+      "purpose": "Community standards (Contributor Covenant)",
+      "read_when": "contributing",
+      "update_when": "never",
+      "owner": "maintainer"
+    },
+    {
+      "path": "THIRD_PARTY_LICENSES.md",
+      "purpose": "Dependency license attribution and audit reference",
+      "read_when": "release",
+      "update_when": "release",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/THREAT_MODEL.md",
+      "purpose": "STRIDE threat model, trust boundaries, abuse cases",
+      "read_when": "architectural_decision",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/PRIVACY.md",
+      "purpose": "Privacy policy draft, data minimization, DPIA checklist",
+      "read_when": "privacy_review",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/RUNBOOK.md",
+      "purpose": "Deploy, rollback, health checks, SLOs, escalation",
+      "read_when": "operations",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "purpose": "Critical path ownership for PR review routing",
+      "read_when": "contributing",
+      "update_when": "milestone_boundary",
+      "owner": "human"
+    },
+    {
+      "path": ".template-version",
+      "purpose": "Semver of template version baked into clone",
+      "read_when": "update_check",
+      "update_when": "template_upgrade",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".template-update.json",
+      "purpose": "Update checker interval and last-checked timestamp",
+      "read_when": "update_check",
+      "update_when": "user_preference",
+      "owner": "human"
+    },
+    {
+      "path": "LICENSE",
+      "purpose": "MIT license for template and child projects",
+      "read_when": "contributing",
+      "update_when": "never",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".env.example",
+      "purpose": "Documented environment variable stub; copy to .env locally",
+      "read_when": "bootstrap_session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "scripts/validate-bootstrap.sh",
+      "purpose": "Sprint 0 artifact verification with encoding, index, and lockfile gates",
+      "read_when": "bootstrap_session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-license-compliance.sh",
+      "purpose": "Fail on disallowed dependency licenses after locked installs",
+      "read_when": "release",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-file-encoding.sh",
+      "purpose": "Reject UTF-16 or NUL-byte corruption in tracked text files",
+      "read_when": "bootstrap_session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/dependency-review.yml",
+      "purpose": "PR dependency review \u2014 fail on new High/Critical vulnerabilities",
+      "read_when": "contributing",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".cursor/rules/destructive-ops.mdc",
+      "purpose": "Human-in-the-loop gates for destructive agent operations",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/validate-workflow-actions.sh",
+      "purpose": "Verify GitHub Actions workflow refs resolve before push",
+      "read_when": "bootstrap_session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-github-ci.sh",
+      "purpose": "Poll GitHub Actions CI/Security/CodeQL status for a commit",
+      "read_when": "release",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-github-ci.ps1",
+      "purpose": "Windows wrapper to poll GitHub Actions workflow status",
+      "read_when": "release",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-workflow-action-ref-format.sh",
+      "purpose": "Pre-commit guard against bare-semver GitHub Action refs in workflows",
+      "read_when": "bootstrap_session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/health-check.yml",
+      "purpose": "Weekly scheduled poll of CI + Security Scan + CodeQL status on main",
+      "read_when": "security_triage",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "purpose": "SBOM, provenance attestation, and GitHub Release on version tags",
+      "read_when": "release",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    }
+  ],
+  "modules": {
+    "web": {
+      "guide": "modules/web/MODULE.md",
+      "example": "docs/dashboard",
+      "activate_when": "stack includes PWA, web, or static site"
+    },
+    "python": {
+      "guide": "modules/python/MODULE.md",
+      "example": "scripts/ci_verify.sh",
+      "activate_when": "stack includes Python application"
+    }
+  }
+}

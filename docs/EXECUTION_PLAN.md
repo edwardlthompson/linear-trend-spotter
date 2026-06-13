@@ -1,5 +1,7 @@
 # Linear Trend Spotter — Execution Plan
 
+> **Agent session routing:** read `docs/START_HERE.md` → `BUILD_PLAN.md` for bootstrap/ops tasks; use this file for product milestones A–Q.
+
 **Purpose:** Single reference for engineering milestones (code quality, Render pipeline, API cost reduction, modular backtesting, public qualified-coin dashboard + PWA + client-side UX).  
 **Living document:** Checkboxes are updated as work completes.  
 **Last reviewed:** 2026-05-03
@@ -26,7 +28,7 @@ These rules apply to **every** milestone unless a task explicitly says otherwise
 2. **Same scan interval:** Do **not** change `SCAN_INTERVAL_SECONDS` (Render), cron schedule, or worker timing as part of this plan. Cadence stays **identical** unless a dedicated ops/product change is approved outside this document.
 3. **Additive by default:** New features (Milestones **J–Q**) must be **disabled or no-op** until opt-in via config/env, **or** must reproduce current outputs when the flag is off. No silent removal of notifications, backtests, or qualification stages in default configuration.
 4. **No regression gate:** After each milestone, existing **verify** scripts in CI (Milestone A) and any milestone-specific verification must pass. For scan-touching work, document in Notes: same key counts as baseline (e.g. symbols loaded, final qualified count within expected variance for a fixed seed run if applicable).
-5. **GitHub CI green before advancing:** Do **not** mark a milestone’s tasks complete in this file and do **not** start the **next** milestone in **Master execution order** until **`main`**’s latest run of [`.github/workflows/ci.yml`](https://github.com/edwardlthompson/linear-trend-spotter/blob/main/.github/workflows/ci.yml) has **`conclusion: success`**. Locally or before pushing milestone work, run `python scripts/check_github_ci.py` (requires authenticated **`gh`** CLI, or **`GITHUB_TOKEN`** / **`GH_TOKEN`** with Actions read access). Exit `2` means the latest run is still in progress—wait and re-run. On GitHub itself, rely on branch protection + required checks when enabled (**A4**).
+5. **GitHub CI green before advancing:** Do **not** mark a milestone’s tasks complete in this file and do **not** start the **next** milestone in **Master execution order** until **`main`**’s latest runs of **CI**, **Security Scan**, and **CodeQL** have **`conclusion: success`**. Locally or before pushing milestone work, run `python scripts/check_github_ci.py` (requires authenticated **`gh`** CLI, or **`GITHUB_TOKEN`** / **`GH_TOKEN`** with Actions read access). Exit `2` means one or more runs are still in progress—wait and re-run. On GitHub itself, rely on branch protection + required checks when enabled (**A4**).
 6. **OHLCV chain unchanged in priority:** Per **Authoritative OHLCV policy** (Technical reference)—never swap provider order to save cost.
 7. **Public dashboard (Milestone Q):** Snapshot serialization must **not** add provider HTTP calls; it only mirrors data already computed in the scan.
 
@@ -44,7 +46,7 @@ Complete milestones in the order defined in **Master execution order** (default:
 3. **Do not** mark a checkbox `[x]` until verification passes.
 4. **Update this file** in the same change set (or immediately after merge) by changing `- [ ]` to `- [x]` for completed tasks only. Add a short **Notes** line under the task if you discovered follow-up work (optional sub-bullet).
 5. If verification fails, **fix or revert**, re-run verification, then check the box.
-5a. **GitHub CI on `main`:** Before checking milestone boxes or starting the **next** milestone, confirm the latest **`CI` / `ci.yml`** run on `main` is **success** (see Non-regression guardrail **5**). Run `python scripts/check_github_ci.py` from the repo root when working locally; if it fails, fix CI first, then continue milestone work.
+5a. **GitHub CI on `main`:** Before checking milestone boxes or starting the **next** milestone, confirm the latest **CI**, **Security Scan**, and **CodeQL** runs on `main` are **success** (see Non-regression guardrail **5**). Run `python scripts/check_github_ci.py` from the repo root when working locally; if it fails, fix CI first, then continue milestone work.
 6. **Render:** After changes merge to the branch Render tracks (usually `main`), confirm the dashboard shows a successful deploy when applicable. Do not mark deploy-dependent tasks complete if the build failed on Render.
 
 **Checkbox format:** Use exactly `- [ ]` (incomplete) and `- [x]` (complete) so searches and parsers stay consistent.

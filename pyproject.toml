@@ -5,13 +5,44 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "linear-trend-spotter"
 version = "0.0.0"
-description = "Linear Trend Spotter scanner worker and backtesting helpers (Milestone P4 packaging stub)."
+description = "Linear Trend Spotter scanner worker and backtesting helpers"
 readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+  "requests>=2.31.0,<3",
+  "portalocker>=2.0.0,<4",
+  "python-dotenv>=1.0.0,<2",
+  "pandas>=2.0.0,<3",
+  "numpy>=1.24.0,<2",
+  "vectorbt>=0.26.0,<1",
+  "tabulate>=0.9.0,<1",
+  "matplotlib>=3.7.0,<4",
+  "psutil>=5.9.0,<8",
+]
+
+[project.optional-dependencies]
+talib = ["TA-Lib>=0.4.28,<1"]
+dev = [
+  "pytest>=8.0.0,<9",
+  "mypy>=1.8.0,<2",
+  "ruff>=0.8.0,<0.13",
+  "types-requests>=2.31.0,<3",
+  "flask>=3.0.0,<4",
+  "pywebpush>=2.0.0,<3",
+]
+push = [
+  "flask>=3.0.0,<4",
+  "gunicorn>=22.0.0,<24",
+  "pywebpush>=2.0.0,<3",
+]
+snapshot = [
+  "flask>=3.0.0,<4",
+  "gunicorn>=22.0.0,<24",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["tests*", "scripts*", "docs*", "push_server*", ".venv*", "venv*", "build*", "dist*"]
+exclude = ["tests*", "scripts*", "docs*", "push_server*", "snapshot_server*", ".venv*", "venv*", "build*", "dist*"]
 
 [tool.ruff]
 target-version = "py311"
@@ -25,7 +56,6 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-# Narrow rule set for CI without mass reformat; expand (e.g. I, E4) incrementally.
 select = ["E9", "F"]
 ignore = []
 
@@ -37,7 +67,6 @@ ignore = []
 testpaths = ["tests"]
 pythonpath = ["."]
 
-# Milestone D3: incremental typing on config + notifications (CI: mypy config notifications …).
 [tool.mypy]
 python_version = "3.11"
 explicit_package_bases = true
