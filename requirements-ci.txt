@@ -181,7 +181,7 @@ pygments==2.20.0
     #   pytest
 pyparsing==3.3.2
     # via matplotlib
-pytest==8.4.2
+pytest==9.0.3
     # via linear-trend-spotter
 python-dateutil==2.9.0.post0
     # via
