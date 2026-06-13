@@ -4,6 +4,8 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from urllib.parse import quote
+
 from config.constants import DEFAULT_TARGET_EXCHANGES
 
 
