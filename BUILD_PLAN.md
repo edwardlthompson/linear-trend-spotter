@@ -1,6 +1,6 @@
 # Build Plan
 
-> Bootstrap adoption and agent-ops task board. Product milestones AñQ live in `docs/EXECUTION_PLAN.md`.
+> Bootstrap adoption and agent-ops task board. Product milestones AùQ live in `docs/EXECUTION_PLAN.md`.
 > Move completed items to `COMPLETED_TASKS.md`.
 
 ## Owner Label Legend
@@ -22,7 +22,7 @@ grep '\[AUTO\]' BUILD_PLAN.md
 
 ---
 
-## Sprint 0 ó Bootstrap Adoption
+## Sprint 0 ù Bootstrap Adoption
 
 ### Sequential (must complete in order)
 
@@ -33,7 +33,7 @@ grep '\[AUTO\]' BUILD_PLAN.md
 5. [ ] [HUMAN] Enable Dependabot alerts + security updates (`docs/SECURITY_TRIAGE.md`)
 6. [ ] [HUMAN] Enable private vulnerability reporting + branch protection on `main`
 7. [x] [AGENT] Draft `docs/THREAT_MODEL.md`, `docs/PRIVACY.md`, `docs/RUNBOOK.md`
-8. [ ] [AUTO] `scripts/validate-bootstrap.sh` passes
+8. [x] [AUTO] `scripts/validate-bootstrap.sh` passes
 9. [ ] [HUMAN] Approve Sprint 0 after CI green on `main`
 
 ### Parallel (safe after Sequential step 3)
@@ -46,7 +46,7 @@ grep '\[AUTO\]' BUILD_PLAN.md
 
 ---
 
-## Sprint 1 ó uv + CI Parity
+## Sprint 1 ù uv + CI Parity
 
 ### Sequential (must complete in order)
 
@@ -55,7 +55,7 @@ grep '\[AUTO\]' BUILD_PLAN.md
 3. [x] [AGENT] Merge bootstrap guardrail jobs into `.github/workflows/ci.yml`
 4. [x] [AGENT] Add CodeQL, Trivy, dependency-review, health-check, release workflows
 5. [x] [AGENT] Extend `scripts/check_github_ci.py` for CI + Security Scan + CodeQL
-6. [ ] [AUTO] Full CI matrix green on `main`
+6. [x] [AUTO] Full CI matrix green on `main`
 7. [ ] [HUMAN] Sign off Sprint 1
 
 ### Parallel (safe after Sequential step 4)
@@ -68,7 +68,7 @@ grep '\[AUTO\]' BUILD_PLAN.md
 
 ---
 
-## Sprint 2 ó Security & Ops Hardening
+## Sprint 2 ù Security & Ops Hardening
 
 ### Sequential
 
@@ -78,7 +78,7 @@ grep '\[AUTO\]' BUILD_PLAN.md
 
 ---
 
-## Sprint 3+ ó Web Module (Deferred)
+## Sprint 3+ ù Web Module (Deferred)
 
 ### Parallel
 
@@ -98,8 +98,8 @@ grep '\[AUTO\]' BUILD_PLAN.md
 
 ## Milestone Gates
 
-- [ ] [AUTO] `scripts/validate-bootstrap.sh` green
-- [ ] [AUTO] `scripts/ci_verify.sh` green (local + Render)
-- [ ] [AUTO] Required workflows: CI, Security Scan, CodeQL
+- [x] [AUTO] `scripts/validate-bootstrap.sh` green
+- [x] [AUTO] `scripts/ci_verify.sh` green (local + Render)
+- [x] [AUTO] Required workflows: CI, Security Scan, CodeQL
 - [ ] [HUMAN] Zero open Critical/High Dependabot alerts (or documented exception)
 - [ ] [HUMAN] `CHANGELOG.md` updated on releases
