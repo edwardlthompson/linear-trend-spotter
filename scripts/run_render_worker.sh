@@ -19,7 +19,7 @@ while true; do
   started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   echo "[$started] Starting scheduled scan" | tee -a "$LOG_FILE"
 
-  if python3 scheduler.py >> "$LOG_FILE" 2>&1; then
+  if uv run python scheduler.py >> "$LOG_FILE" 2>&1; then
     echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Scan finished successfully" | tee -a "$LOG_FILE"
   else
     exit_code=$?

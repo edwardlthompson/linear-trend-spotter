@@ -43,6 +43,15 @@ if os.path.isfile(gitignore):
 for fp in iter_files():
     if is_bad_encoding(fp):
         errors.append(os.path.relpath(fp, root))
+        continue
+    if fp.endswith(".md"):
+        try:
+            text = open(fp, encoding="utf-8").read()
+        except UnicodeDecodeError:
+            errors.append(os.path.relpath(fp, root))
+            continue
+        if "\ufffd" in text:
+            errors.append(os.path.relpath(fp, root) + " (mojibake U+FFFD)")
 
 if errors:
     print("Invalid encoding (require UTF-8 without BOM):")

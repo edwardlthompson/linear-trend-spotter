@@ -24,6 +24,24 @@ def _import_app_ok(cwd: Path) -> None:
     assert r.returncode == 0, f"stderr:\n{r.stderr}\nstdout:\n{r.stdout}"
 
 
+def test_push_server_uv_run_gunicorn_module() -> None:
+    """Render start uses uv run gunicorn --chdir push_server; ensure app module loads."""
+    r = subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "import app; assert getattr(app, 'app', None) is not None",
+        ],
+        cwd=str(ROOT / "push_server"),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert r.returncode == 0, f"stderr:\n{r.stderr}\nstdout:\n{r.stdout}"
+
+
 def test_push_server_import_with_cwd_push_server() -> None:
     _import_app_ok(ROOT / "push_server")
 

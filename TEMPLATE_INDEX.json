@@ -250,6 +250,90 @@
       "read_when": "release",
       "update_when": "milestone_boundary",
       "owner": "maintainer"
+    },
+    {
+      "path": "docs/EXECUTION_PLAN.md",
+      "purpose": "Product engineering milestones A–Q",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "scripts/ci_verify.sh",
+      "purpose": "Canonical CI and Render worker build verification",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check_github_ci.py",
+      "purpose": "Poll CI + Security Scan + CodeQL on branch main",
+      "read_when": "release",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/render_uv_run.sh",
+      "purpose": "Render runtime helper to exec commands in uv venv",
+      "read_when": "operations",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-license-compliance.sh",
+      "purpose": "Fail on disallowed Python dependency licenses",
+      "read_when": "release",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "render.yaml",
+      "purpose": "Render blueprint for worker and relay services",
+      "read_when": "operations",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "pyproject.toml",
+      "purpose": "Python project metadata and dependency declarations",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "uv.lock",
+      "purpose": "Locked Python dependency resolution",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docker-compose.yml",
+      "purpose": "Local CI parity smoke via ci_verify.sh",
+      "read_when": "contributing",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "purpose": "Primary CI workflow including verify and bootstrap gates",
+      "read_when": "contributing",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/security.yml",
+      "purpose": "Trivy filesystem security scan",
+      "read_when": "security_triage",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/codeql.yml",
+      "purpose": "CodeQL static analysis for Python and JS",
+      "read_when": "security_triage",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
     }
   ],
   "modules": {

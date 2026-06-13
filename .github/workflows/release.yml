@@ -18,17 +18,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Verify template version matches tag
+      - name: Verify required CI workflows green on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/check-github-ci.sh "$(git rev-parse main)"
+
+      - name: Verify tag matches pyproject version
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
-          VERSION=$(cat .template-version | tr -d '[:space:]')
+          VERSION=$(grep -E '^version\s*=' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
           if [ "$TAG" != "$VERSION" ]; then
-            echo "Tag v$TAG does not match .template-version ($VERSION)"
+            echo "Tag v$TAG does not match pyproject.toml version ($VERSION)"
             exit 1
           fi
-
-      - name: Run CI checks reminder
-        run: echo "Ensure all CI checks passed before tagging. See CHANGELOG.md."
 
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.20.6

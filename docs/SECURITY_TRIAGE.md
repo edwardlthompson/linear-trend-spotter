@@ -2,12 +2,13 @@
 
 Weekly CVE triage playbook for Dependabot alerts and release security gates.
 
-## Setup (one-time, [HUMAN])
+## Setup (one-time)
 
-1. Open GitHub -> **Settings** -> **Code security and analysis**
-2. Enable **Dependabot alerts** and **Dependabot security updates** (CVE advisories on dependencies)
-3. Enable **Private vulnerability reporting** (Settings -> Code security -> Private vulnerability reporting)
-4. Verify .github/dependabot.yml exists for each active package ecosystem
+Run `bash scripts/apply-github-repo-settings.sh` (requires `gh` with repo admin). It enables Dependabot alerts/security updates and configures branch protection on `main`.
+
+If private vulnerability reporting cannot be enabled via API, use GitHub -> **Settings** -> **Code security and analysis** -> **Private vulnerability reporting** -> Enable.
+
+Verify `.github/dependabot.yml` exists for each active package ecosystem.
 
 **Public repos:** Dependabot alerts are free.
 

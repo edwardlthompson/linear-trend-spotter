@@ -255,7 +255,9 @@ linear-trend-spotter/
 ├── update_exchanges.py
 ├── update_mappings.py
 ├── render.yaml            # Blueprint (worker + optional web services)
-├── requirements.txt
+├── pyproject.toml         # Python deps + tool config
+├── uv.lock                # Locked Python resolution (canonical)
+├── requirements.txt       # uv export (reference only)
 └── README.md
 ```
 
@@ -278,7 +280,9 @@ linear-trend-spotter/
 | `.env.example` | Template showing required environment variables. Committed to repo. |
 | `config.json` | Non-secret tunable parameters. Gitignored (contains per-environment values). |
 | `config_json.example` | Template showing all config keys with defaults. Committed to repo. |
-| `requirements.txt` | Pinned Python dependencies. |
+| `pyproject.toml` | Python project metadata and dependency declarations. |
+| `uv.lock` | Locked Python dependencies (canonical; used by CI and Render). |
+| `requirements.txt` | Generated export from `uv.lock` (reference only). |
 | `linear-trend-spotter-spec.md` | This specification. |
 | `README.md` | Public project overview and quick start. |
 

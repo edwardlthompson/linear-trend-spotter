@@ -33,7 +33,13 @@ From Render service Shell, run:
 
 ```bash
 cd /opt/render/project/src
-python3 scheduler.py
+uv run python scheduler.py
+```
+
+Or use the Render helper:
+
+```bash
+bash scripts/render_uv_run.sh python scheduler.py
 ```
 
 ## Useful log paths on Render

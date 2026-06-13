@@ -6,7 +6,7 @@
 
 | Service | Type | Blueprint name | Notes |
 |---------|------|----------------|-------|
-| Scanner worker | Render worker | `linear-trend-spotter-worker` | Runs `scripts/run_render_worker.sh` |
+| Scanner worker | Render worker | `linear-trend-spotter-worker` | `render_uv_run.sh` → `run_render_worker.sh` |
 | Snapshot relay | Render web | `linear-trend-spotter-snapshot` | `rootDir: snapshot_server` |
 | Push relay | Render web | `linear-trend-spotter-push` | `rootDir: push_server` |
 | Dashboard | GitHub Pages | `docs/` | Static PWA at `docs/dashboard/` |
@@ -19,13 +19,23 @@ See also: [`render-setup.md`](render-setup.md), [`MANUAL_DEPLOY_STEPS.md`](MANUA
 
 1. Merge to `main` (branch tracked by Render blueprint).
 2. Render runs `bash scripts/ci_verify.sh` at build time — must pass.
-3. Worker starts via `bash scripts/run_render_worker.sh`.
+3. Worker starts via `bash scripts/render_uv_run.sh bash scripts/run_render_worker.sh` (uses root `.venv` from build).
 4. Verify logs: `Render worker started`, `Starting scheduled scan`.
+
+### Render redeploy checklist (after uv migration)
+
+1. Merge to `main` and wait for GitHub CI (CI, Security Scan, CodeQL) green.
+2. Confirm Render build succeeds (`ci_verify.sh` for worker; `uv sync` for relays).
+3. Worker: check `/var/data/logs/render_worker.log` for successful scan cycle.
+4. Snapshot relay: `GET https://<snapshot-host>/relay-health` returns OK.
+5. Push relay: optional smoke — subscribe flow from dashboard if Tier-B enabled.
+6. Dashboard: hard refresh if UI stale after snapshot POST.
 
 ### Snapshot / Push relays
 
 - Auto-deploy on `main` commit.
 - Build: `uv sync --locked --extra snapshot` or `--extra push` from repo root.
+- Start: `render_uv_run.sh` + `gunicorn --chdir push_server|snapshot_server`.
 - Set secrets in Render dashboard per `.env.example`.
 
 ### Dashboard (GitHub Pages)
@@ -37,7 +47,7 @@ See also: [`render-setup.md`](render-setup.md), [`MANUAL_DEPLOY_STEPS.md`](MANUA
 
 | Check | Command / URL |
 |-------|---------------|
-| Local CI parity | `bash scripts/ci_verify.sh` |
+| Local CI parity | `bash scripts/ci_verify.sh` or `docker compose up` |
 | GitHub CI gate | `python scripts/check_github_ci.py` |
 | Snapshot relay | `python scripts/check_snapshot_relay.py` |
 | Relay health HTTP | `GET /relay-health` on snapshot service |

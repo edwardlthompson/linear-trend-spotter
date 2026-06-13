@@ -2,6 +2,8 @@
 
 > **Agent session routing:** read `docs/START_HERE.md` → `BUILD_PLAN.md` for bootstrap/ops tasks; use this file for product milestones A–Q.
 
+> **Dependency note (2026-06):** Historical milestone notes may reference `pip install -r requirements-ci.txt`. Current CI, Render build, and local dev use `uv sync --locked --extra dev` via [`scripts/ci_verify.sh`](scripts/ci_verify.sh).
+
 **Purpose:** Single reference for engineering milestones (code quality, Render pipeline, API cost reduction, modular backtesting, public qualified-coin dashboard + PWA + client-side UX).  
 **Living document:** Checkboxes are updated as work completes.  
 **Last reviewed:** 2026-05-03

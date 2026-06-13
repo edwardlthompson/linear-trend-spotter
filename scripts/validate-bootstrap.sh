@@ -64,6 +64,12 @@ fi
 run_check bash scripts/check-file-encoding.sh
 run_check bash scripts/validate-workflow-actions.sh
 run_check bash scripts/validate-template-index.sh
+run_check bash scripts/check-license-compliance.sh
+
+if [ "${VALIDATE_BOOTSTRAP_FULL:-0}" = "1" ]; then
+  echo "Running full ci_verify (VALIDATE_BOOTSTRAP_FULL=1)..."
+  run_check bash scripts/ci_verify.sh
+fi
 
 if [ "$ERRORS" -gt 0 ]; then
   echo "$ERRORS bootstrap check(s) failed"
