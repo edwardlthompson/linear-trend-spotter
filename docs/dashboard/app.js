@@ -107,8 +107,8 @@
     { v: 1000000, label: "$1M" },
     { v: 10000000, label: "$10M" },
   ];
-  /** Scanner default target exchanges — must match `listed_on` ids in snapshot JSON. */
-  const TARGET_EXCHANGES_LIST = ["coinbase", "kraken", "mexc"];
+  /** Scanner default target exchanges — must match worker `TARGET_EXCHANGES` / snapshot `listed_on`. */
+  const TARGET_EXCHANGES_LIST = ["coinbase", "kraken"];
   const EXCHANGE_LABELS = { coinbase: "Coinbase", kraken: "Kraken", mexc: "MEXC" };
   const TARGET_EXCHANGE_IDS = new Set(TARGET_EXCHANGES_LIST);
 
@@ -222,7 +222,6 @@
   const elKpiQualifiedCount = document.getElementById("kpiQualifiedCount");
   const elKpiCoinbaseCount = document.getElementById("kpiCoinbaseCount");
   const elKpiKrakenCount = document.getElementById("kpiKrakenCount");
-  const elKpiMexcCount = document.getElementById("kpiMexcCount");
   const elSnapshotLoadingOverlay = document.getElementById("snapshotLoadingOverlay");
   const elApiBudgetPanelSettings = document.getElementById("apiBudgetPanelSettings");
   const elExchangeFilterDetails = document.getElementById("exchangeFilterDetails");
@@ -1416,19 +1415,44 @@
   }
 
   function rowBestBacktestNetPct(r) {
-    const c = r.coin;
-    const vals = [];
-    const rows = Array.isArray(c.backtest_top_strategies) ? c.backtest_top_strategies : [];
-    for (const x of rows) {
-      const n = Number(x && x.net_pct);
-      if (Number.isFinite(n)) vals.push(n);
+    const winner = rowBestBacktestWinnerRow(r.coin);
+    if (!winner) return null;
+    const n = Number(winner.net_pct);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Strategy row with highest net_pct (includes buy & hold when present). */
+  function rowBestBacktestWinnerRow(c) {
+    if (!c || typeof c !== "object") return null;
+    const rows = Array.isArray(c.backtest_top_strategies)
+      ? c.backtest_top_strategies.filter((x) => x && typeof x === "object")
+      : [];
+    const out = rows.map((x) => x);
+    const bh = c.backtest_buy_hold != null && typeof c.backtest_buy_hold === "object" ? c.backtest_buy_hold : null;
+    if (bh && !out.some((x) => backtestRowIsBuyHold(x))) out.push(bh);
+    let bestRow = null;
+    let bestNet = null;
+    for (const x of out) {
+      const n = Number(x.net_pct);
+      if (!Number.isFinite(n)) continue;
+      if (bestNet == null || n > bestNet) {
+        bestNet = n;
+        bestRow = x;
+      }
     }
-    if (c.backtest_buy_hold && typeof c.backtest_buy_hold === "object") {
-      const b = Number(c.backtest_buy_hold.net_pct);
-      if (Number.isFinite(b)) vals.push(b);
-    }
-    if (!vals.length) return null;
-    return Math.max(...vals);
+    return bestRow;
+  }
+
+  function backtestRowTslPct(row) {
+    if (!row || backtestRowIsBuyHold(row)) return null;
+    const raw = row.trailing_stop_loss_pct != null ? row.trailing_stop_loss_pct : row.trailing_stop_pct;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  function formatBacktestTslLabel(tsl) {
+    if (tsl == null || !Number.isFinite(tsl)) return "";
+    return `${Number.isInteger(tsl) ? tsl.toFixed(0) : tsl.toFixed(1)}%`;
   }
 
   function rowBuyHoldNetPct(r) {
@@ -2854,12 +2878,11 @@
     return s.length > 64 ? `${s.slice(0, 63)}…` : s;
   }
 
-  /** Omitted from Backtest Results strategy table (shown elsewhere or redundant). */
+  /** Omitted from Backtest Results strategy table (TP columns; TSL shown as trailing_stop_loss_pct). */
   const BACKTEST_SHEET_EXCLUDED_KEYS = new Set([
     "symbol",
     "take_profit_pct",
     "trailing_stop_pct",
-    "trailing_stop_loss_pct",
     "trailing_take_profit_pct",
     "skipped_combos",
   ]);
@@ -2869,6 +2892,7 @@
     "strategy",
     "timeframe",
     "params",
+    "trailing_stop_loss_pct",
     "net_pct",
     "win_pct",
     "trades",
@@ -2886,6 +2910,7 @@
       strategy: "Strategy",
       timeframe: "Timeframe",
       params: "Params",
+      trailing_stop_loss_pct: "TSL %",
       net_pct: "Net %",
       win_pct: "Win %",
       trades: "Trades",
@@ -2909,7 +2934,7 @@
       }
       return fmtSheetCell(val);
     }
-    if (columnKey === "net_pct" || columnKey === "win_pct") {
+    if (columnKey === "net_pct" || columnKey === "win_pct" || columnKey === "trailing_stop_loss_pct") {
       if (typeof val === "number" && Number.isFinite(val)) return `${val.toFixed(1)}%`;
       const n = Number(val);
       if (Number.isFinite(n)) return `${n.toFixed(1)}%`;
@@ -3245,7 +3270,14 @@
         const volCell = `<span title="Approximate 24h USD volume on this venue from snapshot">${escapeHtml(formatUsdVolDisplay(r.volUsd))}</span>`;
         const btHtml = backtestCellHtml(c);
         const btBest = rowBestBacktestNetPct(r);
+        const btWinner = rowBestBacktestWinnerRow(c);
+        const btTsl = backtestRowTslPct(btWinner);
         const btBestText = btBest != null ? `${btBest >= 0 ? "+" : ""}${btBest.toFixed(1)}%` : "—";
+        const btTslText = btTsl != null ? formatBacktestTslLabel(btTsl) : "";
+        const btBestTitle =
+          btTsl != null
+            ? `Highest backtest net percent; winning trailing stop ${btTslText}`
+            : "Highest backtest net percent";
         const gain7Class = g7 !== "—" && Number(g7) > 0 ? "gain-pos" : "";
         const gain30Class = g30pct !== "—" && Number(g30pct) > 0 ? "gain-pos" : "";
         const healthVal = coinHealth(c);
@@ -3289,7 +3321,7 @@
           <td headers="col-g7chart" class="num spark-td" title="${escapeAttr(g7Title)}">${spark7Cell}</td>
           <td headers="col-g30pct" class="num"><span class="visually-hidden">30-day gain </span><span class="${gain30Class}" title="${escapeAttr(g30Title)}">${g30pct}%</span></td>
           <td headers="col-g30chart" class="num spark-td" title="${escapeAttr(g30Title)}">${spark30Cell}</td>
-          <td headers="col-btbest" class="num ${btCellClass}"${btBestStyle}><span class="${btTextClass}" title="Highest backtest net percent">${btBestText}</span></td>
+          <td headers="col-btbest" class="num ${btCellClass}"${btBestStyle}><span class="btbest-cell-inner"><span class="${btTextClass}" title="${escapeAttr(btBestTitle)}">${btBestText}</span>${btTslText ? `<span class="btbest-tsl" title="Winning trailing stop loss">${escapeHtml(btTslText)} TSL</span>` : ""}</span></td>
           <td headers="col-btvbh" class="num"><span class="visually-hidden">Bot vs buy and hold </span>${btvbhCell}</td>
           <td headers="col-uniformity" class="num"><span class="visually-hidden">Uniformity </span><span title="OHLCV uniformity score (higher = more consistent bar structure)">${uniformChip}</span></td>
           <td headers="col-health" class="num"><span class="visually-hidden">Health </span><span title="Composite health score from snapshot">${healthChip}</span></td>
@@ -3331,7 +3363,7 @@
     if (!elKpiQualifiedCount) return;
     const rows = Array.isArray(viewRows) ? viewRows : [];
     const count = rows.filter((r) => !r.coin._watchlist_only).length;
-    const exchangeCounts = { coinbase: 0, kraken: 0, mexc: 0 };
+    const exchangeCounts = { coinbase: 0, kraken: 0 };
     for (const r of rows) {
       if (r.coin && r.coin._watchlist_only) continue;
       if (r.exchangeId && Object.prototype.hasOwnProperty.call(exchangeCounts, r.exchangeId)) {
@@ -3341,7 +3373,6 @@
     elKpiQualifiedCount.textContent = count.toLocaleString("en-US");
     if (elKpiCoinbaseCount) elKpiCoinbaseCount.textContent = exchangeCounts.coinbase.toLocaleString("en-US");
     if (elKpiKrakenCount) elKpiKrakenCount.textContent = exchangeCounts.kraken.toLocaleString("en-US");
-    if (elKpiMexcCount) elKpiMexcCount.textContent = exchangeCounts.mexc.toLocaleString("en-US");
   }
 
   function downloadBlob(filename, mime, body) {

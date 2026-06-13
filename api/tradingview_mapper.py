@@ -12,15 +12,15 @@ import logging
 class TradingViewMapper:
     """
     Maps coin symbols to TradingView/Chart-IMG format with exchange-specific rules
-    Priority order: MEXC (USDT) → Kraken (USD) → Coinbase (USD)
+    Priority order: Kraken (USD) → Coinbase (USD) → MEXC (USDT, inactive by default)
     Only checks exchanges where coins have been verified to exist
     """
     
     # Exchange priority and quote preferences - UPDATED ORDER
     EXCHANGE_PRIORITY = [
-        ('mexc', 'MEXC', 'USDT'),      # Most pairs, many meme coins
-        ('kraken', 'KRAKEN', 'USD'),    # Good selection, established pairs
-        ('coinbase', 'COINBASE', 'USD'), # Major exchange, fewer pairs
+        ('kraken', 'KRAKEN', 'USD'),
+        ('coinbase', 'COINBASE', 'USD'),
+        ('mexc', 'MEXC', 'USDT'),  # framework only when TARGET_EXCHANGES includes mexc
     ]
     
     # Special symbol mappings for each exchange

@@ -1,5 +1,11 @@
 """Static configuration and mappings"""
 
+# Exchanges with fetchers/mappers/DB support (framework; may be inactive).
+SUPPORTED_EXCHANGES = ('coinbase', 'kraken', 'mexc')
+
+# Active scanner/dashboard targets (MEXC hidden until added to config TARGET_EXCHANGES).
+DEFAULT_TARGET_EXCHANGES = ['coinbase', 'kraken']
+
 # Exchange emojis for notifications
 EXCHANGE_EMOJIS = {
     'coinbase': '🟦',

@@ -15,6 +15,7 @@ from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from config.settings import settings
 from utils.logger import app_logger
 
 
@@ -30,7 +31,7 @@ def listed_on_for_push(coin: Mapping[str, Any] | None) -> list[str]:
     inferred: list[str] = []
     ev = coin.get("exchange_volumes")
     if isinstance(ev, dict):
-        for ex in ("coinbase", "kraken", "mexc"):
+        for ex in settings.target_exchanges:
             v = ev.get(ex)
             if v is None:
                 continue

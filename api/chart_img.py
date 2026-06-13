@@ -158,12 +158,10 @@ class ChartIMGClient:
             exchanges_to_try.append(exchange)
         
         # Add fallback exchanges based on quote preference
+        if 'kraken' not in exchanges_to_try:
+            exchanges_to_try.append('kraken')
         if 'coinbase' not in exchanges_to_try:
             exchanges_to_try.append('coinbase')
-        if 'binance' not in exchanges_to_try:
-            exchanges_to_try.append('binance')
-        if 'mexc' not in exchanges_to_try:
-            exchanges_to_try.append('mexc')
         
         # Try each exchange until one works
         for ex in exchanges_to_try:

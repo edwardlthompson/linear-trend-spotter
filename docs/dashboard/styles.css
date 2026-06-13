@@ -1911,6 +1911,21 @@ table.qualified-grid td.btbest-cell.btbest-cell--na {
   font-weight: 700;
 }
 
+.btbest-cell-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  line-height: 1.15;
+}
+
+.btbest-tsl {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.88;
+  letter-spacing: 0.01em;
+}
+
 .error {
   color: var(--error-fg);
   background: var(--error-bg);
