@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import quote
 
+from config.constants import DEFAULT_TARGET_EXCHANGES
+
 
 def _build_source_url(coin: Dict[str, Any]) -> str:
     source_url = str(coin.get('source_url') or coin.get('cmc_url') or '').strip()
@@ -481,6 +483,8 @@ class ActiveCoinsDatabase(Database):
             ('kraken', 'kraken_volume'),
             ('mexc', 'mexc_volume'),
         ):
+            if ex not in DEFAULT_TARGET_EXCHANGES:
+                continue
             v = coin_info.get(key)
             if v is None:
                 continue

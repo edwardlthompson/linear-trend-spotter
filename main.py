@@ -159,6 +159,7 @@ def run_scanner():
             exchange_db,
             ExchangeFetcher,
             app_logger,
+            target_exchanges=tuple(settings.target_exchanges),
         )
 
         alias_markets_by_id = prefetch_alias_markets_by_gecko_id(

@@ -165,8 +165,13 @@ class ExchangeFetcher:
         ]
         return [{'symbol': s, 'name': s, 'source': 'fallback'} for s in common]
     
-    def update_all_exchanges(self):
-        """Update listings for all target exchanges"""
+    def update_all_exchanges(self, target_exchanges: list[str] | None = None):
+        """Update listings for configured target exchanges (inactive venues skipped)."""
+        if target_exchanges is None:
+            from config.settings import settings
+
+            target_exchanges = settings.target_exchanges
+        active = {str(ex).strip().lower() for ex in target_exchanges if str(ex).strip()}
         exchanges = {
             'coinbase': self.fetch_coinbase_listings,
             'kraken': self.fetch_kraken_listings,
@@ -174,6 +179,9 @@ class ExchangeFetcher:
         }
         
         for exchange, fetcher in exchanges.items():
+            if exchange not in active:
+                print(f"[SKIP] {exchange} not in TARGET_EXCHANGES")
+                continue
             try:
                 if self.db.needs_update(exchange):
                     listings = fetcher()

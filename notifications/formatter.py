@@ -6,7 +6,7 @@ import html
 from typing import Dict, List, Tuple
 from urllib.parse import quote
 
-from config.constants import EXCHANGE_EMOJIS
+from config.constants import DEFAULT_TARGET_EXCHANGES, EXCHANGE_EMOJIS
 from config.settings import settings
 
 
@@ -274,7 +274,7 @@ class MessageFormatter:
         caption += "💰 Exchange Volumes:\n"
         
         volumes = coin.get('exchange_volumes', {})
-        listed_on = coin.get('listed_on', ['coinbase', 'kraken', 'mexc'])
+        listed_on = coin.get('listed_on', list(DEFAULT_TARGET_EXCHANGES))
         
         for exchange in listed_on:
             volume = volumes.get(exchange, "N/A")

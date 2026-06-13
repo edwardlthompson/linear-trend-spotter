@@ -7,6 +7,8 @@ from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
 
+from config.constants import DEFAULT_TARGET_EXCHANGES
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -45,7 +47,7 @@ class Settings:
             'MIN_VOLUME_M': 1000000,
             'GAIN_FILTER_MIN_7D_PERCENT': 7.0,
             'GAIN_FILTER_MIN_30D_PERCENT': 30.0,
-            'TARGET_EXCHANGES': ['coinbase', 'kraken', 'mexc'],
+            'TARGET_EXCHANGES': list(DEFAULT_TARGET_EXCHANGES),
             'UNIFORMITY_MIN_SCORE': 55,
             'UNIFORMITY_PERIOD': 30,
             'TOP_COINS_LIMIT': 4000,
@@ -477,7 +479,7 @@ class Settings:
     
     @property
     def target_exchanges(self) -> list:
-        return self._config.get('TARGET_EXCHANGES', ['coinbase', 'kraken', 'mexc'])
+        return self._config.get('TARGET_EXCHANGES', list(DEFAULT_TARGET_EXCHANGES))
     
     @property
     def uniformity_min_score(self) -> int:

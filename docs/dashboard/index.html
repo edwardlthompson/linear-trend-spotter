@@ -202,10 +202,6 @@
           <p class="kpi-label">Kraken coins</p>
           <p id="kpiKrakenCount" class="kpi-value">—</p>
         </article>
-        <article class="kpi-card" title="Number of qualified rows listed on MEXC after filters">
-          <p class="kpi-label">MEXC coins</p>
-          <p id="kpiMexcCount" class="kpi-value">—</p>
-        </article>
       </section>
       <div id="compareBar" class="compare-bar" role="region" aria-label="Compare two coins" hidden>
         <span id="compareBarLabel" class="compare-bar-label"></span>
@@ -335,13 +331,13 @@
                   </select>
                 </div>
               </th>
-              <th scope="col" id="col-btbest" title="Highest backtest net percent for this coin (top strategy or buy/hold)">
+              <th scope="col" id="col-btbest" title="Highest backtest net percent and winning trailing stop (TSL) when not buy &amp; hold">
                 <button
                   type="button"
                   class="sort-btn"
                   data-sort="btbest"
                   aria-label="Sort by highest backtest net percent"
-                  title="Sort by highest backtest net percent available for the coin"
+                  title="Sort by highest backtest net percent; TSL shows the winning strategy trailing stop"
                 >
                   Best BT %
                 </button>
@@ -478,15 +474,12 @@
                         <label class="exchange-cb-row" title="Require Kraken listing (or combine with other checked venues)"
                           ><input type="checkbox" data-exchange-cb value="kraken" /> Kraken</label
                         >
-                        <label class="exchange-cb-row" title="Require MEXC listing (or combine with other checked venues)"
-                          ><input type="checkbox" data-exchange-cb value="mexc" /> MEXC</label
-                        >
                         <div class="exchange-filter-actions">
                           <button
                             type="button"
                             id="exchangeFilterSelectAll"
                             class="secondary"
-                            title="Check Coinbase, Kraken, and MEXC (coins listed on any of them pass the filter)"
+                            title="Check Coinbase and Kraken (coins listed on any of them pass the filter)"
                           >
                             Select all
                           </button>

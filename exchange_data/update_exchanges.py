@@ -29,7 +29,7 @@ def main():
     fetcher = ExchangeFetcher(db)
     
     # Update all exchanges
-    fetcher.update_all_exchanges()
+    fetcher.update_all_exchanges(settings.target_exchanges)
     
     # Show stats
     stats = db.get_exchange_stats()
