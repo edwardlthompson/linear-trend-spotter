@@ -496,8 +496,9 @@ Engineering closed the **canonical OHLCV chain** (CoinGecko → Polygon → Coin
 |------|-----------------|---------------|--------------|
 | **A (Q7–Q9)** | Installable app icon; optional **tab-open / PWA** notifications when snapshot **version** changes (poll JSON every 15–60 min + `visibilitychange`). | **None** | **None** (only your snapshot URL). |
 | **B (Q21)** | Notifications when the browser has been closed for days. | **Yes** — Web Push relay (VAPID + subscription store) invoked after each scan. | **None** for market data. |
+| **C (Q23b)** | Reliable off-browser alerts via ntfy (FOSS client on Windows/Android). | **Optional** — ntfy POST from worker; self-host or ntfy.sh. | **None** |
 
-Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (document VAPID, subscription storage, and ops in `docs/WEB_DASHBOARD.md`).
+Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (document VAPID, subscription storage, and ops in `docs/WEB_DASHBOARD.md`). **Tier C** in **Q23b**.
 
 ### Tasks — PWA & tier-A notifications
 
@@ -564,6 +565,59 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
 - [x] **Q21.** **Tier-B Web Push:** minimal **Render** (or other) endpoint: store `pushSubscription` JSON per client (privacy policy required), VAPID keys in env, send **one** Web Push after each scan when subscriptions exist (payload: “Scan updated” + link to dashboard). Document rate limits and **no** market data in push body.  
   - **Verification:** Test push received on at least one browser after scan hook; unsub flow works; **H0** confirms no extra CoinGecko calls from push path.
   - **Notes:** `push_server/app.py` (Flask + `pywebpush`, `gunicorn`); `render.yaml` second web service + worker env `WEB_PUSH_*`; `main.py` `_maybe_notify_web_push_scan()`; dashboard **`#pushTierBBtn`** + `__PUSH_API_BASE__` / `__VAPID_PUBLIC_KEY__`; `docs/dashboard/sw.js` **`push`** / **`notificationclick`**, **`CACHE_VERSION`** v10; `docs/WEB_DASHBOARD.md` Tier-B section.
+
+- [x] **Q22.** **Backtest Results modal — TSL columns:** In the strategy comparison table (`backtestStrategiesTableHtml`), always show **TSL %** (winning trailing stop from `trailing_stop_loss_pct` / `trailing_stop_pct` alias) and **TSL hit %** (computed client-side as `tsl_hits ÷ trades`, matching `notifications/image_renderer.py`). B&H rows show `—`. Bump `docs/dashboard/sw.js` **`CACHE_VERSION`** so cached PWAs load updated `app.js`.
+  - **Owner:** AGENT
+  - **Scope:** `docs/dashboard/app.js`, `docs/dashboard/sw.js`; optional `styles.css` min-width only if columns collapse in modal scroll.
+  - **Verification:**
+    1. Open dashboard with `docs/qualified_public_snapshot.json` (or live snapshot).
+    2. **Results** for PENDLE → **TSL %** between Params and Net % (e.g. MFI `8.0%`); **TSL hit %** after TSL hits (e.g. MFI `28.6%` for 2/7 trades).
+    3. B&H row shows `—` for both TSL columns.
+    4. Hard-refresh / SW update picks up new `CACHE_VERSION`.
+    5. `python -m compileall -q .` (repo root); no new CI gate required.
+  - **Notes:** Partial fix landed in commit `991c14a` (TSL % column + Best BT TSL badge) but SW cache was not bumped and TSL hit % was never added. No snapshot schema change. Completed 2026-06-14: forced columns + `CACHE_VERSION` v100.
+
+- [x] **Q23a.** **Tier-B reliability ops:** Persist `PUSH_SUBSCRIPTIONS_FILE` on Render (disk mount in `render.yaml`); prune subscriptions on Web Push `410 Gone`; dashboard re-subscribes on `visibilitychange` when `pushManager.getSubscription()` is null. Document Android battery-optimization steps in `docs/WEB_DASHBOARD.md`.
+  - **Owner:** AGENT
+  - **Scope:** `push_server/app.py`, `render.yaml`, `docs/dashboard/app.js`, `docs/WEB_DASHBOARD.md`
+  - **Verification:**
+    1. Subscribe via dashboard Tier-B; restart push service; subscription survives.
+    2. Simulate expired endpoint → pruned from store; user can re-subscribe on focus.
+    3. Entry/exit scan still delivers push to active subscription.
+    4. `python -m compileall -q .`; CI green on `main`.
+  - **Notes:** Addresses “notifications stopped after a while” when subs were on ephemeral `/tmp`. Completed 2026-06-14: Render push disk + dashboard re-subscribe on focus.
+
+- [x] **Q23b.** **Tier-C ntfy bridge (opt-in):** When `NTFY_ENABLED` and `NTFY_*` env set, POST list-change alerts to ntfy after scan (same entry/exit gate as Tier-B). Reuse copy from `scanner/web_push_notify.py`. No market data in body.
+  - **Owner:** AGENT (+ **HUMAN** for topic/token provisioning)
+  - **Scope:** `config/settings.py`, `config.json.example`, `scanner/ntfy_notify.py`, `main.py`, `docs/WEB_DASHBOARD.md` Tier-C section
+  - **Verification:**
+    1. Default config → no ntfy HTTP (non-regression).
+    2. With test topic: entry/exit produces ntfy message.
+    3. Failed ntfy POST logged; scan completes successfully.
+    4. Topic name unguessable; token required when using public ntfy.sh.
+  - **Notes:** FOSS path per `.cursor/rules/foss-compliance.mdc`; no Firebase SDK. Completed 2026-06-14: `scanner/ntfy_notify.py` + `NTFY_*` settings.
+
+- [x] **Q23c.** **OS-aware notification UX:** Detect platform (Client Hints + UA fallback); in Settings → Notifications show Windows vs Android install CTAs (PWA, Tier-B, ntfy deep link / store links). No silent installs. Bump `docs/dashboard/sw.js` `CACHE_VERSION`.
+  - **Owner:** AGENT
+  - **Scope:** `docs/dashboard/app.js`, `index.html`, `styles.css`, `sw.js`
+  - **Verification:**
+    1. Windows UA → desktop + ntfy CTA visible.
+    2. Android UA → ntfy + Add to Home Screen hints visible.
+    3. iOS/other → Tier-A limitation note only.
+    4. Hard-refresh loads new SW cache version.
+  - **Notes:** Completed 2026-06-14: Settings platform panel + `CACHE_VERSION` v101.
+
+- [x] **Q24.** *(Optional)* **Windows tray notifier:** MIT-licensed tray app polling public snapshot URL; native toast on filtered row-set change; GitHub Releases + winget manifest scaffold.
+  - **Owner:** AGENT (+ **HUMAN** winget)
+  - **Scope:** `clients/windows/`
+  - **Verification:** Tray module loads; documents env vars; no market API calls.
+  - **Notes:** Only if Q23b+c insufficient for Windows users. Completed 2026-06-14: `clients/windows/tray_notifier.py` scaffold.
+
+- [x] **Q25.** *(Optional)* **Android UnifiedPush companion:** FOSS app scaffold via UnifiedPush distributor (ntfy-compatible); F-Droid metadata stub.
+  - **Owner:** ADB (+ AGENT scaffold)
+  - **Scope:** `clients/android/`
+  - **Verification:** README documents UP + ntfy path; no Google Play Services / Firebase.
+  - **Notes:** Activates Android FOSS rules when native app work begins.
 
 ---
 
@@ -648,13 +702,13 @@ Milestone **A4** (branch protection) is complete. Use this section for **risks a
 | N | Security & compliance | **N1** done; **N2** webhook row retired (**push protection** still admin) |
 | O | Product & research | **O1–O3** done |
 | P | Backtesting modularization (web reuse) | **P1–P4** done |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q25**) | **Q1–Q25** done (Q24/Q25 scaffolds) |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 
 **Execution kickoff:** Complete **A1** and **A2** first; enable **A4** branch protection once CI is green. Skim **Master execution order** and **Technical reference** before touching scanner code (**G** onward).
 
-**Note:** The former **Feature backlog** (six topic groups) is **Milestones J–O**. **P–Q** cover modular backtests and the public dashboard (**Q1–Q21** task IDs).
+**Note:** The former **Feature backlog** (six topic groups) is **Milestones J–O**. **P–Q** cover modular backtests and the public dashboard (**Q1–Q25** task IDs). Post-Q21 UX fixes use **Q22+**; reliable notifications **Q23a–c** are sequential.
 
 ---
 
@@ -674,7 +728,7 @@ _Update the Status column as milestones complete (e.g. “Complete”, “In pro
 | CMC usage | `api/coinmarketcap.py`, `config/settings.py` |
 | Render | `render.yaml`, `scripts/run_render_worker.sh` |
 | Backtest library surface | `backtesting/*` (incl. `params.py` P2), `docs/BACKTESTING_LIBRARY.md` (Milestone P) |
-| Public dashboard + PWA + UX | `main.py` (writer + optional Tier-B notify), `DATA_DIR/qualified_public_snapshot.json`, `push_server/`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q21**) |
+| Public dashboard + PWA + UX | `main.py` (Tier-B/C notify), `scanner/ntfy_notify.py`, `DATA_DIR/qualified_public_snapshot.json`, `push_server/`, `clients/windows/`, `clients/android/`, `docs/WEB_DASHBOARD.md`, `docs/dashboard/*` (Milestone **Q1–Q25**) |
 | Docker compose smoke (M3) | `docker-compose.yml` (root) |
 | Scan costs (J3) | `utils/scan_costs.py`, `utils/provider_http_usage.py`, `SCAN_COSTS_*` in `config/settings.py` |
 | Multi-portfolio simulation (O1) | `utils/portfolio_multi.py`, `main.py`, `PORTFOLIO_MULTI_SIM_*` in `config/settings.py` |

@@ -5,6 +5,8 @@ config.json
 *.json.backup
 *.json.fixed
 .env
+.ntfy-provision.local.json
+clients/android/release.keystore
 
 # Logs and output
 *.log

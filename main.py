@@ -23,6 +23,7 @@ from utils.metrics import metrics, timed_block
 from utils.runtime_hygiene import run_artifact_hygiene, update_exit_reason_analytics
 from utils.cross_provider_identity import attach_identity_bundles
 from utils.scan_artifacts import (
+    build_notify_public_config,
     write_public_qualified_snapshot,
     write_scan_heartbeat,
 )
@@ -45,6 +46,7 @@ from scanner.coin_enrichment import (
     attach_volume_acceleration,
 )
 from scanner.web_push_notify import maybe_notify_web_push_qualified_changes
+from scanner.ntfy_notify import maybe_notify_ntfy_qualified_changes
 from scanner.snapshot_relay_notify import maybe_push_qualified_snapshot_relay
 from scanner.runtime_init import initialize_runtime_components
 from scanner.top_coin_resolution import ensure_cmc_notify_urls
@@ -650,6 +652,11 @@ def run_scanner():
                     cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
                     vendor_quotas=vendor_quotas or None,
                 )
+                notify_public = build_notify_public_config(
+                    ntfy_enabled=settings.ntfy_enabled,
+                    ntfy_base_url=settings.ntfy_base_url,
+                    ntfy_topic=settings.ntfy_topic,
+                )
                 write_public_qualified_snapshot(
                     settings.DATA_DIR,
                     settings.public_qualified_snapshot_file,
@@ -664,6 +671,7 @@ def run_scanner():
                     regime_gate=regime_meta,
                     api_cost_panel=api_cost_panel,
                     qualification_exits=exited,
+                    notify_public_config=notify_public,
                 )
                 app_logger.info("📤 Public qualified snapshot written")
                 maybe_push_qualified_snapshot_relay(
@@ -674,6 +682,7 @@ def run_scanner():
                 app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
 
         maybe_notify_web_push_qualified_changes(entered, exited)
+        maybe_notify_ntfy_qualified_changes(entered, exited)
 
         app_logger.info("\n✅ Scan complete")
         

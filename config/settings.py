@@ -155,6 +155,12 @@ class Settings:
             'CMC_SLUG_MAP_MAX_AGE_HOURS': 72,
             'CMC_SLUG_MAP_CACHE_FILE': 'cmc_cryptocurrency_map_cache.json',
             'CMC_SLUG_LEARN_FILE': 'gecko_id_to_cmc_slug.json',
+            'NTFY_ENABLED': False,
+            'NTFY_BASE_URL': 'https://ntfy.sh',
+            'NTFY_TOPIC': '',
+            'NTFY_TOKEN': '',
+            'NTFY_PRIORITY': 'default',
+            'NTFY_DASHBOARD_URL': '',
         }
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -246,6 +252,7 @@ class Settings:
             'DEGRADE_SKIP_BACKTEST_ENABLED',
             'BACKTEST_AB_SHADOW_ENABLED',
             'CMC_SLUG_MAP_ENABLED',
+            'NTFY_ENABLED',
         ]:
             require_bool(bool_key)
 
@@ -934,6 +941,42 @@ class Settings:
     def cmc_slug_learn_file(self) -> str:
         name = str(self._config.get('CMC_SLUG_LEARN_FILE', 'gecko_id_to_cmc_slug.json')).strip()
         return name or 'gecko_id_to_cmc_slug.json'
+
+    @property
+    def ntfy_enabled(self) -> bool:
+        return bool(self._config.get('NTFY_ENABLED', False))
+
+    @property
+    def ntfy_base_url(self) -> str:
+        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+
+    @property
+    def ntfy_topic(self) -> str:
+        return str(self._config.get('NTFY_TOPIC', '')).strip()
+
+    @property
+    def ntfy_token(self) -> str:
+        return str(self._config.get('NTFY_TOKEN', '')).strip()
+
+    @property
+    def ntfy_priority(self) -> str:
+        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
+
+    @property
+    def ntfy_dashboard_url(self) -> str:
+        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+
+    @property
+    def ntfy_public_subscribe_url(self) -> str:
+        """HTTPS subscribe URL for dashboard hints (no publish token)."""
+        if not self.ntfy_enabled:
+            return ''
+        topic = self.ntfy_topic
+        if not topic:
+            return ''
+        base = self.ntfy_base_url.rstrip('/') or 'https://ntfy.sh'
+        return f'{base}/{topic}'
 
     @property
     def base_dir(self) -> Path:

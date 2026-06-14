@@ -78,6 +78,9 @@
   const LS_CG_LAST_SNAP_ISO = "qualified_dash_cg_last_snapshot_iso_v2";
   /** First-visit prompt for browser notifications (Tier-A); dismissed after user chooses. */
   const LS_NOTIFY_FIRST_PROMPT_DONE = "qualified_dash_notify_first_prompt_done_v1";
+  /** User checked "Don't show again" on the notification guide dialog. */
+  const LS_NOTIFY_GUIDE_DISMISSED = "qualified_dash_notify_guide_dismissed_v1";
+  const LS_TIER_B_WANTED = "qualified_dash_tier_b_wanted_v1";
   /** Fallback when snapshot omits scan_interval_seconds (older files). */
   const NOMINAL_SCAN_FALLBACK_SEC = 3600;
   /** Treat snapshot timestamps before this as invalid for age/stale (epoch placeholders, corrupt data). */
@@ -264,9 +267,12 @@
   const elTelemetryStripDismiss = document.getElementById("telemetryStripDismiss");
   const elOpsMarkReadBtn = document.getElementById("opsMarkReadBtn");
   const elThemeToggle = document.getElementById("themeToggleBtn");
-  const elNotifyPromptDialog = document.getElementById("notifyPromptDialog");
-  const elNotifyPromptEnable = document.getElementById("notifyPromptEnable");
-  const elNotifyPromptLater = document.getElementById("notifyPromptLater");
+  const elNotifyGuideDialog = document.getElementById("notifyGuideDialog");
+  const elNotifyGuideBody = document.getElementById("notifyGuideBody");
+  const elNotifyGuideEnableTierA = document.getElementById("notifyGuideEnableTierA");
+  const elNotifyGuideEnableTierB = document.getElementById("notifyGuideEnableTierB");
+  const elNotifyGuideLater = document.getElementById("notifyGuideLater");
+  const elNotifyGuideSkip = document.getElementById("notifyGuideSkip");
   const elCoinAlertsBell = document.getElementById("coinAlertsBell");
   const elCoinAlertsPopover = document.getElementById("coinAlertsPopover");
   const elCoinAlertsDropdownRoot = document.getElementById("coinAlertsDropdownRoot");
@@ -277,6 +283,7 @@
   const elExportBtn = document.getElementById("exportBtn");
   const elExportFormatSelect = document.getElementById("exportFormatSelect");
   const elPushTierB = document.getElementById("pushTierBBtn");
+  const elNotifyPlatformPanel = document.getElementById("notifyPlatformPanel");
   const elBacktestModal = document.getElementById("backtestModal");
   const elBacktestModalTitle = document.getElementById("backtestModalTitle");
   const elBacktestModalBody = document.getElementById("backtestModalBody");
@@ -285,6 +292,10 @@
   let pollTimer = null;
   let notifyAlertsEnabled = false;
   let lastPayload = null;
+  /** Tier-C subscribe URL from last loaded snapshot (no publish token). */
+  let snapshotNtfySubscribeUrl = "";
+  /** @type {"a"|"b"|"all"} */
+  let notifyGuideTierFocus = "all";
   /** Appended to meta line once after loading `../qualified_public_snapshot.json` when the relay returns 503. */
   let snapshotMetaSuffix = "";
   /** True when the last successful snapshot fetch used the committed-repo fallback (relay 503). */
@@ -849,6 +860,206 @@
     );
   }
 
+  function ntfySubscribeUrl() {
+    return String(window.__NTFY_SUBSCRIBE_URL__ || "").trim();
+  }
+
+  function resolveNtfySubscribeUrl() {
+    const fromSnap = String(snapshotNtfySubscribeUrl || "").trim();
+    if (fromSnap) return fromSnap;
+    return ntfySubscribeUrl();
+  }
+
+  function windowsTrayReleaseUrl() {
+    return String(window.__WINDOWS_TRAY_RELEASE_URL__ || "").trim();
+  }
+
+  function ntfyAndroidAppUrl() {
+    return String(window.__NTFY_ANDROID_APP_URL__ || "https://f-droid.org/packages/io.heckel.ntfy/").trim();
+  }
+
+  function ntfyDesktopAppUrl() {
+    return String(window.__NTFY_DESKTOP_URL__ || "https://ntfy.sh/app").trim();
+  }
+
+  /** @returns {"windows"|"android"|"ios"|"other"} */
+  function detectNotifyPlatform() {
+    const ua = navigator.userAgent || "";
+    if (/Android/i.test(ua)) return "android";
+    if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+    if (/Win/i.test(ua)) return "windows";
+    if (navigator.userAgentData && typeof navigator.userAgentData.platform === "string") {
+      const p = navigator.userAgentData.platform.toLowerCase();
+      if (p.includes("win")) return "windows";
+      if (p.includes("android")) return "android";
+    }
+    return "other";
+  }
+
+  function notifyGuideDismissed() {
+    try {
+      return localStorage.getItem(LS_NOTIFY_GUIDE_DISMISSED) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * @param {{ platform?: string, tierFocus?: "a"|"b"|"all", compact?: boolean }} opts
+   */
+  function buildNotifyGuideHtml(opts) {
+    const platform = opts.platform || detectNotifyPlatform();
+    const tierFocus = opts.tierFocus || "all";
+    const compact = !!opts.compact;
+    const ntfyUrl = resolveNtfySubscribeUrl();
+    const parts = [];
+
+    if (!compact) {
+      parts.push(
+        "<p>Choose how you want alerts when coins enter or leave the qualified list. You can enable more than one tier.</p>",
+      );
+      const tierRows = [
+        {
+          id: "a",
+          name: "Tier-A",
+          desc: "Browser polling while this dashboard is open. Least reliable when the tab is closed.",
+        },
+        {
+          id: "b",
+          name: "Tier-B",
+          desc: "Web Push via the browser. Needs permission and the push relay; OS may throttle background delivery.",
+        },
+        {
+          id: "c",
+          name: "Tier-C",
+          desc: "ntfy off-device alerts. Best for reliable background delivery on Windows and Android.",
+        },
+      ];
+      parts.push('<table class="notify-guide-tier-table"><thead><tr><th>Tier</th><th>How it works</th></tr></thead><tbody>');
+      for (const row of tierRows) {
+        const focusClass =
+          tierFocus === row.id || (tierFocus === "all" && row.id === "a") ? " notify-guide-tier-focus" : "";
+        parts.push(
+          `<tr class="notify-guide-tier-row${focusClass}"><td><strong>${row.name}</strong></td><td>${row.desc}</td></tr>`,
+        );
+      }
+      parts.push("</tbody></table>");
+    }
+
+    const linkParts = [];
+    if (platform === "windows") {
+      parts.push(
+        `<p><strong>Windows:</strong> Tier-B works in Edge/Chrome but may miss alerts when the browser is idle. For consistent background delivery, install <strong>ntfy desktop</strong> (Tier-C) or keep Tier-B registered.</p>`,
+      );
+      linkParts.push(
+        `<a href="${escapeAttr(ntfyDesktopAppUrl())}" target="_blank" rel="noopener noreferrer">Get ntfy for desktop</a>`,
+      );
+      const trayUrl = windowsTrayReleaseUrl();
+      if (trayUrl) {
+        linkParts.push(
+          `<a href="${escapeAttr(trayUrl)}" target="_blank" rel="noopener noreferrer">Download tray notifier (GitHub Releases)</a>`,
+        );
+      }
+    } else if (platform === "android") {
+      parts.push(
+        "<p><strong>Android:</strong> PWAs and browser push are often killed by battery optimization. Install <strong>ntfy from F-Droid</strong> (Tier-C) and disable battery optimization for ntfy (and your browser if using Tier-B).</p>",
+      );
+      linkParts.push(
+        `<a href="${escapeAttr(ntfyAndroidAppUrl())}" target="_blank" rel="noopener noreferrer">Install ntfy (F-Droid)</a>`,
+      );
+      parts.push(
+        "<p class=\"notify-platform-hint\">Add this dashboard to your Home Screen for Tier-A polling when the app is open.</p>",
+      );
+    } else if (platform === "ios") {
+      parts.push(
+        "<p><strong>iOS:</strong> Web push is limited. Add this site to your Home Screen and use Tier-A update alerts while the installed PWA is open.</p>",
+      );
+    } else {
+      parts.push(
+        "<p>Use Tier-A while the dashboard is open, Tier-B for browser push, or Tier-C ntfy for off-browser alerts on supported devices.</p>",
+      );
+      linkParts.push(
+        `<a href="${escapeAttr(ntfyDesktopAppUrl())}" target="_blank" rel="noopener noreferrer">ntfy desktop</a>`,
+        `<a href="${escapeAttr(ntfyAndroidAppUrl())}" target="_blank" rel="noopener noreferrer">ntfy (F-Droid)</a>`,
+      );
+    }
+
+    if (ntfyUrl) {
+      linkParts.push(
+        `<a href="${escapeAttr(ntfyUrl)}" target="_blank" rel="noopener noreferrer">Subscribe to alerts topic (ntfy)</a>`,
+      );
+    } else if (platform !== "ios") {
+      parts.push(
+        "<p><em>Tier-C subscribe link appears here once the operator enables ntfy on the worker (or set <code>__NTFY_SUBSCRIBE_URL__</code> in config.js).</em></p>",
+      );
+    }
+
+    if (linkParts.length) {
+      parts.push(`<div class="notify-guide-links">${linkParts.join("")}</div>`);
+    }
+
+    if (platform === "android") {
+      parts.push(
+        "<p class=\"notify-platform-hint\">The native Linear Trend Spotter Android companion (UnifiedPush) is coming soon; ntfy is the recommended FOSS path today.</p>",
+      );
+    }
+
+    return parts.join("");
+  }
+
+  function syncNotifyGuideActions() {
+    if (!elNotifyGuideEnableTierB) return;
+    elNotifyGuideEnableTierB.hidden = !pushTierBAvailable();
+  }
+
+  /** @param {"a"|"b"|"all"} tierFocus */
+  function showNotifyGuideDialog(tierFocus) {
+    notifyGuideTierFocus = tierFocus;
+    if (!elNotifyGuideDialog || typeof elNotifyGuideDialog.showModal !== "function") {
+      if (tierFocus === "b") void enableTierBPushDirect();
+      else void toggleTierANotifications();
+      return;
+    }
+    try {
+      if (elNotifyGuideBody) {
+        elNotifyGuideBody.innerHTML = buildNotifyGuideHtml({ tierFocus, compact: false });
+      }
+      if (elNotifyGuideSkip) elNotifyGuideSkip.checked = false;
+      syncNotifyGuideActions();
+      if (!elNotifyGuideDialog.open) elNotifyGuideDialog.showModal();
+    } catch {
+      if (tierFocus === "b") void enableTierBPushDirect();
+      else void toggleTierANotifications();
+    }
+  }
+
+  function dismissNotifyGuide() {
+    try {
+      localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+      if (elNotifyGuideSkip && elNotifyGuideSkip.checked) {
+        localStorage.setItem(LS_NOTIFY_GUIDE_DISMISSED, "1");
+      }
+    } catch {
+      /* ignore */
+    }
+    if (elNotifyGuideDialog && elNotifyGuideDialog.open) elNotifyGuideDialog.close();
+  }
+
+  function renderNotifyPlatformPanel() {
+    if (!elNotifyPlatformPanel) return;
+    elNotifyPlatformPanel.innerHTML = buildNotifyGuideHtml({ compact: true });
+    elNotifyPlatformPanel.hidden = false;
+  }
+
+  function applySnapshotNotifyPublicConfig(payload) {
+    snapshotNtfySubscribeUrl = "";
+    if (!payload || typeof payload !== "object") return;
+    const cfg = payload.notify_public_config;
+    if (!cfg || typeof cfg !== "object") return;
+    const url = cfg.ntfy_subscribe_url;
+    if (typeof url === "string" && url.trim()) snapshotNtfySubscribeUrl = url.trim();
+  }
+
   async function refreshPushTierBLabel() {
     if (!elPushTierB || !pushTierBAvailable()) return;
     try {
@@ -870,6 +1081,39 @@
     void refreshPushTierBLabel();
   }
 
+  function tierBWanted() {
+    try {
+      return localStorage.getItem(LS_TIER_B_WANTED) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function setTierBWanted(on) {
+    try {
+      if (on) localStorage.setItem(LS_TIER_B_WANTED, "1");
+      else localStorage.removeItem(LS_TIER_B_WANTED);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Re-create push subscription when browser dropped it but user still wants Tier-B. */
+  async function maybeRefreshTierBPushSubscription() {
+    if (!pushTierBAvailable() || !tierBWanted()) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    try {
+      await registerServiceWorker();
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) return;
+      await tierBSubscribeRemote();
+      await refreshPushTierBLabel();
+    } catch (e) {
+      console.warn("tier-B push re-subscribe", e);
+    }
+  }
+
   async function tierBUnsubscribeRemote() {
     const base = pushApiBase();
     const reg = await navigator.serviceWorker.ready;
@@ -889,6 +1133,7 @@
       credentials: "omit",
     });
     if (!res.ok) console.warn("push unsubscribe relay HTTP", res.status);
+    setTierBWanted(false);
   }
 
   async function tierBSubscribeRemote() {
@@ -914,6 +1159,41 @@
     if (!res.ok) {
       await sub.unsubscribe().catch(() => {});
       throw new Error(`Push subscribe relay HTTP ${res.status}`);
+    }
+    setTierBWanted(true);
+  }
+
+  async function enableTierBPushDirect() {
+    if (!pushTierBAvailable()) return;
+    if (!("Notification" in window)) {
+      showError("Browser notifications are not supported here.");
+      return;
+    }
+    let perm = Notification.permission;
+    if (perm === "default") {
+      perm = await Notification.requestPermission();
+    }
+    if (perm !== "granted") {
+      showError(
+        "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
+      );
+      return;
+    }
+    await registerServiceWorker();
+    clearError();
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await tierBUnsubscribeRemote();
+      } else {
+        await tierBSubscribeRemote();
+      }
+      setTierBWanted(!!(await reg.pushManager.getSubscription()));
+      await refreshPushTierBLabel();
+    } catch (e) {
+      showError(String(e && e.message ? e.message : e));
+      await refreshPushTierBLabel();
     }
   }
 
@@ -1453,6 +1733,20 @@
   function formatBacktestTslLabel(tsl) {
     if (tsl == null || !Number.isFinite(tsl)) return "";
     return `${Number.isInteger(tsl) ? tsl.toFixed(0) : tsl.toFixed(1)}%`;
+  }
+
+  function backtestRowTslHitPct(row) {
+    if (!row || backtestRowIsBuyHold(row)) return null;
+    const trades = Number(row.trades);
+    const hits = Number(row.tsl_hits);
+    if (!Number.isFinite(trades) || trades <= 0) return null;
+    if (!Number.isFinite(hits) || hits < 0) return null;
+    return (hits / trades) * 100;
+  }
+
+  function formatBacktestTslHitLabel(pct) {
+    if (pct == null || !Number.isFinite(pct)) return "—";
+    return `${pct.toFixed(1)}%`;
   }
 
   function rowBuyHoldNetPct(r) {
@@ -2887,6 +3181,9 @@
     "skipped_combos",
   ]);
 
+  /** Always shown in strategy comparison table even when absent from row keys. */
+  const BACKTEST_FORCED_COLUMNS = new Set(["trailing_stop_loss_pct", "tsl_hit_pct"]);
+
   const BACKTEST_COLUMN_PRIORITY = [
     "indicator",
     "strategy",
@@ -2897,6 +3194,7 @@
     "win_pct",
     "trades",
     "tsl_hits",
+    "tsl_hit_pct",
     "final_equity",
     "rank",
     "combos_evaluated",
@@ -2915,6 +3213,7 @@
       win_pct: "Win %",
       trades: "Trades",
       tsl_hits: "TSL hits",
+      tsl_hit_pct: "TSL hit %",
       final_equity: "Equity",
       rank: "Rank",
       combos_evaluated: "Combos evaluated",
@@ -2980,8 +3279,8 @@
     }
     const allKeys = [...keySet];
     const useKeys = [
-      ...BACKTEST_COLUMN_PRIORITY.filter((k) => allKeys.includes(k)),
-      ...allKeys.filter((k) => !BACKTEST_COLUMN_PRIORITY.includes(k)).sort(),
+      ...BACKTEST_COLUMN_PRIORITY.filter((k) => allKeys.includes(k) || BACKTEST_FORCED_COLUMNS.has(k)),
+      ...allKeys.filter((k) => !BACKTEST_COLUMN_PRIORITY.includes(k) && !BACKTEST_FORCED_COLUMNS.has(k)).sort(),
     ];
     if (!useKeys.length) return '<p class="detail-muted">No columns.</p>';
     const th = useKeys
@@ -3001,6 +3300,14 @@
                 ? `<span class="sheet-bh-name">${escapeHtml(ind)}</span>`
                 : escapeHtml(ind || "—");
               return `<td>${inner}</td>`;
+            }
+            if (k === "trailing_stop_loss_pct") {
+              const tsl = backtestRowTslPct(r);
+              const text = tsl != null ? formatBacktestTslLabel(tsl) : "—";
+              return `<td>${escapeHtml(text)}</td>`;
+            }
+            if (k === "tsl_hit_pct") {
+              return `<td>${escapeHtml(formatBacktestTslHitLabel(backtestRowTslHitPct(r)))}</td>`;
             }
             return `<td>${escapeHtml(formatBacktestSheetCell(k, r[k]))}</td>`;
           })
@@ -3482,6 +3789,8 @@
   function render(data) {
     clearError();
     lastPayload = data;
+    applySnapshotNotifyPublicConfig(data);
+    renderNotifyPlatformPanel();
     const coins = Array.isArray(data.coins) ? data.coins : [];
     const updatedRaw = data.updated_at || "";
     const updatedDisplay = updatedRaw || "—";
@@ -4223,22 +4532,23 @@
 
   if (elNotify) {
     elNotify.addEventListener("click", () => {
-      void toggleTierANotifications();
+      const perm = "Notification" in window ? Notification.permission : "denied";
+      const turningOff = notifyAlertsEnabled && perm === "granted";
+      if (turningOff || notifyGuideDismissed()) {
+        void toggleTierANotifications();
+        return;
+      }
+      showNotifyGuideDialog("a");
     });
-  }
-
-  function dismissNotifyFirstPrompt() {
-    try {
-      localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
-    } catch {
-      /* ignore */
-    }
-    if (elNotifyPromptDialog && elNotifyPromptDialog.open) elNotifyPromptDialog.close();
   }
 
   function maybeShowNotifyFirstPrompt() {
     try {
       if (localStorage.getItem(LS_NOTIFY_FIRST_PROMPT_DONE) === "1") return;
+      if (notifyGuideDismissed()) {
+        localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
+        return;
+      }
       if (!("Notification" in window)) {
         localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
         return;
@@ -4251,10 +4561,10 @@
         localStorage.setItem(LS_NOTIFY_FIRST_PROMPT_DONE, "1");
         return;
       }
-      if (!elNotifyPromptDialog || typeof elNotifyPromptDialog.showModal !== "function") return;
+      if (!elNotifyGuideDialog || typeof elNotifyGuideDialog.showModal !== "function") return;
       window.setTimeout(() => {
         try {
-          if (!elNotifyPromptDialog.open) elNotifyPromptDialog.showModal();
+          if (!elNotifyGuideDialog.open) showNotifyGuideDialog("all");
         } catch {
           /* ignore */
         }
@@ -4264,55 +4574,50 @@
     }
   }
 
-  if (elNotifyPromptLater) {
-    elNotifyPromptLater.addEventListener("click", () => dismissNotifyFirstPrompt());
+  if (elNotifyGuideLater) {
+    elNotifyGuideLater.addEventListener("click", () => dismissNotifyGuide());
   }
-  if (elNotifyPromptEnable) {
-    elNotifyPromptEnable.addEventListener("click", () => {
+  if (elNotifyGuideEnableTierA) {
+    elNotifyGuideEnableTierA.addEventListener("click", () => {
       void (async () => {
+        dismissNotifyGuide();
         await toggleTierANotifications();
-        dismissNotifyFirstPrompt();
       })();
     });
   }
-  if (elNotifyPromptDialog) {
-    elNotifyPromptDialog.addEventListener("click", (ev) => {
-      if (ev.target === elNotifyPromptDialog) dismissNotifyFirstPrompt();
+  if (elNotifyGuideEnableTierB) {
+    elNotifyGuideEnableTierB.addEventListener("click", () => {
+      void (async () => {
+        dismissNotifyGuide();
+        await enableTierBPushDirect();
+      })();
+    });
+  }
+  if (elNotifyGuideDialog) {
+    elNotifyGuideDialog.addEventListener("click", (ev) => {
+      if (ev.target === elNotifyGuideDialog) dismissNotifyGuide();
     });
   }
 
   if (elPushTierB) {
     elPushTierB.addEventListener("click", async () => {
       if (!pushTierBAvailable()) return;
-      if (!("Notification" in window)) {
-        showError("Browser notifications are not supported here.");
-        return;
-      }
-      let perm = Notification.permission;
-      if (perm === "default") {
-        perm = await Notification.requestPermission();
-      }
-      if (perm !== "granted") {
-        showError(
-          "Notification permission not granted. On iOS, add the site to the Home Screen and try again from the installed PWA.",
-        );
-        return;
-      }
-      await registerServiceWorker();
-      clearError();
       try {
+        await registerServiceWorker();
         const reg = await navigator.serviceWorker.ready;
         const existing = await reg.pushManager.getSubscription();
         if (existing) {
-          await tierBUnsubscribeRemote();
-        } else {
-          await tierBSubscribeRemote();
+          await enableTierBPushDirect();
+          return;
         }
-        await refreshPushTierBLabel();
-      } catch (e) {
-        showError(String(e && e.message ? e.message : e));
-        await refreshPushTierBLabel();
+      } catch {
+        /* fall through to guide or direct enable */
       }
+      if (!notifyGuideDismissed()) {
+        showNotifyGuideDialog("b");
+        return;
+      }
+      await enableTierBPushDirect();
     });
   }
 
@@ -4322,6 +4627,7 @@
       await registerServiceWorker();
       syncPushTierBVisibility();
       await refreshPushTierBLabel();
+      renderNotifyPlatformPanel();
       syncNotifyTierAButton();
       maybeShowNotifyFirstPrompt();
     })();
@@ -4330,6 +4636,7 @@
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       syncNotifyTierAButton();
+      void maybeRefreshTierBPushSubscription();
       if (notifyAlertsEnabled) {
         loadSnapshot({ showErrors: false, forNotify: true });
       }

@@ -1,0 +1,27 @@
+// F-Droid / Gradle stub — copy to app/build.gradle when implementing the Kotlin module.
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'org.lineartrendspotter.companion'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'org.lineartrendspotter.companion'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies {
+    // UnifiedPush connector + ntfy distributor — add when module is active
+}

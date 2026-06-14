@@ -1,0 +1,35 @@
+# Created with yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+
+PackageIdentifier: EdwardLThompson.LinearTrendSpotterTrayNotifier
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Edward L Thompson
+PublisherUrl: https://github.com/edwardlthompson
+PublisherSupportUrl: https://github.com/edwardlthompson/linear-trend-spotter/issues
+PackageName: Linear Trend Spotter Tray Notifier
+PackageUrl: https://github.com/edwardlthompson/linear-trend-spotter/tree/main/clients/windows
+License: MIT
+LicenseUrl: https://github.com/edwardlthompson/linear-trend-spotter/blob/main/LICENSE
+ShortDescription: FOSS Windows tray notifier for qualified-list changes via public snapshot JSON
+Description: |
+  MIT-licensed companion that polls the public qualified snapshot URL and shows a native
+  Windows toast when the filtered qualified row set changes (same semantics as dashboard Tier-A).
+  No proprietary SDKs; no market API calls from the client.
+Moniker: linear-trend-spotter-tray
+Tags:
+  - notifications
+  - cryptocurrency
+  - foss
+  - tray
+ReleaseNotes: Initial portable release scaffold — update InstallerUrl and InstallerSha256 when publishing GitHub Releases.
+Installers:
+  - Architecture: x64
+    InstallerType: portable
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: tray_notifier.exe
+        PortableCommandAlias: lts-tray
+    InstallerUrl: https://github.com/edwardlthompson/linear-trend-spotter/releases/download/v0.1.0/tray-notifier-win-x64.zip
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+ManifestType: singleton
+ManifestVersion: 1.6.0
