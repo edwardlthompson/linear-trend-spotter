@@ -1455,6 +1455,20 @@
     return `${Number.isInteger(tsl) ? tsl.toFixed(0) : tsl.toFixed(1)}%`;
   }
 
+  function backtestRowTslHitPct(row) {
+    if (!row || backtestRowIsBuyHold(row)) return null;
+    const trades = Number(row.trades);
+    const hits = Number(row.tsl_hits);
+    if (!Number.isFinite(trades) || trades <= 0) return null;
+    if (!Number.isFinite(hits) || hits < 0) return null;
+    return (hits / trades) * 100;
+  }
+
+  function formatBacktestTslHitLabel(pct) {
+    if (pct == null || !Number.isFinite(pct)) return "—";
+    return `${pct.toFixed(1)}%`;
+  }
+
   function rowBuyHoldNetPct(r) {
     const c = r.coin;
     if (!c.backtest_buy_hold || typeof c.backtest_buy_hold !== "object") return null;
@@ -2887,6 +2901,9 @@
     "skipped_combos",
   ]);
 
+  /** Always shown in strategy comparison table even when absent from row keys. */
+  const BACKTEST_FORCED_COLUMNS = new Set(["trailing_stop_loss_pct", "tsl_hit_pct"]);
+
   const BACKTEST_COLUMN_PRIORITY = [
     "indicator",
     "strategy",
@@ -2897,6 +2914,7 @@
     "win_pct",
     "trades",
     "tsl_hits",
+    "tsl_hit_pct",
     "final_equity",
     "rank",
     "combos_evaluated",
@@ -2915,6 +2933,7 @@
       win_pct: "Win %",
       trades: "Trades",
       tsl_hits: "TSL hits",
+      tsl_hit_pct: "TSL hit %",
       final_equity: "Equity",
       rank: "Rank",
       combos_evaluated: "Combos evaluated",
@@ -2980,8 +2999,8 @@
     }
     const allKeys = [...keySet];
     const useKeys = [
-      ...BACKTEST_COLUMN_PRIORITY.filter((k) => allKeys.includes(k)),
-      ...allKeys.filter((k) => !BACKTEST_COLUMN_PRIORITY.includes(k)).sort(),
+      ...BACKTEST_COLUMN_PRIORITY.filter((k) => allKeys.includes(k) || BACKTEST_FORCED_COLUMNS.has(k)),
+      ...allKeys.filter((k) => !BACKTEST_COLUMN_PRIORITY.includes(k) && !BACKTEST_FORCED_COLUMNS.has(k)).sort(),
     ];
     if (!useKeys.length) return '<p class="detail-muted">No columns.</p>';
     const th = useKeys
@@ -3001,6 +3020,14 @@
                 ? `<span class="sheet-bh-name">${escapeHtml(ind)}</span>`
                 : escapeHtml(ind || "—");
               return `<td>${inner}</td>`;
+            }
+            if (k === "trailing_stop_loss_pct") {
+              const tsl = backtestRowTslPct(r);
+              const text = tsl != null ? formatBacktestTslLabel(tsl) : "—";
+              return `<td>${escapeHtml(text)}</td>`;
+            }
+            if (k === "tsl_hit_pct") {
+              return `<td>${escapeHtml(formatBacktestTslHitLabel(backtestRowTslHitPct(r)))}</td>`;
             }
             return `<td>${escapeHtml(formatBacktestSheetCell(k, r[k]))}</td>`;
           })

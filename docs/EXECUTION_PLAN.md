@@ -565,6 +565,17 @@ Implement **tier A** in **Q7–Q9** first; implement **tier B** in **Q21** (docu
   - **Verification:** Test push received on at least one browser after scan hook; unsub flow works; **H0** confirms no extra CoinGecko calls from push path.
   - **Notes:** `push_server/app.py` (Flask + `pywebpush`, `gunicorn`); `render.yaml` second web service + worker env `WEB_PUSH_*`; `main.py` `_maybe_notify_web_push_scan()`; dashboard **`#pushTierBBtn`** + `__PUSH_API_BASE__` / `__VAPID_PUBLIC_KEY__`; `docs/dashboard/sw.js` **`push`** / **`notificationclick`**, **`CACHE_VERSION`** v10; `docs/WEB_DASHBOARD.md` Tier-B section.
 
+- [x] **Q22.** **Backtest Results modal — TSL columns:** In the strategy comparison table (`backtestStrategiesTableHtml`), always show **TSL %** (winning trailing stop from `trailing_stop_loss_pct` / `trailing_stop_pct` alias) and **TSL hit %** (computed client-side as `tsl_hits ÷ trades`, matching `notifications/image_renderer.py`). B&H rows show `—`. Bump `docs/dashboard/sw.js` **`CACHE_VERSION`** so cached PWAs load updated `app.js`.
+  - **Owner:** AGENT
+  - **Scope:** `docs/dashboard/app.js`, `docs/dashboard/sw.js`; optional `styles.css` min-width only if columns collapse in modal scroll.
+  - **Verification:**
+    1. Open dashboard with `docs/qualified_public_snapshot.json` (or live snapshot).
+    2. **Results** for PENDLE → **TSL %** between Params and Net % (e.g. MFI `8.0%`); **TSL hit %** after TSL hits (e.g. MFI `28.6%` for 2/7 trades).
+    3. B&H row shows `—` for both TSL columns.
+    4. Hard-refresh / SW update picks up new `CACHE_VERSION`.
+    5. `python -m compileall -q .` (repo root); no new CI gate required.
+  - **Notes:** Partial fix landed in commit `991c14a` (TSL % column + Best BT TSL badge) but SW cache was not bumped and TSL hit % was never added. No snapshot schema change. Completed 2026-06-14: forced columns + `CACHE_VERSION` v100.
+
 ---
 
 ## Risks, follow-ups & operational checklist
@@ -648,7 +659,7 @@ Milestone **A4** (branch protection) is complete. Use this section for **risks a
 | N | Security & compliance | **N1** done; **N2** webhook row retired (**push protection** still admin) |
 | O | Product & research | **O1–O3** done |
 | P | Backtesting modularization (web reuse) | **P1–P4** done |
-| Q | Public dashboard + PWA + notifications + UX (**Q1–Q21**) | **Q1–Q21** done |
+| Q | Public dashboard + PWA + notifications + UX (**Q1–Q22**) | **Q1–Q22** done |
 
 _Update the Status column as milestones complete (e.g. “Complete”, “In progress”)._
 

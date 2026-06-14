@@ -32,6 +32,7 @@
 
 | Task | Owner | Isolated scope |
 |------|-------|----------------|
+| Backtest Results modal: show TSL % + TSL hit % columns (Q22) | AGENT | Done — `docs/dashboard/app.js`, `sw.js` v100 |
 | Lighthouse CI for `docs/dashboard/` | AGENT | npm tooling under dashboard |
 | axe-core accessibility tests | AGENT | `docs/dashboard/` |
 | File line-limit refactor | HUMAN decision | large legacy modules |
