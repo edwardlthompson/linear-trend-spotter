@@ -36,16 +36,27 @@ services:
         sync: false
       - key: QUALIFIED_SNAPSHOT_RELAY_SECRET
         sync: false
+      - key: NTFY_ENABLED
+        sync: false
+      - key: NTFY_BASE_URL
+        sync: false
+      - key: NTFY_TOPIC
+        sync: false
+      - key: NTFY_TOKEN
+        sync: false
+      - key: NTFY_DASHBOARD_URL
+        sync: false
     disk:
       name: app-data
       mountPath: /var/data
       sizeGB: 10
 
   # Tier-B Web Push relay (Q21): deploy once, set VAPID_* and WEB_PUSH_INTERNAL_SECRET in dashboard.
+  # Q23a: persistent disk so push subscriptions survive redeploys (requires Starter+ for disk mount).
   - type: web
     name: linear-trend-spotter-push
     runtime: python
-    plan: free
+    plan: starter
     region: oregon
     branch: main
     autoDeployTrigger: commit
@@ -56,7 +67,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: PUSH_SUBSCRIPTIONS_FILE
-        value: /tmp/push_subscriptions.json
+        value: /var/data/push_subscriptions.json
       - key: WEB_PUSH_CORS_ORIGINS
         value: "*"
       - key: VAPID_PRIVATE_KEY
@@ -67,6 +78,10 @@ services:
         sync: false
       - key: WEB_PUSH_SUBSCRIBE_TOKEN
         sync: false
+    disk:
+      name: push-data
+      mountPath: /var/data
+      sizeGB: 1
 
   # Public qualified snapshot (Q4): GitHub Pages dashboard GETs JSON here with CORS.
   # Worker POSTs after each scan (QUALIFIED_SNAPSHOT_RELAY_*). Workers do not serve HTTP.

@@ -35,3 +35,13 @@ Each scan performs up to **two** extra GETs (CoinGecko + CMC), not counted in yo
 - **Vendor credits (CoinGecko / CMC):** bars use **`vendor_quota`** from the snapshot when the worker could read `/key` usage (same keys already on Render).
 - **Configured HTTP caps:** still used when set (`SCAN_COST_PANEL_*` in config); if both vendor quota and a cap exist, the UI explains both.
 - **Polygon:** there is no documented public REST for monthly credits in this pipeline; Polygon still uses your configured cap + local `polygon_http_*` counts.
+
+## 7. Tier-C ntfy (optional reliable off-device alerts)
+
+1. Set `RENDER_API_KEY` locally (never commit).
+2. Run:
+   ```bash
+   python scripts/provision_tier_c_ntfy.py --generate --apply --dashboard-url https://YOUR-GITHUB-PAGES/docs/dashboard/
+   ```
+3. Wait for one scan; confirm snapshot JSON includes `notify_public_config.ntfy_subscribe_url`.
+4. Hard refresh the dashboard — Settings and the notification guide will show the ntfy subscribe link.

@@ -130,6 +130,24 @@ def _public_qualification_exits(exited: list[dict[str, Any]] | None) -> list[dic
     return out
 
 
+def build_notify_public_config(
+    *,
+    ntfy_enabled: bool = False,
+    ntfy_base_url: str = "",
+    ntfy_topic: str = "",
+) -> dict[str, Any] | None:
+    """Public Tier-C hints for dashboard (subscribe URL only — never publish token)."""
+    if not ntfy_enabled:
+        return None
+    topic = str(ntfy_topic or "").strip()
+    if not topic:
+        return None
+    base = str(ntfy_base_url or "https://ntfy.sh").strip().rstrip("/")
+    if not base:
+        base = "https://ntfy.sh"
+    return {"ntfy_subscribe_url": f"{base}/{topic}"}
+
+
 def build_public_qualified_snapshot(
     final_results: list[dict[str, Any]],
     *,
@@ -139,6 +157,7 @@ def build_public_qualified_snapshot(
     regime_gate: dict[str, Any] | None = None,
     api_cost_panel: dict[str, Any] | None = None,
     qualification_exits: list[dict[str, Any]] | None = None,
+    notify_public_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Notification-parity subset for public JSON (Q1/Q2). No secrets.
 
@@ -227,6 +246,8 @@ def build_public_qualified_snapshot(
         body["regime_gate"] = regime_gate
     if api_cost_panel:
         body["api_cost_panel"] = api_cost_panel
+    if notify_public_config:
+        body["notify_public_config"] = notify_public_config
     qe = _public_qualification_exits(qualification_exits)
     if qe:
         body["qualification_exits"] = qe
@@ -245,6 +266,7 @@ def write_public_qualified_snapshot(
     regime_gate: dict[str, Any] | None = None,
     api_cost_panel: dict[str, Any] | None = None,
     qualification_exits: list[dict[str, Any]] | None = None,
+    notify_public_config: dict[str, Any] | None = None,
 ) -> None:
     payload = build_public_qualified_snapshot(
         final_results,
@@ -254,5 +276,6 @@ def write_public_qualified_snapshot(
         regime_gate=regime_gate,
         api_cost_panel=api_cost_panel,
         qualification_exits=qualification_exits,
+        notify_public_config=notify_public_config,
     )
     _atomic_write_json(data_dir / filename, payload)

@@ -84,7 +84,7 @@ Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere),
 **Relay service**
 
 - Deploy from repo root `push_server/` (see root `render.yaml` blueprint fragment `linear-trend-spotter-push`).
-- Env on the relay: **`VAPID_PRIVATE_KEY`**, **`VAPID_CONTACT_EMAIL`** (mailto claim), **`WEB_PUSH_INTERNAL_SECRET`** (Bearer for internal notify), optional **`WEB_PUSH_SUBSCRIBE_TOKEN`** (Bearer or JSON `token` on subscribe/unsubscribe), **`WEB_PUSH_CORS_ORIGINS`** (e.g. `*` or your GitHub Pages origin), **`PUSH_SUBSCRIPTIONS_FILE`** (default JSON on disk — **ephemeral** on free web unless you add persistent disk).
+- Env on the relay: **`VAPID_PRIVATE_KEY`**, **`VAPID_CONTACT_EMAIL`** (mailto claim), **`WEB_PUSH_INTERNAL_SECRET`** (Bearer for internal notify), optional **`WEB_PUSH_SUBSCRIBE_TOKEN`** (Bearer or JSON `token` on subscribe/unsubscribe), **`WEB_PUSH_CORS_ORIGINS`** (e.g. `*` or your GitHub Pages origin), **`PUSH_SUBSCRIPTIONS_FILE`** (Q23a: use **`/var/data/push_subscriptions.json`** on a mounted persistent disk — see `render.yaml` push service).
 - Generate keys, for example: `npx web-push generate-vapid-keys` ([web-push-libs](https://github.com/web-push-libs/web-push)) — put **public** key in dashboard `config.js` as `window.__VAPID_PUBLIC_KEY__`, **private** only on the relay.
 
 **Worker**
@@ -94,12 +94,46 @@ Off-device alerts use a **small relay** (`push_server/` on Render or elsewhere),
 
 **Dashboard**
 
-- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **List change push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits).
+- When `window.__PUSH_API_BASE__` and `window.__VAPID_PUBLIC_KEY__` are set (see `docs/dashboard/config.example.js`), **List change push** appears; it registers a push subscription with the relay and toggles off to unsubscribe. Service worker **`sw.js`** handles **`push`** and **`notificationclick`** (cache version bumped with static edits). Q23a: the dashboard **re-subscribes on tab focus** when the user previously enabled Tier-B but the browser dropped `PushSubscription`; expired endpoints are **pruned** on the relay when Web Push returns **410 Gone**.
+
+**Reliability (Q23a)**
+
+- **Android:** Disable battery optimization for your browser (Tier-B) or for the **ntfy** app (Tier-C). OEMs may still delay background work.
+- **Windows:** Tier-B depends on the browser push channel; for consistent delivery use **Tier-C ntfy desktop** (Settings → Reliable alerts by device).
 
 **Privacy / rate**
 
 - Subscriptions are **endpoint URLs and keys** stored by your relay — disclose in your privacy policy if you ship this to users.
 - **Rate:** at most **one** relay request per completed scan **when** there is entry/exit churn; the relay sends **at most one** push per stored subscription per notify call (no client-driven burst).
+
+### Tier-C ntfy (Q23b)
+
+FOSS off-device alerts via [ntfy](https://ntfy.sh) (self-host or ntfy.sh). When **`NTFY_ENABLED`** is true in worker `config.json` / env and **`NTFY_TOPIC`** is set, the worker POSTs a short title/body on qualified **entry/exit** (same gate as Tier-B). **No market data** in the message.
+
+**Worker env / config**
+
+- **`NTFY_ENABLED`**: `false` by default (non-regression).
+- **`NTFY_BASE_URL`**: e.g. `https://ntfy.sh` or your self-hosted origin.
+- **`NTFY_TOPIC`**: unguessable topic name; use **`NTFY_TOKEN`** (Bearer) on public ntfy.sh.
+- **`NTFY_DASHBOARD_URL`**: optional click-through URL in ntfy `Click` header.
+- **`NTFY_PRIORITY`**: `min` | `low` | `default` | `high` | `max` | `urgent`.
+
+**Clients**
+
+- **Android:** [ntfy on F-Droid](https://f-droid.org/packages/io.heckel.ntfy/) — subscribe to your topic.
+- **Windows:** [ntfy desktop](https://ntfy.sh/app) — same topic.
+- Dashboard **Settings → Reliable alerts by device** and the **notification guide** dialog show OS-specific install links when `notify_public_config.ntfy_subscribe_url` is in the snapshot (or `window.__NTFY_SUBSCRIBE_URL__` in `config.js`).
+
+**Provision (automated):**
+
+```bash
+set RENDER_API_KEY=...
+python scripts/provision_tier_c_ntfy.py --generate --apply --dashboard-url https://YOUR-GITHUB-PAGES/dashboard/
+```
+
+After the next scan, the public snapshot includes `notify_public_config.ntfy_subscribe_url` (no publish token).
+
+**Privacy:** Topic URLs are secrets if unauthenticated; disclose ntfy usage in your privacy policy for external users.
 
 ## New / dropped since last visit (Q10)
 

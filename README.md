@@ -2,7 +2,7 @@
 
 A scanner that pulls exchange-listed coins, filters on volume and momentum, scores **OHLCV uniformity**, runs **integrated backtests**, and publishes results where you actually look at them: a **web dashboard** (GitHub Pages–friendly) plus optional **browser push**.
 
-No chat-bot pipeline—configuration points at **`qualified_public_snapshot.json`**, optional **`snapshot_server`** relay on Render, and optional Tier-B **`push_server`** for list-change notifications.
+No chat-bot pipeline—configuration points at **`qualified_public_snapshot.json`**, optional **`snapshot_server`** relay on Render, and optional **Tier-B** (`push_server`) / **Tier-C** (ntfy) list-change notifications.
 
 ## Why use it
 
@@ -12,7 +12,7 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 
 - **Scanner worker:** scheduled runs (e.g. Render), SQLite caches, CoinGecko/CMC/Polygon as configured, anomaly hints in logs.
 - **Qualified snapshot:** JSON consumed by the static UI under `docs/dashboard/`; relay POST optional.
-- **Dashboard (static PWA):** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot), optional **per-chart % below high** filters on **7d** / **30d** chart headers, watchlist pins, CSV/JSON export, **List changes** bell + **Logs** tab badges (hidden when zero), theme toggle (**LTS** short name / **Linear Trend Spotter** full title in manifest), Tier-A poll alerts, Tier-B push—see **`docs/WEB_DASHBOARD.md`**.
+- **Dashboard (static PWA):** sortable multi-venue table, **7d / 30d** sparklines from `closes_1h` (click a chart cell for a full-screen hourly plot), optional **per-chart % below high** filters on **7d** / **30d** chart headers, watchlist pins, CSV/JSON export, **List changes** bell + **Logs** tab badges (hidden when zero), theme toggle (**LTS** short name / **Linear Trend Spotter** full title in manifest), backtest **Results** modal with **TSL %** and **TSL hit %**, **Tier-A** poll alerts, **Tier-B** Web Push, **Tier-C** ntfy (FOSS off-device)—platform-aware notification guide on enable—see **`docs/WEB_DASHBOARD.md`**.
 - **Backtesting:** per-coin strategy sweep artifacts (`backtest_results.json`, checkpoints)—library boundary documented in **`docs/BACKTESTING_LIBRARY.md`**.
 
 ## Quick start
@@ -26,6 +26,8 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 
 **Live dashboard JSON:** set **`QUALIFIED_SNAPSHOT_RELAY_URL`** + **`QUALIFIED_SNAPSHOT_RELAY_SECRET`** on the worker and deploy **`snapshot_server/`** (see **`render.yaml`** fragment).
 
+**Tier-C ntfy (optional):** after setting **`RENDER_API_KEY`**, run `python scripts/provision_tier_c_ntfy.py --generate --apply --dashboard-url https://…` — the worker publishes list-change alerts; the public snapshot exposes `notify_public_config.ntfy_subscribe_url` for the dashboard guide. See **`docs/MANUAL_DEPLOY_STEPS.md`** §7.
+
 **Local dashboard preview:** `cd docs/dashboard && python -m http.server 8765` and open with **`?api=`** pointing at your relay URL—details in **`docs/WEB_DASHBOARD.md`**.
 
 ## Repo layout (short)
@@ -33,10 +35,13 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 | Path | Role |
 |------|------|
 | `main.py` | Scan orchestration |
-| `scanner/` | Pipeline stages (filters, listings, uniformity, web push hook) |
+| `scanner/` | Pipeline stages (filters, listings, uniformity, web push + ntfy hooks) |
 | `docs/dashboard/` | Static PWA UI |
 | `snapshot_server/` | Small Flask relay for public GET + worker POST |
-| `push_server/` | Optional Web Push relay |
+| `push_server/` | Optional Web Push relay (Tier-B) |
+| `clients/windows/` | FOSS tray notifier scaffold + winget manifest |
+| `clients/android/` | UnifiedPush companion scaffold + F-Droid metadata |
+| `scripts/provision_tier_c_ntfy.py` | Automate `NTFY_*` on Render worker |
 | `scripts/check_snapshot_relay.py` | Operator tool: GET `/relay-health`, optional ingest smoke test (env `QUALIFIED_SNAPSHOT_RELAY_*`) |
 | `scripts/check_exchange_print_ascii.py` | CI guardrail: `exchange_data` `print()` lines must be ASCII (Windows console safety) |
 
@@ -47,7 +52,8 @@ If you watch trends across majors like Coinbase, Kraken, or MEXC, manually scree
 - **`docs/DELIVERY_MODE.md`** — how snapshot data reaches the browser  
 - **`docs/MANUAL_DEPLOY_STEPS.md`** — Render / Pages checklist  
 - **`docs/render-setup.md`** — Render blueprint and worker notes  
-- **`docs/WEB_DASHBOARD.md`** — dashboard UI (grid, per-chart filters, alerts), relay/env vars  
+- **`docs/WEB_DASHBOARD.md`** — dashboard UI (grid, per-chart filters, Tier-A/B/C alerts, notification guide), relay/env vars
+- **`docs/PRIVACY.md`** — privacy policy draft (Web Push + ntfy)  
 - **`docs/COIN_API_CREDIT_STRATEGY.md`** — splitting load across CoinGecko / CoinMarketCap / Polygon, **rate limits & backoff**, **bulk `/coins/markets`** alias fetching  
 - **`docs/API_MONTHLY_BUDGET_ESTIMATE.md`** — rough monthly HTTP estimates per provider  
 - **`docs/API_PROVIDER_DEEP_ANALYSIS.md`** — which API fits which pipeline stage  

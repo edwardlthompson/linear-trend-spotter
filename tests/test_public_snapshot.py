@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from utils.scan_artifacts import build_public_qualified_snapshot
 from utils.scan_costs import build_api_cost_panel_for_snapshot
 
@@ -271,3 +273,50 @@ def test_minimal_field_set_omits_backtest_and_exchange_fields() -> None:
     assert "exchange_volumes" not in coin
     assert "listed_on" not in coin
     assert "volume_acceleration_pct" not in coin
+
+
+def test_notify_public_config_included_when_set() -> None:
+    from utils.scan_artifacts import build_notify_public_config
+
+    cfg = build_notify_public_config(
+        ntfy_enabled=True,
+        ntfy_base_url="https://ntfy.sh",
+        ntfy_topic="secret-topic-abc",
+    )
+    assert cfg == {"ntfy_subscribe_url": "https://ntfy.sh/secret-topic-abc"}
+    rows = [
+        {
+            "symbol": "btc",
+            "name": "Bitcoin",
+            "slug": "bitcoin",
+            "gains": {"7d": 1.0, "30d": 2.0},
+            "uniformity_score": 50.0,
+            "health_score": 60,
+        },
+    ]
+    payload = build_public_qualified_snapshot(
+        rows,
+        field_set="full",
+        scan_interval_seconds=3600,
+        notify_public_config=cfg,
+    )
+    assert payload["notify_public_config"]["ntfy_subscribe_url"] == "https://ntfy.sh/secret-topic-abc"
+    assert "NTFY_TOKEN" not in json.dumps(payload)
+
+
+def test_notify_public_config_omitted_when_disabled() -> None:
+    from utils.scan_artifacts import build_notify_public_config
+
+    assert build_notify_public_config(ntfy_enabled=False, ntfy_topic="x") is None
+    rows = [
+        {
+            "symbol": "btc",
+            "name": "Bitcoin",
+            "slug": "bitcoin",
+            "gains": {"7d": 1.0, "30d": 2.0},
+            "uniformity_score": 50.0,
+            "health_score": 60,
+        },
+    ]
+    payload = build_public_qualified_snapshot(rows, field_set="full", scan_interval_seconds=3600)
+    assert "notify_public_config" not in payload

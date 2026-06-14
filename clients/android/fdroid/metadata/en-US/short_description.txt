@@ -1,0 +1,1 @@
+FOSS Android companion for Linear Trend Spotter list-change alerts via UnifiedPush / ntfy.

@@ -633,6 +633,14 @@
           </button>
         </p>
       </section>
+      <section class="settings-section" aria-labelledby="settingsNotifyPlatformHeading">
+        <h3 id="settingsNotifyPlatformHeading" class="settings-section-title">Reliable alerts by device</h3>
+        <p class="settings-section-hint">
+          Tier-A (poll) and Tier-B (browser push) may stop when the PWA is closed or battery optimization runs.
+          For always-on alerts, use Tier-C ntfy on Windows or Android.
+        </p>
+        <div id="notifyPlatformPanel" class="notify-platform-panel" hidden></div>
+      </section>
       <section class="settings-section" aria-labelledby="settingsExportHeading">
         <h3 id="settingsExportHeading" class="settings-section-title">Export</h3>
         <p class="settings-section-hint">
@@ -736,15 +744,18 @@
     </footer>
     </div>
 
-    <dialog id="notifyPromptDialog" class="notify-prompt-dialog">
-      <div class="notify-prompt-box">
-        <h2 class="notify-prompt-title">Enable notifications?</h2>
-        <p class="notify-prompt-text">
-          Get browser alerts when coins enter or leave the qualified list. You can turn this off anytime in Settings.
-        </p>
-        <div class="notify-prompt-actions">
-          <button type="button" id="notifyPromptEnable" class="notify-prompt-enable">Enable</button>
-          <button type="button" id="notifyPromptLater" class="secondary">Not now</button>
+    <dialog id="notifyGuideDialog" class="notify-guide-dialog">
+      <div class="notify-guide-box">
+        <h2 class="notify-guide-title">Notification settings</h2>
+        <div id="notifyGuideBody" class="notify-guide-body"></div>
+        <label class="notify-guide-skip">
+          <input type="checkbox" id="notifyGuideSkip" />
+          Don't show this again
+        </label>
+        <div class="notify-guide-actions">
+          <button type="button" id="notifyGuideEnableTierA" class="notify-guide-enable-tier-a">Enable update alerts (Tier-A)</button>
+          <button type="button" id="notifyGuideEnableTierB" class="notify-guide-enable-tier-b secondary" hidden>Enable list-change push (Tier-B)</button>
+          <button type="button" id="notifyGuideLater" class="secondary">Not now</button>
         </div>
       </div>
     </dialog>

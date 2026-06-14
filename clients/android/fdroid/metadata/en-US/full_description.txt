@@ -1,0 +1,7 @@
+Linear Trend Spotter Android companion receives qualified-list change alerts via UnifiedPush with an ntfy-compatible distributor (no Google Play Services or Firebase).
+
+The worker can publish Tier-C ntfy messages when coins enter or leave the qualified list. Subscribe to the operator's topic in the ntfy app, or use this companion when the native Kotlin module is implemented.
+
+FOSS distribution target: F-Droid with reproducible builds (SOURCE_DATE_EPOCH).
+
+Status: scaffold only — Kotlin app under clients/android/app/ is not yet implemented.

@@ -1,7 +1,8 @@
 """Minimal Tier-B Web Push relay (Milestone Q21).
 
 Deploy as a separate Render **Web Service** (see render.yaml). Stores
-PushSubscription JSON on disk (ephemeral unless you mount persistent storage).
+PushSubscription JSON on disk (use persistent volume — Q23a — at
+``PUSH_SUBSCRIPTIONS_FILE``, default ``/var/data/push_subscriptions.json`` on Render).
 No market OHLCV in payloads — short text + dashboard URL. The scanner POSTs when
 the qualified **active** list gains or loses members; each subscription may
 include ``notify_exchanges`` so pushes match the same exchange filter semantics

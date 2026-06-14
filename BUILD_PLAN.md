@@ -1,6 +1,6 @@
 # Build Plan
 
-> Bootstrap adoption and agent-ops task board. Product milestones A-Q live in `docs/EXECUTION_PLAN.md`.
+> Bootstrap adoption and agent-ops task board. Product milestones A–Q and post-Q follow-ups (Q23+) live in `docs/EXECUTION_PLAN.md`.
 > Finished items are archived in `COMPLETED_TASKS.md`.
 
 ## Owner Label Legend
@@ -36,6 +36,33 @@
 | Lighthouse CI for `docs/dashboard/` | AGENT | npm tooling under dashboard |
 | axe-core accessibility tests | AGENT | `docs/dashboard/` |
 | File line-limit refactor | HUMAN decision | large legacy modules |
+
+---
+
+## Sprint 7 -- Reliable notifications (Q23)
+
+| Task | Owner | Isolated scope |
+|------|-------|----------------|
+| Q23a: Tier-B ops — persistent push subs, dead-sub cleanup, dashboard re-subscribe on focus | AGENT | Done — `render.yaml`, `app.js`, `WEB_DASHBOARD.md` |
+| Q23b: Tier-C ntfy bridge — opt-in `NTFY_*` publish on list change | AGENT | Done — `scanner/ntfy_notify.py`, settings, docs |
+| Q23c: OS-aware notification install UX (Windows/Android CTAs) | AGENT | Done — dashboard guide dialog + Settings panel, `sw.js` v102 |
+| Provision ntfy topic + token on Render worker | AUTO | `scripts/provision_tier_c_ntfy.py` + snapshot `notify_public_config` |
+| Privacy policy update for Tier-C external users | AGENT | Done — `docs/PRIVACY.md` |
+
+**Order:** Q23a → Q23b → Q23c. Do not start Q23b until Q23a verification passes.
+
+---
+
+## Sprint 8 -- Native companions (optional, Q24–Q25)
+
+| Task | Owner | Isolated scope |
+|------|-------|----------------|
+| Q24: Windows tray notifier (Python tray scaffold) | AGENT | Done — `clients/windows/` |
+| Q25: Android UnifiedPush companion scaffold | ADB / AGENT | Done — `clients/android/` README + fdroid metadata |
+| winget manifest validate + submit scripts | AUTO | `scripts/winget_validate.ps1`, `scripts/winget_submit.ps1` |
+| winget-pkgs PR merge (Microsoft review) | HUMAN | external maintainer |
+| F-Droid metadata + keystore prep script | AUTO | `scripts/android_fdroid_prepare.sh` |
+| F-Droid tracker submission (after APK) | ADB | post-APK only |
 
 ---
 
