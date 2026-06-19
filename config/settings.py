@@ -458,6 +458,24 @@ class Settings:
                 return json.load(f)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in config file {self.config_path}: {e}") from e
+
+    def _env_override(self, key: str) -> str | None:
+        """Return a stripped env override, preserving explicit empty values."""
+        if key not in os.environ:
+            return None
+        return os.environ[key].strip()
+
+    def _env_bool_override(self, key: str) -> bool | None:
+        raw = self._env_override(key)
+        if raw is None:
+            return None
+        val = raw.lower()
+        if val in {'1', 'true', 'yes', 'on'}:
+            return True
+        if val in {'', '0', 'false', 'no', 'off'}:
+            return False
+        _logger.warning("Ignoring invalid boolean environment override for %s: %r", key, raw)
+        return None
     
     @property
     def cmc_api_key(self) -> str:
@@ -944,27 +962,45 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
+        env_val = self._env_bool_override('NTFY_ENABLED')
+        if env_val is not None:
+            return env_val
         return bool(self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
+        env_val = self._env_override('NTFY_BASE_URL')
+        if env_val is not None:
+            return env_val or 'https://ntfy.sh'
         return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
 
     @property
     def ntfy_topic(self) -> str:
+        env_val = self._env_override('NTFY_TOPIC')
+        if env_val is not None:
+            return env_val
         return str(self._config.get('NTFY_TOPIC', '')).strip()
 
     @property
     def ntfy_token(self) -> str:
+        env_val = self._env_override('NTFY_TOKEN')
+        if env_val is not None:
+            return env_val
         return str(self._config.get('NTFY_TOKEN', '')).strip()
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = self._env_override('NTFY_PRIORITY')
+        if raw is None:
+            raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip()
+        raw = raw.lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
+        env_val = self._env_override('NTFY_DASHBOARD_URL')
+        if env_val is not None:
+            return env_val
         return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
 
     @property

@@ -304,6 +304,26 @@ def test_notify_public_config_included_when_set() -> None:
     assert "NTFY_TOKEN" not in json.dumps(payload)
 
 
+def test_notify_public_config_uses_ntfy_environment(monkeypatch, tmp_path) -> None:
+    from config.settings import Settings
+    from utils.scan_artifacts import build_notify_public_config
+
+    monkeypatch.setenv("NTFY_ENABLED", "1")
+    monkeypatch.setenv("NTFY_BASE_URL", "https://ntfy.example/")
+    monkeypatch.setenv("NTFY_TOPIC", "env-topic")
+    monkeypatch.setenv("NTFY_TOKEN", "publish-token")
+    s = Settings(config_path=str(tmp_path / "missing.json"))
+
+    cfg = build_notify_public_config(
+        ntfy_enabled=s.ntfy_enabled,
+        ntfy_base_url=s.ntfy_base_url,
+        ntfy_topic=s.ntfy_topic,
+    )
+
+    assert cfg == {"ntfy_subscribe_url": "https://ntfy.example/env-topic"}
+    assert "publish-token" not in json.dumps(cfg)
+
+
 def test_notify_public_config_omitted_when_disabled() -> None:
     from utils.scan_artifacts import build_notify_public_config
 
