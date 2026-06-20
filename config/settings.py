@@ -40,6 +40,25 @@ class Settings:
 
         # Fail-fast safety validation and normalization
         self._config = self._validate_and_normalize(self._config)
+
+    @staticmethod
+    def _env_or_config_str(name: str, fallback: Any) -> str:
+        raw = os.getenv(name)
+        if raw is None:
+            return str(fallback).strip()
+        return raw.strip()
+
+    @staticmethod
+    def _env_or_config_bool(name: str, fallback: Any) -> bool:
+        raw = os.getenv(name)
+        if raw is None:
+            return bool(fallback)
+        val = raw.strip().lower()
+        if val in {'1', 'true', 'yes', 'on'}:
+            return True
+        if val in {'0', 'false', 'no', 'off', ''}:
+            return False
+        return bool(fallback)
     
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration values per spec §9.3"""
@@ -944,28 +963,28 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return self._env_or_config_bool('NTFY_ENABLED', self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return self._env_or_config_str('NTFY_BASE_URL', self._config.get('NTFY_BASE_URL', 'https://ntfy.sh'))
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return self._env_or_config_str('NTFY_TOPIC', self._config.get('NTFY_TOPIC', ''))
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return self._env_or_config_str('NTFY_TOKEN', self._config.get('NTFY_TOKEN', ''))
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = self._env_or_config_str('NTFY_PRIORITY', self._config.get('NTFY_PRIORITY', 'default')).lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return self._env_or_config_str('NTFY_DASHBOARD_URL', self._config.get('NTFY_DASHBOARD_URL', ''))
 
     @property
     def ntfy_public_subscribe_url(self) -> str:
