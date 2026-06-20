@@ -18,10 +18,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Verify required CI workflows green on main
+      - name: Verify required CI workflows green on release commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/check-github-ci.sh "$(git rev-parse main)"
+        run: bash scripts/check-github-ci.sh "${{ github.sha }}"
 
       - name: Verify tag matches pyproject version
         run: |

@@ -18,10 +18,10 @@ REPO="${OWNER_REPO##*/}"
 echo "=== GitHub repo settings: $OWNER_REPO ==="
 
 echo "Enabling Dependabot alerts..."
-gh api -X PUT "repos/${OWNER}/${REPO}/vulnerability-alerts" >/dev/null 2>&1 || true
+gh api -X PUT "repos/${OWNER}/${REPO}/vulnerability-alerts" >/dev/null
 
 echo "Enabling Dependabot security updates..."
-gh api -X PUT "repos/${OWNER}/${REPO}/automated-security-fixes" >/dev/null 2>&1 || true
+gh api -X PUT "repos/${OWNER}/${REPO}/automated-security-fixes" >/dev/null
 
 echo "Enabling private vulnerability reporting..."
 if gh api -X POST "repos/${OWNER}/${REPO}/private-vulnerability-reporting" >/dev/null 2>&1; then
@@ -70,6 +70,7 @@ payload = {
         "strict": True,
         "checks": [
             {"context": "Verify", "app_id": 15368},
+            {"context": "Secret scan", "app_id": 15368},
             {"context": "Trivy FS Scan", "app_id": 15368},
             {"context": "Analyze (python)", "app_id": 15368},
         ],
