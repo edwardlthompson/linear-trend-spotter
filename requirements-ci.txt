@@ -15,7 +15,7 @@ attrs==26.1.0
     # via aiohttp
 blinker==1.9.0
     # via flask
-certifi==2026.5.20
+certifi==2026.6.17
     # via requests
 cffi==2.0.0 ; platform_python_implementation != 'PyPy'
     # via cryptography
@@ -40,7 +40,7 @@ cryptography==49.0.0
     #   pywebpush
 cycler==0.12.1
     # via matplotlib
-dateparser==1.4.0
+dateparser==1.4.1
     # via vectorbt
 decorator==5.3.1
     # via ipython
@@ -180,7 +180,7 @@ pygments==2.20.0
     #   pytest
 pyparsing==3.3.2
     # via matplotlib
-pytest==9.0.3
+pytest==9.1.1
     # via linear-trend-spotter
 python-dateutil==2.9.0.post0
     # via
@@ -204,7 +204,7 @@ requests==2.34.2
     #   linear-trend-spotter
     #   pywebpush
     #   vectorbt
-ruff==0.15.17
+ruff==0.15.18
     # via linear-trend-spotter
 schedule==1.2.2
     # via vectorbt
@@ -222,7 +222,7 @@ tabulate==0.10.0
     # via linear-trend-spotter
 threadpoolctl==3.6.0
     # via scikit-learn
-tqdm==4.68.2
+tqdm==4.68.3
     # via vectorbt
 traitlets==5.15.1
     # via
@@ -241,13 +241,13 @@ tzdata==2026.2 ; sys_platform == 'emscripten' or sys_platform == 'win32'
     # via
     #   pandas
     #   tzlocal
-tzlocal==5.3.1
+tzlocal==5.4.3
     # via dateparser
 urllib3==2.7.0
     # via
     #   requests
     #   types-requests
-vectorbt==0.28.2
+vectorbt==1.0.0
     # via linear-trend-spotter
 wcwidth==0.8.1
     # via
