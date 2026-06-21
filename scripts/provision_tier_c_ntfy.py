@@ -44,6 +44,14 @@ from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
 API_BASE = "https://api.render.com/v1"
 DEFAULT_WORKER = "linear-trend-spotter-worker"
 PROVISION_ARTIFACT = ".ntfy-provision.local.json"
+NTFY_ENV_KEYS = {
+    "NTFY_ENABLED",
+    "NTFY_BASE_URL",
+    "NTFY_TOPIC",
+    "NTFY_TOKEN",
+    "NTFY_PRIORITY",
+    "NTFY_DASHBOARD_URL",
+}
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -152,6 +160,11 @@ def put_env_vars(
         raise SystemExit(f"PUT env-vars failed {r.status_code}: {r.text[:2000]}")
 
 
+def masked_non_ntfy_keys(env_vars: list[dict[str, str]]) -> list[str]:
+    """Return masked/empty Render env keys this script cannot safely preserve via bulk PUT."""
+    return sorted(e["key"] for e in env_vars if e["value"] == "" and e["key"] not in NTFY_ENV_KEYS)
+
+
 def test_ntfy_publish(base_url: str, topic: str, publish_token: str) -> bool:
     url = build_ntfy_subscribe_url(base_url, topic)
     if not url:
@@ -213,7 +226,7 @@ def main() -> None:
     p.add_argument(
         "--i-understand-risk",
         action="store_true",
-        help="Allow PUT when Render API returns empty values for masked secrets.",
+        help="Deprecated no-op; masked non-NTFY secrets are never overwritten.",
     )
     args = p.parse_args()
 
@@ -247,12 +260,14 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
+    missing = masked_non_ntfy_keys(w_env)
+    if missing:
         print(
-            "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
+            "Aborting: Render returned masked/empty non-NTFY secret value(s):\n"
             f"  {missing}\n"
-            "Re-run with --i-understand-risk only if you accept possible loss of those vars.",
+            "The Render env-vars PUT endpoint replaces the full env list, so this script cannot "
+            "safely preserve those secrets. Update NTFY_* in the Render dashboard or rerun after "
+            "temporarily providing plaintext values for the listed keys.",
             file=sys.stderr,
         )
         sys.exit(2)

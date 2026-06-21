@@ -180,6 +180,89 @@ def run_scanner():
             app_logger=app_logger,
         )
 
+        def finalize_zero_qualified_scan(
+            warning: str,
+            *,
+            gain_symbols: set[str],
+            cg_symbols: set[str],
+        ) -> None:
+            """Finalize active exits and public state after a successful scan with no qualified coins."""
+            app_logger.warning(warning)
+            entered, exited, _blocked_by_cooldown = active_db.get_entered_exited(
+                [],
+                cooldown_hours=settings.alert_cooldown_hours,
+                target_exchanges=tuple(settings.target_exchanges),
+            )
+            attach_exit_reasons_and_register(
+                exited,
+                active_db=active_db,
+                settings=settings,
+                all_symbols_set=all_symbols_set,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=gain_symbols,
+                coins_with_cg_ids_symbols=cg_symbols,
+                all_processed_map={},
+                uniformity_passed_symbols=set(),
+            )
+            if settings.public_qualified_snapshot_enabled:
+                try:
+                    finished_at = datetime.now(timezone.utc)
+                    notify_public = build_notify_public_config(
+                        ntfy_enabled=settings.ntfy_enabled,
+                        ntfy_base_url=settings.ntfy_base_url,
+                        ntfy_topic=settings.ntfy_topic,
+                    )
+                    write_public_qualified_snapshot(
+                        settings.DATA_DIR,
+                        settings.public_qualified_snapshot_file,
+                        [],
+                        field_set=settings.public_qualified_snapshot_field_set,
+                        scan_interval_seconds=settings.scan_interval_seconds,
+                        scan_health={
+                            "scan_duration_s": round(
+                                max(0.0, (finished_at - scan_started_at).total_seconds()),
+                                2,
+                            ),
+                            "coins_evaluated": len(all_symbols),
+                            "errors_count": 0,
+                        },
+                        qualification_exits=exited,
+                        notify_public_config=notify_public,
+                    )
+                    app_logger.info("📤 Public qualified snapshot written")
+                    maybe_push_qualified_snapshot_relay(
+                        settings.DATA_DIR,
+                        settings.public_qualified_snapshot_file,
+                    )
+                except Exception as snap_err:
+                    app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+            if settings.scan_heartbeat_enabled:
+                try:
+                    write_scan_heartbeat(
+                        settings.DATA_DIR,
+                        filename=settings.scan_heartbeat_file,
+                        status="ok",
+                        started_at=scan_started_at,
+                        finished_at=datetime.now(timezone.utc),
+                        extra={
+                            "gain_qualified": len(gain_symbols),
+                            "final_results": 0,
+                            "entered": len(entered),
+                            "exited": len(exited),
+                        },
+                    )
+                    app_logger.info("💓 Scan heartbeat written")
+                except Exception as hb_err:
+                    app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
+            maybe_notify_web_push_qualified_changes(entered, exited)
+            maybe_notify_ntfy_qualified_changes(entered, exited)
+
         # ============================================================
         # STEP 3: Match with top-coin provider data and apply volume/gain filters
         # ============================================================
@@ -203,10 +286,15 @@ def run_scanner():
         gain_qualified_symbols = {c["symbol"] for c in gain_qualified}
 
         if not gain_qualified:
-            app_logger.warning("No coins passed gain filter")
+            finalize_zero_qualified_scan(
+                "No coins passed gain filter",
+                gain_symbols=gain_qualified_symbols,
+                cg_symbols=set(),
+            )
             tv_mapper.close()
             exchange_db.close()
             cg_mapper.close()
+            cache.close()
             return
 
         # ============================================================
@@ -230,10 +318,15 @@ def run_scanner():
         coins_with_cg_ids_symbols = {c["symbol"] for c in coins_with_cg_ids}
 
         if not coins_with_cg_ids:
-            app_logger.warning("No coins with CoinGecko IDs")
+            finalize_zero_qualified_scan(
+                "No coins with CoinGecko IDs",
+                gain_symbols=gain_qualified_symbols,
+                cg_symbols=coins_with_cg_ids_symbols,
+            )
             tv_mapper.close()
             exchange_db.close()
             cg_mapper.close()
+            cache.close()
             return
 
         no_ticker_count = hydrate_exchange_volumes_from_coingecko(
@@ -407,6 +500,7 @@ def run_scanner():
         entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
             final_results,
             cooldown_hours=settings.alert_cooldown_hours,
+            target_exchanges=tuple(settings.target_exchanges),
         )
         app_logger.info(
             f"   New entries: {len(entered)}, Exits: {len(exited)}, "

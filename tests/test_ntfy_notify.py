@@ -50,6 +50,32 @@ def test_ntfy_posts_when_enabled(monkeypatch) -> None:
         assert req.headers["Click"] == "https://example.com/dash"
 
 
+def test_ntfy_uses_environment_overrides(monkeypatch) -> None:
+    _cfg(
+        monkeypatch,
+        NTFY_ENABLED=False,
+        NTFY_BASE_URL="https://config.example",
+        NTFY_TOPIC="config-topic",
+        NTFY_TOKEN="config-token",
+        NTFY_DASHBOARD_URL="https://config.example/dash",
+    )
+    monkeypatch.setenv("NTFY_ENABLED", "true")
+    monkeypatch.setenv("NTFY_BASE_URL", "https://ntfy.example")
+    monkeypatch.setenv("NTFY_TOPIC", "env-topic")
+    monkeypatch.setenv("NTFY_TOKEN", "env-token")
+    monkeypatch.setenv("NTFY_DASHBOARD_URL", "https://env.example/dash")
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"ok"
+
+    with patch.object(ntfy_notify, "urlopen", return_value=mock_resp) as mock_open:
+        ntfy_notify.maybe_notify_ntfy_qualified_changes([{"symbol": "BTC"}], [])
+
+    req = mock_open.call_args[0][0]
+    assert req.full_url == "https://ntfy.example/env-topic"
+    assert req.headers["Authorization"] == "Bearer env-token"
+    assert req.headers["Click"] == "https://env.example/dash"
+
+
 def test_ntfy_no_op_without_entry_exit(monkeypatch) -> None:
     _cfg(monkeypatch, NTFY_ENABLED=True, NTFY_TOPIC="t")
     with patch.object(ntfy_notify, "urlopen") as mock_open:

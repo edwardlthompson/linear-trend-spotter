@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from scripts.provision_tier_c_ntfy import masked_non_ntfy_keys
 from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
 from utils.scan_artifacts import build_notify_public_config, build_public_qualified_snapshot
 
@@ -30,6 +31,16 @@ def test_merge_ntfy_vars_preserves_existing() -> None:
     assert by_key["NTFY_TOPIC"] == "topic1"
     assert by_key["NTFY_TOKEN"] == "tok1"
     assert by_key["NTFY_DASHBOARD_URL"] == "https://example.com/dash"
+
+
+def test_masked_non_ntfy_keys_blocks_secret_loss() -> None:
+    env = [
+        {"key": "CMC_API_KEY", "value": ""},
+        {"key": "NTFY_TOKEN", "value": ""},
+        {"key": "NTFY_TOPIC", "value": ""},
+    ]
+
+    assert masked_non_ntfy_keys(env) == ["CMC_API_KEY"]
 
 
 def test_public_snapshot_never_includes_publish_token() -> None:
