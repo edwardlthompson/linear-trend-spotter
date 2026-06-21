@@ -2,7 +2,53 @@
 
 from __future__ import annotations
 
+import sys
+from dataclasses import dataclass
+from types import ModuleType
 from types import SimpleNamespace
+
+
+def _install_main_import_stubs() -> None:
+    data_loader = ModuleType("backtesting.data_loader")
+
+    class BacktestDataLoader:  # noqa: N801 - matches production import name
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    data_loader.BacktestDataLoader = BacktestDataLoader
+
+    runner = ModuleType("backtesting.runner")
+    runner.run_backtests_for_final_results = lambda *args, **kwargs: {}
+
+    params = ModuleType("backtesting.params")
+
+    @dataclass(frozen=True)
+    class _RunnerParams:
+        backtest_resume_enabled: bool = False
+        backtest_max_coins_per_run: int = 0
+        backtest_max_param_combos: int = 0
+        backtest_trailing_stop_min: int = 0
+        backtest_trailing_stop_max: int = 0
+        backtest_trailing_stop_step: int = 0
+        backtest_checkpoint_file: str = ""
+        backtest_telemetry_file: str = ""
+
+    params.runner_params_from_settings = lambda *args, **kwargs: _RunnerParams()
+
+    report = ModuleType("backtesting.report")
+    report.notification_rows_for_symbol = lambda *args, **kwargs: {"top_strategies": [], "buy_hold": None}
+
+    signals = ModuleType("backtesting.signals")
+    signals.generate_indicator_signals = lambda *args, **kwargs: {}
+
+    sys.modules.setdefault("backtesting.data_loader", data_loader)
+    sys.modules.setdefault("backtesting.runner", runner)
+    sys.modules.setdefault("backtesting.params", params)
+    sys.modules.setdefault("backtesting.report", report)
+    sys.modules.setdefault("backtesting.signals", signals)
+
+
+_install_main_import_stubs()
 
 import main
 
