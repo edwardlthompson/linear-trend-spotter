@@ -14,6 +14,27 @@ load_dotenv()
 
 _logger = logging.getLogger(__name__)
 
+
+def _env_bool_override(key: str) -> bool | None:
+    raw = os.getenv(key)
+    if raw is None:
+        return None
+    normalized = raw.strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off'}:
+        return False
+    _logger.warning("Ignoring invalid boolean environment override %s=%r", key, raw)
+    return None
+
+
+def _env_str_override(key: str) -> str | None:
+    raw = os.getenv(key)
+    if raw is None:
+        return None
+    return raw.strip()
+
+
 class Settings:
     """Centralized settings management"""
     
@@ -944,27 +965,42 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
+        env_value = _env_bool_override('NTFY_ENABLED')
+        if env_value is not None:
+            return env_value
         return bool(self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
+        env_value = _env_str_override('NTFY_BASE_URL')
+        if env_value is not None:
+            return env_value or 'https://ntfy.sh'
         return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
 
     @property
     def ntfy_topic(self) -> str:
+        env_value = _env_str_override('NTFY_TOPIC')
+        if env_value is not None:
+            return env_value
         return str(self._config.get('NTFY_TOPIC', '')).strip()
 
     @property
     def ntfy_token(self) -> str:
+        env_value = _env_str_override('NTFY_TOKEN')
+        if env_value is not None:
+            return env_value
         return str(self._config.get('NTFY_TOKEN', '')).strip()
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = str(_env_str_override('NTFY_PRIORITY') or self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
+        env_value = _env_str_override('NTFY_DASHBOARD_URL')
+        if env_value is not None:
+            return env_value
         return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
 
     @property

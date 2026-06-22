@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
+from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars, unsafe_preserved_env_keys
 from utils.scan_artifacts import build_notify_public_config, build_public_qualified_snapshot
 
 
@@ -30,6 +30,17 @@ def test_merge_ntfy_vars_preserves_existing() -> None:
     assert by_key["NTFY_TOPIC"] == "topic1"
     assert by_key["NTFY_TOKEN"] == "tok1"
     assert by_key["NTFY_DASHBOARD_URL"] == "https://example.com/dash"
+
+
+def test_unsafe_preserved_env_keys_flags_masked_non_ntfy_secrets() -> None:
+    existing = [
+        {"key": "CMC_API_KEY", "value": "[REDACTED]"},
+        {"key": "POLYGON_API_KEY", "value": "********"},
+        {"key": "SAFE_PUBLIC_FLAG", "value": "true"},
+        {"key": "NTFY_TOKEN", "value": "[REDACTED]"},
+    ]
+
+    assert unsafe_preserved_env_keys(existing) == ["CMC_API_KEY", "POLYGON_API_KEY"]
 
 
 def test_public_snapshot_never_includes_publish_token() -> None:

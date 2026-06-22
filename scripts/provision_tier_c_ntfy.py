@@ -39,7 +39,7 @@ except ImportError:
     print("Install requests: pip install requests", file=sys.stderr)
     sys.exit(1)
 
-from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
+from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars, unsafe_preserved_env_keys
 
 API_BASE = "https://api.render.com/v1"
 DEFAULT_WORKER = "linear-trend-spotter-worker"
@@ -247,12 +247,13 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
+    unsafe_existing = unsafe_preserved_env_keys(w_env)
+    if unsafe_existing and not args.i_understand_risk:
         print(
-            "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
-            f"  {missing}\n"
-            "Re-run with --i-understand-risk only if you accept possible loss of those vars.",
+            "Aborting: API returned empty or masked value(s) for existing non-NTFY keys:\n"
+            f"  {unsafe_existing}\n"
+            "Render's env PUT replaces every variable; re-run with --i-understand-risk only "
+            "if you accept possible loss of those vars.",
             file=sys.stderr,
         )
         sys.exit(2)
