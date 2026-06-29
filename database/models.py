@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import quote
 
-from config.constants import DEFAULT_TARGET_EXCHANGES
+from config.settings import settings
 
 
 def _build_source_url(coin: Dict[str, Any]) -> str:
@@ -45,11 +45,11 @@ class Database:
         self.db_path = db_path
         self._local = threading.local()
         self._init_db()
-    
+
     def _init_db(self):
         """Initialize database - to be overridden"""
         raise NotImplementedError
-    
+
     def get_connection(self):
         """Get a database connection (thread-local). Enables WAL for write-heavy paths."""
         if not hasattr(self._local, 'conn'):
@@ -59,13 +59,13 @@ class Database:
             except sqlite3.Error:
                 pass
         return self._local.conn
-    
+
     def close(self):
         """Close database connection"""
         if hasattr(self._local, 'conn'):
             self._local.conn.close()
             del self._local.conn
-    
+
     def execute(self, query: str, params: tuple = ()):
         """Execute one SQL statement and commit. See class docstring for transaction semantics."""
         with self.get_connection() as conn:
@@ -76,11 +76,11 @@ class Database:
 
 class HistoryDatabase(Database):
     """History database for scan results"""
-    
+
     def _init_db(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Create scan_history table per spec §8.1
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS scan_history (
@@ -97,21 +97,21 @@ class HistoryDatabase(Database):
                     cmc_url         TEXT
                 )
             ''')
-            
+
             # Create indexes per spec §8.1
             cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_scan_history_date 
+                CREATE INDEX IF NOT EXISTS idx_scan_history_date
                 ON scan_history(scan_date)
             ''')
             cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_scan_history_symbol 
+                CREATE INDEX IF NOT EXISTS idx_scan_history_symbol
                 ON scan_history(coin_symbol)
             ''')
-            
+
             # Migrate existing data if needed: rename norm_slope to uniformity_score
             cursor.execute("PRAGMA table_info(scan_history)")
             columns = {row[1] for row in cursor.fetchall()}
-            
+
             if 'norm_slope' in columns and 'uniformity_score' not in columns:
                 # Create temporary table with new schema
                 cursor.execute('''
@@ -129,7 +129,7 @@ class HistoryDatabase(Database):
                         cmc_url         TEXT
                     )
                 ''')
-                
+
                 # Copy data
                 cursor.execute('''
                     INSERT INTO scan_history_new
@@ -139,23 +139,23 @@ class HistoryDatabase(Database):
                            coinbase_volume, kraken_volume, mexc_volume, cmc_url
                     FROM scan_history
                 ''')
-                
+
                 # Drop old and rename
                 cursor.execute('DROP TABLE scan_history')
                 cursor.execute('ALTER TABLE scan_history_new RENAME TO scan_history')
-                
+
                 # Recreate indexes
                 cursor.execute('''
-                    CREATE INDEX IF NOT EXISTS idx_scan_history_date 
+                    CREATE INDEX IF NOT EXISTS idx_scan_history_date
                     ON scan_history(scan_date)
                 ''')
                 cursor.execute('''
-                    CREATE INDEX IF NOT EXISTS idx_scan_history_symbol 
+                    CREATE INDEX IF NOT EXISTS idx_scan_history_symbol
                     ON scan_history(coin_symbol)
                 ''')
-            
+
             conn.commit()
-    
+
     def save_scan(self, coins: List[Dict[str, Any]]):
         """Save scan results (single transaction, batched inserts)."""
         if not coins:
@@ -214,11 +214,11 @@ class HistoryDatabase(Database):
 
 class ActiveCoinsDatabase(Database):
     """Active coins tracking database"""
-    
+
     def _init_db(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            
+
             # Create active_coins table per spec §8.1
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS active_coins (
@@ -252,12 +252,12 @@ class ActiveCoinsDatabase(Database):
                     exit_reason         TEXT
                 )
             ''')
-            
+
             # Migrate existing data if needed: rename norm_slope to uniformity_score
             # Check if old schema exists
             cursor.execute("PRAGMA table_info(active_coins)")
             columns = {row[1] for row in cursor.fetchall()}
-            
+
             if 'norm_slope' in columns and 'uniformity_score' not in columns:
                 # Need to migrate - create new table, copy data, drop old
                 cursor.execute('''
@@ -278,7 +278,7 @@ class ActiveCoinsDatabase(Database):
                         cmc_url         TEXT
                     )
                 ''')
-                
+
                 # Copy data from old table
                 cursor.execute('''
                     INSERT OR IGNORE INTO active_coins_new
@@ -290,7 +290,7 @@ class ActiveCoinsDatabase(Database):
                            slug, cmc_url
                     FROM active_coins
                 ''')
-                
+
                 # Drop old and rename new
                 cursor.execute('DROP TABLE active_coins')
                 cursor.execute('ALTER TABLE active_coins_new RENAME TO active_coins')
@@ -307,9 +307,9 @@ class ActiveCoinsDatabase(Database):
                 cursor.execute('ALTER TABLE active_coins ADD COLUMN last_price REAL')
             if 'lifecycle_updated_at' not in active_columns:
                 cursor.execute('ALTER TABLE active_coins ADD COLUMN lifecycle_updated_at TEXT')
-            
+
             conn.commit()
-    
+
     def get_active(self) -> Dict[str, Dict]:
         """Get all active coins - keyed by symbol only per spec §8.1"""
         cursor = self.execute('SELECT * FROM active_coins')
@@ -339,28 +339,28 @@ class ActiveCoinsDatabase(Database):
                 'lifecycle_updated_at': row[18] if len(row) > 18 else None,
             }
         return active
-    
+
     def add_coin(self, coin: Dict[str, Any]):
         """Add a new active coin"""
         now = datetime.now().isoformat()
         today = datetime.now().strftime('%Y-%m-%d')
-        
+
         gecko_id = coin.get('gecko_id') or coin.get('cg_id')
         current_price = float(coin.get('current_price', 0) or 0)
         lifecycle_price = current_price if current_price > 0 else None
-        
+
         self.execute('''
-            INSERT OR REPLACE INTO active_coins 
+            INSERT OR REPLACE INTO active_coins
             (coin_symbol, coin_name, gecko_id, entered_date, last_seen_date, last_scan_date,
              gain_7d, gain_30d, uniformity_score, coinbase_volume, kraken_volume, mexc_volume, slug, cmc_url,
              entry_price, peak_price, trough_price, last_price, lifecycle_updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            coin['symbol'], 
-            coin['name'], 
+            coin['symbol'],
+            coin['name'],
             gecko_id,
-            today, 
-            today, 
+            today,
+            today,
             now,
             coin['gains'].get('7d', 0),
             coin['gains'].get('30d', 0),
@@ -376,20 +376,20 @@ class ActiveCoinsDatabase(Database):
             lifecycle_price,
             now,
         ))
-    
+
     def remove_coin(self, symbol: str):
         """Remove a coin from active list - by symbol only per spec §8.1"""
         self.execute('DELETE FROM active_coins WHERE coin_symbol = ?', (symbol,))
-    
+
     def update_coin(self, coin: Dict[str, Any]):
         """Update an existing active coin"""
         now = datetime.now().isoformat()
-        
+
         gecko_id = coin.get('gecko_id') or coin.get('cg_id')
         current_price = float(coin.get('current_price', 0) or 0)
-        
+
         self.execute('''
-            UPDATE active_coins 
+            UPDATE active_coins
             SET last_seen_date = ?, last_scan_date = ?,
                 gecko_id = ?,
                 gain_7d = ?, gain_30d = ?, uniformity_score = ?,
@@ -473,7 +473,7 @@ class ActiveCoinsDatabase(Database):
             return datetime.fromisoformat(str(row[0]))
         except Exception:
             return None
-    
+
     @staticmethod
     def _listed_on_from_volume_fields(coin_info: Dict[str, Any]) -> List[str]:
         """Infer target-exchange listings from persisted per-venue volume strings (exit rows)."""
@@ -483,7 +483,7 @@ class ActiveCoinsDatabase(Database):
             ('kraken', 'kraken_volume'),
             ('mexc', 'mexc_volume'),
         ):
-            if ex not in DEFAULT_TARGET_EXCHANGES:
+            if ex not in settings.target_exchanges:
                 continue
             v = coin_info.get(key)
             if v is None:
@@ -501,11 +501,11 @@ class ActiveCoinsDatabase(Database):
         """
         active = self.get_active()
         now = datetime.now()
-        
+
         # Create set of current coin symbols (not name_symbol pairs)
         current_symbols = {c['symbol'] for c in current_coins}
         current_dict = {c['symbol']: c for c in current_coins}
-        
+
         # Find entered (in current but not in active)
         entered = []
         blocked_by_cooldown = []
@@ -520,7 +520,7 @@ class ActiveCoinsDatabase(Database):
             coin = current_dict[symbol]
             entered.append(coin)
             self.add_coin(coin)
-        
+
         # Find exited (in active but not in current)
         exited = []
         for symbol in set(active.keys()) - current_symbols:
@@ -565,9 +565,9 @@ class ActiveCoinsDatabase(Database):
             })
             self.remove_coin(symbol)
             self.register_exit(symbol, reason='No longer qualified', cooldown_hours=cooldown_hours)
-        
+
         # Update remaining active coins
         for symbol in current_symbols & set(active.keys()):
             self.update_coin(current_dict[symbol])
-        
+
         return entered, exited, blocked_by_cooldown

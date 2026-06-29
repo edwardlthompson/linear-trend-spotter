@@ -14,9 +14,30 @@ load_dotenv()
 
 _logger = logging.getLogger(__name__)
 
+
+def _env_str(name: str) -> str | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    return raw.strip()
+
+
+def _env_bool(name: str) -> bool | None:
+    raw = _env_str(name)
+    if raw is None or raw == '':
+        return None
+    lowered = raw.lower()
+    if lowered in {'1', 'true', 'yes', 'on'}:
+        return True
+    if lowered in {'0', 'false', 'no', 'off'}:
+        return False
+    _logger.warning("Ignoring invalid boolean env var %s=%r", name, raw)
+    return None
+
+
 class Settings:
     """Centralized settings management"""
-    
+
     def __init__(self, config_path: Optional[str] = None):
         self.CODE_DIR = Path(__file__).parent.parent
         data_dir_raw = os.getenv('DATA_DIR', '').strip()
@@ -24,10 +45,10 @@ class Settings:
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.BASE_DIR = self.CODE_DIR
         self.config_path = Path(config_path) if config_path else self.CODE_DIR / 'config.json'
-        
+
         # Initialize with defaults
         self._config = self._get_default_config()
-        
+
         # Try to load config file (for non-sensitive settings only)
         try:
             loaded_config = self._load_config()
@@ -40,7 +61,7 @@ class Settings:
 
         # Fail-fast safety validation and normalization
         self._config = self._validate_and_normalize(self._config)
-    
+
     def _get_default_config(self) -> Dict[str, Any]:
         """Get default configuration values per spec §9.3"""
         return {
@@ -445,7 +466,7 @@ class Settings:
             raise ValueError(f"Invalid configuration in {self.config_path}:\n- {joined}")
 
         return normalized
-    
+
     def _load_config(self) -> Dict[str, Any]:
         """Load non-sensitive settings from config.json.
 
@@ -458,12 +479,12 @@ class Settings:
                 return json.load(f)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in config file {self.config_path}: {e}") from e
-    
+
     @property
     def cmc_api_key(self) -> str:
         """CoinMarketCap API key from environment"""
         return os.getenv('CMC_API_KEY', '')
-    
+
     @property
     def min_volume(self) -> int:
         """Minimum 24h volume in USD"""
@@ -483,19 +504,19 @@ class Settings:
     def chart_img_api_key(self) -> str:
         """Chart-IMG API key from environment"""
         return os.getenv('CHART_IMG_API_KEY', '')
-    
+
     @property
     def target_exchanges(self) -> list:
         return self._config.get('TARGET_EXCHANGES', list(DEFAULT_TARGET_EXCHANGES))
-    
+
     @property
     def uniformity_min_score(self) -> int:
         return self._config.get('UNIFORMITY_MIN_SCORE', 55)
-    
+
     @property
     def uniformity_period(self) -> int:
         return self._config.get('UNIFORMITY_PERIOD', 30)
-    
+
     @property
     def top_coins_limit(self) -> int:
         return self._config.get('TOP_COINS_LIMIT', 4000)
@@ -503,11 +524,11 @@ class Settings:
     @property
     def top_coins_provider(self) -> str:
         return str(self._config.get('TOP_COINS_PROVIDER', 'cmc')).strip().lower()
-    
+
     @property
     def entry_notifications(self) -> bool:
         return self._config.get('ENTRY_NOTIFICATIONS', True)
-    
+
     @property
     def exit_notifications(self) -> bool:
         return self._config.get('EXIT_NOTIFICATIONS', True)
@@ -565,11 +586,11 @@ class Settings:
     @property
     def alert_backtest_report_top_n(self) -> int:
         return int(self._config.get('ALERT_BACKTEST_REPORT_TOP_N', 10))
-    
+
     @property
     def coingecko_calls_per_minute(self) -> int:
         return self._config.get('COINGECKO_CALLS_PER_MINUTE', 30)
-    
+
     @property
     def cmc_calls_per_minute(self) -> int:
         return self._config.get('CMC_CALLS_PER_MINUTE', 333)
@@ -587,15 +608,15 @@ class Settings:
     def coingecko_id_aliases(self) -> Dict[str, str]:
         value = self._config.get('COINGECKO_ID_ALIASES', {})
         return value if isinstance(value, dict) else {}
-    
+
     @property
     def cache_gecko_id_days(self) -> int:
         return self._config.get('CACHE_GECKO_ID_DAYS', 30)
-    
+
     @property
     def cache_exchange_hours(self) -> int:
         return self._config.get('CACHE_EXCHANGE_HOURS', 24)
-    
+
     @property
     def cache_price_hours(self) -> int:
         return self._config.get('CACHE_PRICE_HOURS', 12)
@@ -609,11 +630,11 @@ class Settings:
         if len(parts) == 3 and set(parts) == allowed:
             return parts
         return ("coingecko", "polygon", "cmc")
-    
+
     @property
     def circuit_failure_threshold(self) -> int:
         return self._config.get('CIRCUIT_FAILURE_THRESHOLD', 5)
-    
+
     @property
     def circuit_recovery_timeout(self) -> int:
         return self._config.get('CIRCUIT_RECOVERY_TIMEOUT', 60)
@@ -944,27 +965,42 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
+        env_value = _env_bool('NTFY_ENABLED')
+        if env_value is not None:
+            return env_value
         return bool(self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
+        env_value = _env_str('NTFY_BASE_URL')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
 
     @property
     def ntfy_topic(self) -> str:
+        env_value = _env_str('NTFY_TOPIC')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_TOPIC', '')).strip()
 
     @property
     def ntfy_token(self) -> str:
+        env_value = _env_str('NTFY_TOKEN')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_TOKEN', '')).strip()
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = (_env_str('NTFY_PRIORITY') or str(self._config.get('NTFY_PRIORITY', 'default'))).strip().lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
+        env_value = _env_str('NTFY_DASHBOARD_URL')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
 
     @property
@@ -981,7 +1017,7 @@ class Settings:
     @property
     def base_dir(self) -> Path:
         return self.DATA_DIR
-    
+
     @property
     def db_paths(self) -> Dict[str, Path]:
         return {
@@ -990,19 +1026,19 @@ class Settings:
             'mappings': self.DATA_DIR / 'mappings.db',
             'tv_mappings': self.DATA_DIR / 'tv_mappings.db'
         }
-    
+
     @property
     def lock_file(self) -> Path:
         return self.DATA_DIR / 'scan.lock'
-    
+
     @property
     def metrics_file(self) -> Path:
         return self.DATA_DIR / 'metrics.json'
-    
+
     @property
     def log_file(self) -> Path:
         return self.DATA_DIR / 'trend_scanner.log'
-    
+
     @property
     def retry_settings(self) -> dict:
         return {

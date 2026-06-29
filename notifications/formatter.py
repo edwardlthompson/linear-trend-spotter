@@ -6,7 +6,7 @@ import html
 from typing import Dict, List, Tuple
 from urllib.parse import quote
 
-from config.constants import DEFAULT_TARGET_EXCHANGES, EXCHANGE_EMOJIS
+from config.constants import EXCHANGE_EMOJIS
 from config.settings import settings
 
 
@@ -208,7 +208,7 @@ class MessageFormatter:
         gain_7d = coin['gains'].get('7d', 0)
         gain_30d = coin['gains'].get('30d', 0)
         score = coin.get('uniformity_score', 0)
-        
+
         sym_t = MessageFormatter._tg_html_text(symbol)
         name_t = MessageFormatter._tg_html_text(name)
         # Header with HTML link (CMC-first; see primary_market_url)
@@ -217,12 +217,12 @@ class MessageFormatter:
             caption = f"🟢 <a href='{href}'>{sym_t} ({name_t})</a>\n\n"
         else:
             caption = f"🟢 {sym_t} ({name_t})\n\n"
-        
+
         # Gains section
         caption += "📊 Gains:\n"
         caption += f"   7d: +{gain_7d:.1f}%\n"
         caption += f"   30d: +{gain_30d:.1f}%\n\n"
-        
+
         # Uniformity score
         caption += f"📈 Uniformity Score: {score:.0f}/100\n"
 
@@ -269,17 +269,17 @@ class MessageFormatter:
             caption += f"💵 Total 24h Volume (Provider): ${total_volume_24h:,.0f}\n\n"
         else:
             caption += "💵 Total 24h Volume (Provider): No volume\n\n"
-        
+
         # Exchange volumes
         caption += "💰 Exchange Volumes:\n"
-        
+
         volumes = coin.get('exchange_volumes', {})
-        listed_on = coin.get('listed_on', list(DEFAULT_TARGET_EXCHANGES))
-        
+        listed_on = coin.get('listed_on', list(settings.target_exchanges))
+
         for exchange in listed_on:
             volume = volumes.get(exchange, "N/A")
             exchange_emoji = EXCHANGE_EMOJIS.get(exchange, "💱")
-            
+
             # Show "No volume" instead of $0 or N/A per spec §10.1
             if volume == "N/A" or volume == 0 or volume == "0":
                 caption += f"{exchange_emoji} {exchange.title()}: No volume\n"
@@ -290,9 +290,9 @@ class MessageFormatter:
                     f"{exchange_emoji} {exchange.title()}: "
                     f"{MessageFormatter._tg_html_text(volume)}\n"
                 )
-        
+
         return caption
-    
+
     @staticmethod
     def format_exit(coin: Dict) -> str:
         """
@@ -332,7 +332,7 @@ class MessageFormatter:
 
         if lifecycle_parts:
             message += "\nLifecycle: " + " | ".join(lifecycle_parts)
-        
+
         return message
 
     @staticmethod
