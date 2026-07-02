@@ -3786,7 +3786,8 @@
     );
   }
 
-  function render(data) {
+  function render(data, options) {
+    const suppressAlertState = options && options.suppressAlertState === true;
     clearError();
     lastPayload = data;
     applySnapshotNotifyPublicConfig(data);
@@ -3841,13 +3842,23 @@
     const currSet = new Set(
       coins.map((c) => String(c.symbol || "").toUpperCase()).filter(Boolean),
     );
-    lastPinWatchDelta = reconcilePinnedQualifiedState(currSet);
-    pinEnterFlashSet = new Set(lastPinWatchDelta.entered);
-    updateWatchLeaveBanner(lastPinWatchDelta.left);
+    if (suppressAlertState) {
+      lastPinWatchDelta = { entered: [], left: [] };
+      pinEnterFlashSet = new Set();
+      updateWatchLeaveBanner([]);
+    } else {
+      lastPinWatchDelta = reconcilePinnedQualifiedState(currSet);
+      pinEnterFlashSet = new Set(lastPinWatchDelta.entered);
+      updateWatchLeaveBanner(lastPinWatchDelta.left);
+    }
     const added =
-      prevSyms.size === 0 ? [] : [...currSet].filter((s) => !prevSyms.has(s)).sort();
+      suppressAlertState || prevSyms.size === 0
+        ? []
+        : [...currSet].filter((s) => !prevSyms.has(s)).sort();
     const dropped =
-      prevSyms.size === 0 ? [] : [...prevSyms].filter((s) => !currSet.has(s)).sort();
+      suppressAlertState || prevSyms.size === 0
+        ? []
+        : [...prevSyms].filter((s) => !currSet.has(s)).sort();
     lastAddedSet = new Set(added);
 
     const curSchema = String(data.schema_version ?? "");
@@ -3862,43 +3873,15 @@
 
     updateCoinListDiffBanner(added, dropped);
     const exitReasonBySym = qualificationExitReasonMap(data);
-    const listNotifyDelta = appendQualifiedListNotifications(
-      added,
-      dropped,
-      prevSyms.size === 0,
-      exitReasonBySym,
-    );
-    renderCoinAlertsList();
-    if (
-      notifyAlertsEnabled &&
-      tierANotifyScope() === "qualified" &&
-      (listNotifyDelta.enters.length || listNotifyDelta.exits.length)
-    ) {
-      const stamp = String(updatedRaw || "snap").replace(/[^a-z0-9]+/gi, "").slice(0, 24);
-      void (async () => {
-        for (const sym of listNotifyDelta.enters) {
-          await showDashboardNotification({
-            title: `Entered: ${sym}`,
-            body: `${sym} entered the qualified list.`,
-            tag: `qfeed-ent-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
-            symbol: sym,
-          });
-        }
-        for (const sym of listNotifyDelta.exits) {
-          const why = exitReasonBySym.get(sym) || "";
-          let body = why
-            ? `${sym} left the qualified list. ${why}`
-            : `${sym} left the qualified list.`;
-          if (body.length > 240) body = `${body.slice(0, 236)}…`;
-          await showDashboardNotification({
-            title: `Left: ${sym}`,
-            body,
-            tag: `qfeed-out-${sym}-${stamp}-${Date.now()}`.slice(0, 64),
-            symbol: sym,
-          });
-        }
-      })();
+    if (!suppressAlertState) {
+      appendQualifiedListNotifications(
+        added,
+        dropped,
+        prevSyms.size === 0,
+        exitReasonBySym,
+      );
     }
+    renderCoinAlertsList();
     updateStaleBanner(data);
     updateSnapshotValidationBanner(data);
     updateHealthStrip(data);
@@ -3911,7 +3894,9 @@
 
     applyTableView();
     updateWatchlistBadge();
-    writeSnapshotVisitState(data);
+    if (!suppressAlertState) {
+      writeSnapshotVisitState(data);
+    }
     window.requestAnimationFrame(() => {
       refreshDashboardShellWidth();
     });
@@ -4206,8 +4191,11 @@
         snapshotMetaSuffix = "";
         snapshotLoadWasCommittedFallback = false;
       }
-      render(data);
+      render(data, { suppressAlertState: usedRelay503Fallback });
       const snapDigest = await digestHex(text);
+      if (usedRelay503Fallback) {
+        return;
+      }
       if (forNotify && notifyAlertsEnabled) {
         const scope = tierANotifyScope();
         if (scope === "qualified") {
