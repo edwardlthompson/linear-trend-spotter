@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from scripts import provision_tier_c_ntfy as provision
 from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
 from utils.scan_artifacts import build_notify_public_config, build_public_qualified_snapshot
 
@@ -30,6 +31,32 @@ def test_merge_ntfy_vars_preserves_existing() -> None:
     assert by_key["NTFY_TOPIC"] == "topic1"
     assert by_key["NTFY_TOKEN"] == "tok1"
     assert by_key["NTFY_DASHBOARD_URL"] == "https://example.com/dash"
+
+
+def test_fetch_env_vars_parses_nested_render_rows() -> None:
+    class Resp:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "envVars": [
+                    {"envVar": {"key": "CMC_API_KEY", "value": "secret"}, "cursor": "row-cursor"},
+                    {"envVar": {"key": "EMPTY_MASKED", "value": None}},
+                    {"key": "PLAIN_KEY", "value": "plain"},
+                ]
+            }
+
+    class Session:
+        def get(self, *args: object, **kwargs: object) -> Resp:
+            return Resp()
+
+    rows = provision.fetch_env_vars(Session(), "render-token", "srv-id")
+    assert rows == [
+        {"key": "CMC_API_KEY", "value": "secret"},
+        {"key": "EMPTY_MASKED", "value": ""},
+        {"key": "PLAIN_KEY", "value": "plain"},
+    ]
 
 
 def test_public_snapshot_never_includes_publish_token() -> None:
