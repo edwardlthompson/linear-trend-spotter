@@ -44,6 +44,13 @@ from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
 API_BASE = "https://api.render.com/v1"
 DEFAULT_WORKER = "linear-trend-spotter-worker"
 PROVISION_ARTIFACT = ".ntfy-provision.local.json"
+NTFY_ENV_KEYS = {
+    "NTFY_ENABLED",
+    "NTFY_BASE_URL",
+    "NTFY_TOPIC",
+    "NTFY_TOKEN",
+    "NTFY_DASHBOARD_URL",
+}
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -131,12 +138,18 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
     for row in raw:
         if not isinstance(row, dict):
             continue
+        if isinstance(row.get("envVar"), dict):
+            row = row["envVar"]
         k = row.get("key")
         if not k:
             continue
         val = row.get("value")
         out.append({"key": str(k), "value": "" if val is None else str(val)})
     return out
+
+
+def _ntfy_env_updates(env_vars: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [e for e in env_vars if e.get("key") in NTFY_ENV_KEYS]
 
 
 def put_env_vars(
@@ -150,6 +163,22 @@ def put_env_vars(
     )
     if not r.ok:
         raise SystemExit(f"PUT env-vars failed {r.status_code}: {r.text[:2000]}")
+
+
+def put_ntfy_env_vars(
+    session: requests.Session, token: str, service_id: str, env_vars: list[dict[str, str]]
+) -> None:
+    """Write only NTFY_* keys so masked Render secrets are never bulk-replaced."""
+    for item in _ntfy_env_updates(env_vars):
+        key = item["key"]
+        r = session.put(
+            f"{API_BASE}/services/{service_id}/env-vars/{key}",
+            headers=_headers(token),
+            data=json.dumps({"value": item.get("value", "")}),
+            timeout=120,
+        )
+        if not r.ok:
+            raise SystemExit(f"PUT env-var {key} failed {r.status_code}: {r.text[:2000]}")
 
 
 def test_ntfy_publish(base_url: str, topic: str, publish_token: str) -> bool:
@@ -213,7 +242,7 @@ def main() -> None:
     p.add_argument(
         "--i-understand-risk",
         action="store_true",
-        help="Allow PUT when Render API returns empty values for masked secrets.",
+        help="Deprecated; NTFY provisioning now writes only NTFY_* keys.",
     )
     args = p.parse_args()
 
@@ -247,15 +276,14 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
+    missing = [e["key"] for e in w_env if e["value"] == "" and e["key"] not in NTFY_ENV_KEYS]
+    if missing:
         print(
-            "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
+            "WARN: API returned empty value(s) for non-NTFY keys (often masked secrets); "
+            "they will not be modified:\n"
             f"  {missing}\n"
-            "Re-run with --i-understand-risk only if you accept possible loss of those vars.",
             file=sys.stderr,
         )
-        sys.exit(2)
 
     merged = merge_ntfy_vars(
         w_env,
@@ -279,7 +307,7 @@ def main() -> None:
         print("\nDry run: no PUT. Pass --apply to write to Render.")
         return
 
-    put_env_vars(session, render_token, worker_id, merged)
+    put_ntfy_env_vars(session, render_token, worker_id, merged)
     artifact_path = Path(args.artifact)
     write_provision_artifact(
         artifact_path,
