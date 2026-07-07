@@ -300,6 +300,8 @@
   let snapshotMetaSuffix = "";
   /** True when the last successful snapshot fetch used the committed-repo fallback (relay 503). */
   let snapshotLoadWasCommittedFallback = false;
+  /** Suppress render()'s OS notifications during background Tier-A polling; poll diff emits those. */
+  let suppressRenderQualifiedOsNotifications = false;
   /** @type {Set<string>} */
   let lastAddedSet = new Set();
   let sortKey = "health";
@@ -3871,6 +3873,7 @@
     renderCoinAlertsList();
     if (
       notifyAlertsEnabled &&
+      !suppressRenderQualifiedOsNotifications &&
       tierANotifyScope() === "qualified" &&
       (listNotifyDelta.enters.length || listNotifyDelta.exits.length)
     ) {
@@ -4206,7 +4209,16 @@
         snapshotMetaSuffix = "";
         snapshotLoadWasCommittedFallback = false;
       }
-      render(data);
+      if (forNotify && usedRelay503Fallback) {
+        return;
+      }
+      const previousSuppressRenderNotifications = suppressRenderQualifiedOsNotifications;
+      suppressRenderQualifiedOsNotifications = Boolean(forNotify);
+      try {
+        render(data);
+      } finally {
+        suppressRenderQualifiedOsNotifications = previousSuppressRenderNotifications;
+      }
       const snapDigest = await digestHex(text);
       if (forNotify && notifyAlertsEnabled) {
         const scope = tierANotifyScope();

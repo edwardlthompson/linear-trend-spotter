@@ -13,18 +13,11 @@ const ASSETS = [
   "./index.html",
   "./app.js",
   "./styles.css",
-  "./dashboard-social-preview.png",
   "./manifest.webmanifest",
-  "./icons/icon-32.png",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
   "./icons/app-icon.svg",
   "./icons/exchanges/coinbase.svg",
   "./icons/exchanges/kraken.svg",
   "./icons/exchanges/mexc.svg",
-  "./icons/exchanges/coinbase.png",
-  "./icons/exchanges/kraken.png",
-  "./icons/exchanges/mexc.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -77,8 +70,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: "./icons/icon-192.png",
-      badge: "./icons/icon-192.png",
+      icon: "./icons/app-icon.svg",
+      badge: "./icons/app-icon.svg",
       tag: notifTag,
       data: { url: openUrl },
     }),
