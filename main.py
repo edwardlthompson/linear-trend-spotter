@@ -5,6 +5,7 @@ import sys
 import json
 from dataclasses import replace
 from datetime import datetime, timezone
+from typing import Any
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -67,6 +68,144 @@ from scanner.exit_pipeline import attach_exit_reasons_and_register
 
 # Import exchange database
 from exchange_data.exchange_fetcher import ExchangeFetcher
+
+
+def _publish_public_snapshot(
+    final_results: list[dict[str, Any]],
+    *,
+    scan_started_at: datetime,
+    all_symbols: list[str],
+    regime_meta: dict[str, Any] | None,
+    exited: list[dict[str, Any]],
+) -> None:
+    if not settings.public_qualified_snapshot_enabled:
+        return
+    try:
+        if final_results and str(settings.public_qualified_snapshot_field_set).strip().lower() != "minimal":
+            attach_hourly_sparkline_closes_for_snapshot(
+                final_results,
+                settings.db_paths["scanner"],
+                max_bars=SPARKLINE_HOURLY_MAX_BARS,
+                logger=app_logger,
+            )
+        finished_at = datetime.now(timezone.utc)
+        wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
+        err_map = metrics.get_summary().get("errors") or {}
+        err_total = 0
+        for v in err_map.values():
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            err_total += int(v)
+        # Always embed HTTP usage counts from this scan (metrics H0/J3) so the dashboard
+        # can show per-vendor bars; SCAN_COSTS_ENABLED only gates the separate scan_costs.json artifact.
+        vendor_quotas = {}
+        try:
+            vendor_quotas = fetch_vendor_quotas(
+                coingecko_key=os.getenv("COINGECKO_API_KEY", "").strip(),
+                cmc_key=settings.cmc_api_key.strip(),
+                timeout=12.0,
+                logger=app_logger,
+            )
+        except Exception as vq_err:
+            app_logger.warning("Vendor API quota fetch failed (snapshot still written): %s", vq_err)
+        api_cost_panel = build_api_cost_panel_for_snapshot(
+            metrics.get_summary(),
+            coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
+            polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
+            cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
+            vendor_quotas=vendor_quotas or None,
+        )
+        notify_public = build_notify_public_config(
+            ntfy_enabled=settings.ntfy_enabled,
+            ntfy_base_url=settings.ntfy_base_url,
+            ntfy_topic=settings.ntfy_topic,
+        )
+        write_public_qualified_snapshot(
+            settings.DATA_DIR,
+            settings.public_qualified_snapshot_file,
+            final_results,
+            field_set=settings.public_qualified_snapshot_field_set,
+            scan_interval_seconds=settings.scan_interval_seconds,
+            scan_health={
+                "scan_duration_s": round(wall_s, 2),
+                "coins_evaluated": len(all_symbols),
+                "errors_count": int(err_total),
+            },
+            regime_gate=regime_meta,
+            api_cost_panel=api_cost_panel,
+            qualification_exits=exited,
+            notify_public_config=notify_public,
+        )
+        app_logger.info("📤 Public qualified snapshot written")
+        maybe_push_qualified_snapshot_relay(
+            settings.DATA_DIR,
+            settings.public_qualified_snapshot_file,
+        )
+    except Exception as snap_err:
+        app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+
+
+def _finalize_zero_qualified_scan(
+    *,
+    active_db: Any,
+    tv_mapper: Any,
+    exchange_db: Any,
+    cg_mapper: Any,
+    cache: Any,
+    scan_started_at: datetime,
+    all_symbols: list[str],
+    all_symbols_set: set[str],
+    top_coins_provider: str,
+    cmc_by_symbol: dict[str, Any],
+    cmc_by_normalized_symbol: Any,
+    cmc_symbol_aliases: dict[str, str],
+    coingecko_id_aliases: dict[str, str],
+    gecko: Any,
+    alias_markets_by_id: dict[str, dict[str, Any]],
+    gain_qualified_symbols: set[str],
+    coins_with_cg_ids_symbols: set[str],
+) -> None:
+    entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
+        [],
+        cooldown_hours=settings.alert_cooldown_hours,
+    )
+    app_logger.info(
+        "   Zero-qualified finalization: New entries: %s, Exits: %s, Blocked by cooldown: %s",
+        len(entered),
+        len(exited),
+        len(blocked_by_cooldown),
+    )
+    attach_exit_reasons_and_register(
+        exited,
+        active_db=active_db,
+        settings=settings,
+        all_symbols_set=all_symbols_set,
+        top_coins_provider=top_coins_provider,
+        cmc_by_symbol=cmc_by_symbol,
+        cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+        cmc_symbol_aliases=cmc_symbol_aliases,
+        coingecko_id_aliases=coingecko_id_aliases,
+        gecko=gecko,
+        alias_markets_by_id=alias_markets_by_id,
+        gain_qualified_symbols=gain_qualified_symbols,
+        coins_with_cg_ids_symbols=coins_with_cg_ids_symbols,
+        all_processed_map={},
+        uniformity_passed_symbols=set(),
+    )
+    _publish_public_snapshot(
+        [],
+        scan_started_at=scan_started_at,
+        all_symbols=all_symbols,
+        regime_meta=None,
+        exited=exited,
+    )
+    maybe_notify_web_push_qualified_changes(entered, exited)
+    maybe_notify_ntfy_qualified_changes(entered, exited)
+
+    tv_mapper.close()
+    exchange_db.close()
+    cg_mapper.close()
+    cache.close()
 
 
 def run_scanner():
@@ -204,9 +343,25 @@ def run_scanner():
 
         if not gain_qualified:
             app_logger.warning("No coins passed gain filter")
-            tv_mapper.close()
-            exchange_db.close()
-            cg_mapper.close()
+            _finalize_zero_qualified_scan(
+                active_db=active_db,
+                tv_mapper=tv_mapper,
+                exchange_db=exchange_db,
+                cg_mapper=cg_mapper,
+                cache=cache,
+                scan_started_at=scan_started_at,
+                all_symbols=all_symbols,
+                all_symbols_set=all_symbols_set,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=gain_qualified_symbols,
+                coins_with_cg_ids_symbols=set(),
+            )
             return
 
         # ============================================================
@@ -231,9 +386,25 @@ def run_scanner():
 
         if not coins_with_cg_ids:
             app_logger.warning("No coins with CoinGecko IDs")
-            tv_mapper.close()
-            exchange_db.close()
-            cg_mapper.close()
+            _finalize_zero_qualified_scan(
+                active_db=active_db,
+                tv_mapper=tv_mapper,
+                exchange_db=exchange_db,
+                cg_mapper=cg_mapper,
+                cache=cache,
+                scan_started_at=scan_started_at,
+                all_symbols=all_symbols,
+                all_symbols_set=all_symbols_set,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=gain_qualified_symbols,
+                coins_with_cg_ids_symbols=coins_with_cg_ids_symbols,
+            )
             return
 
         no_ticker_count = hydrate_exchange_volumes_from_coingecko(
@@ -614,72 +785,13 @@ def run_scanner():
             except Exception as hb_err:
                 app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
 
-        # Always publish when enabled, including coins=[] (and regime_meta=None when gate is off).
-        # Otherwise a zero-qualifier scan never writes or POSTs, and the relay 503s after /tmp loss.
-        if settings.public_qualified_snapshot_enabled:
-            try:
-                if final_results and str(settings.public_qualified_snapshot_field_set).strip().lower() != "minimal":
-                    attach_hourly_sparkline_closes_for_snapshot(
-                        final_results,
-                        settings.db_paths["scanner"],
-                        max_bars=SPARKLINE_HOURLY_MAX_BARS,
-                        logger=app_logger,
-                    )
-                finished_at = datetime.now(timezone.utc)
-                wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
-                err_map = metrics.get_summary().get("errors") or {}
-                err_total = 0
-                for v in err_map.values():
-                    if isinstance(v, bool) or not isinstance(v, (int, float)):
-                        continue
-                    err_total += int(v)
-                # Always embed HTTP usage counts from this scan (metrics H0/J3) so the dashboard
-                # can show per-vendor bars; SCAN_COSTS_ENABLED only gates the separate scan_costs.json artifact.
-                vendor_quotas = {}
-                try:
-                    vendor_quotas = fetch_vendor_quotas(
-                        coingecko_key=os.getenv("COINGECKO_API_KEY", "").strip(),
-                        cmc_key=settings.cmc_api_key.strip(),
-                        timeout=12.0,
-                        logger=app_logger,
-                    )
-                except Exception as vq_err:
-                    app_logger.warning("Vendor API quota fetch failed (snapshot still written): %s", vq_err)
-                api_cost_panel = build_api_cost_panel_for_snapshot(
-                    metrics.get_summary(),
-                    coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
-                    polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
-                    cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
-                    vendor_quotas=vendor_quotas or None,
-                )
-                notify_public = build_notify_public_config(
-                    ntfy_enabled=settings.ntfy_enabled,
-                    ntfy_base_url=settings.ntfy_base_url,
-                    ntfy_topic=settings.ntfy_topic,
-                )
-                write_public_qualified_snapshot(
-                    settings.DATA_DIR,
-                    settings.public_qualified_snapshot_file,
-                    final_results,
-                    field_set=settings.public_qualified_snapshot_field_set,
-                    scan_interval_seconds=settings.scan_interval_seconds,
-                    scan_health={
-                        "scan_duration_s": round(wall_s, 2),
-                        "coins_evaluated": len(all_symbols),
-                        "errors_count": int(err_total),
-                    },
-                    regime_gate=regime_meta,
-                    api_cost_panel=api_cost_panel,
-                    qualification_exits=exited,
-                    notify_public_config=notify_public,
-                )
-                app_logger.info("📤 Public qualified snapshot written")
-                maybe_push_qualified_snapshot_relay(
-                    settings.DATA_DIR,
-                    settings.public_qualified_snapshot_file,
-                )
-            except Exception as snap_err:
-                app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+        _publish_public_snapshot(
+            final_results,
+            scan_started_at=scan_started_at,
+            all_symbols=all_symbols,
+            regime_meta=regime_meta,
+            exited=exited,
+        )
 
         maybe_notify_web_push_qualified_changes(entered, exited)
         maybe_notify_ntfy_qualified_changes(entered, exited)
