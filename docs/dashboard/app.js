@@ -296,9 +296,9 @@
   let snapshotNtfySubscribeUrl = "";
   /** @type {"a"|"b"|"all"} */
   let notifyGuideTierFocus = "all";
-  /** Appended to meta line once after loading `../qualified_public_snapshot.json` when the relay returns 503. */
+  /** Appended to meta line after loading `../qualified_public_snapshot.json` when the live relay is unavailable. */
   let snapshotMetaSuffix = "";
-  /** True when the last successful snapshot fetch used the committed-repo fallback (relay 503). */
+  /** True when the last successful snapshot fetch used the committed-repo fallback. */
   let snapshotLoadWasCommittedFallback = false;
   /** @type {Set<string>} */
   let lastAddedSet = new Set();
@@ -817,7 +817,7 @@
     return fromQuery || configured || "";
   }
 
-  /** Same-origin committed snapshot (one level up from `docs/dashboard/`). Used when the live relay has no file yet (503). */
+  /** Same-origin committed snapshot (one level up from `docs/dashboard/`). Used when the live relay is unavailable. */
   function getCommittedSnapshotFallbackUrl() {
     try {
       return new URL("../qualified_public_snapshot.json", window.location.href).href;
@@ -4162,17 +4162,36 @@
     try {
       const primary = url.trim();
       const fallback = getCommittedSnapshotFallbackUrl();
-      let res = await fetch(primary, { credentials: "omit" });
-      let text = await res.text();
-      let usedRelay503Fallback = false;
-      if (!res.ok && res.status === 503 && fallback && fallback !== primary) {
-        const resFb = await fetch(fallback, { credentials: "omit" });
-        const textFb = await resFb.text();
-        if (resFb.ok) {
-          res = resFb;
-          text = textFb;
-          usedRelay503Fallback = true;
+      let res = null;
+      let text = "";
+      let primaryFetchError = null;
+      let fallbackReason = "";
+      let usedCommittedFallback = false;
+      try {
+        res = await fetch(primary, { credentials: "omit" });
+        text = await res.text();
+      } catch (err) {
+        primaryFetchError = err;
+        fallbackReason = "primary fetch failed";
+      }
+      if (res && !res.ok) {
+        fallbackReason = `HTTP ${res.status}`;
+      }
+      if ((primaryFetchError || (res && !res.ok)) && fallback && fallback !== primary) {
+        try {
+          const resFb = await fetch(fallback, { credentials: "omit" });
+          const textFb = await resFb.text();
+          if (resFb.ok) {
+            res = resFb;
+            text = textFb;
+            usedCommittedFallback = true;
+          }
+        } catch {
+          /* Keep the primary error/status for user-facing diagnostics below. */
         }
+      }
+      if (primaryFetchError && !usedCommittedFallback) {
+        throw primaryFetchError;
       }
       if (!res.ok) {
         if (showErrors) {
@@ -4198,9 +4217,9 @@
         if (showErrors) showError("Invalid JSON in snapshot response");
         return;
       }
-      if (usedRelay503Fallback) {
+      if (usedCommittedFallback) {
         snapshotMetaSuffix =
-          " · Showing committed docs/qualified_public_snapshot.json (live relay has no file yet; HTTP 503).";
+          ` · Showing committed docs/qualified_public_snapshot.json (live relay unavailable: ${fallbackReason}).`;
         snapshotLoadWasCommittedFallback = true;
       } else {
         snapshotMetaSuffix = "";
@@ -4208,7 +4227,7 @@
       }
       render(data);
       const snapDigest = await digestHex(text);
-      if (forNotify && notifyAlertsEnabled) {
+      if (forNotify && notifyAlertsEnabled && !usedCommittedFallback) {
         const scope = tierANotifyScope();
         if (scope === "qualified") {
           await notifySnapshotChangedFiltered(data, snapDigest);
@@ -4223,7 +4242,7 @@
         }
       } else {
         localStorage.setItem(LS_DIGEST, snapDigest);
-        if (notifyAlertsEnabled) {
+        if (notifyAlertsEnabled && !usedCommittedFallback) {
           try {
             localStorage.setItem(LS_LAST_POLL_SNAPSHOT_DIGEST, snapDigest);
           } catch {
