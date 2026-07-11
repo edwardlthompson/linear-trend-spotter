@@ -14,6 +14,20 @@ load_dotenv()
 
 _logger = logging.getLogger(__name__)
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == '':
+        return default
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_str(name: str, default: str) -> str:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == '':
+        return default
+    return raw.strip()
+
+
 class Settings:
     """Centralized settings management"""
     
@@ -944,28 +958,28 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return _env_bool('NTFY_ENABLED', bool(self._config.get('NTFY_ENABLED', False)))
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return _env_str('NTFY_BASE_URL', str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip())
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return _env_str('NTFY_TOPIC', str(self._config.get('NTFY_TOPIC', '')).strip())
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return _env_str('NTFY_TOKEN', str(self._config.get('NTFY_TOKEN', '')).strip())
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = _env_str('NTFY_PRIORITY', str(self._config.get('NTFY_PRIORITY', 'default')).strip()).lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return _env_str('NTFY_DASHBOARD_URL', str(self._config.get('NTFY_DASHBOARD_URL', '')).strip())
 
     @property
     def ntfy_public_subscribe_url(self) -> str:
