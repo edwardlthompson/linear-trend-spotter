@@ -262,7 +262,7 @@ def main() -> None:
         print(
             "WARN: API returned empty value(s) for non-NTFY keys (often masked secrets); "
             "they will not be modified:\n"
-            f"  {missing}\n"
+            f"  {missing}\n",
             file=sys.stderr,
         )
 
