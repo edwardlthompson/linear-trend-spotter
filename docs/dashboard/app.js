@@ -296,9 +296,9 @@
   let snapshotNtfySubscribeUrl = "";
   /** @type {"a"|"b"|"all"} */
   let notifyGuideTierFocus = "all";
-  /** Appended to meta line once after loading `../qualified_public_snapshot.json` when the relay returns 503. */
+  /** Appended to meta line once after loading `../qualified_public_snapshot.json` when the live snapshot fails. */
   let snapshotMetaSuffix = "";
-  /** True when the last successful snapshot fetch used the committed-repo fallback (relay 503). */
+  /** True when the last successful snapshot fetch used the committed-repo fallback. */
   let snapshotLoadWasCommittedFallback = false;
   /** @type {Set<string>} */
   let lastAddedSet = new Set();
@@ -3831,7 +3831,7 @@
         elEmptyBanner.textContent = regimeBlocked
           ? "No qualified coins in this snapshot — the BTC regime filter blocked all uniformity passes (see the Regime strip on the Logs tab). This is expected when `REGIME_FILTER_ENABLED` is on and BTC 7d/30d fails the gate."
           : snapshotLoadWasCommittedFallback
-            ? "The live snapshot relay returned HTTP 503 (no snapshot file on the server yet), so this page loaded the committed repo file `docs/qualified_public_snapshot.json`, which currently has 0 coins. Fix: wait for the worker to POST after a scan, or run `python scripts/sync_snapshot_to_docs.py` after a local scan and deploy the updated JSON. Check Render snapshot service logs if 503 persists."
+            ? "The live snapshot relay failed, so this page loaded the committed repo file `docs/qualified_public_snapshot.json`, which currently has 0 coins. Fix: wait for the worker to POST after a scan, or run `python scripts/sync_snapshot_to_docs.py` after a local scan and deploy the updated JSON. Check Render snapshot service logs if the live relay keeps failing."
             : "This JSON has 0 coins. The file committed at `docs/qualified_public_snapshot.json` is a placeholder; live scans from the Render worker do not update GitHub automatically. Point this dashboard at your relay: set `window.__SNAPSHOT_URL__` in `docs/dashboard/config.js` to `https://<your-snapshot>.onrender.com/qualified_public_snapshot.json`, or add `?api=` with that URL. Alternatively run `python scripts/sync_snapshot_to_docs.py` after a scan and push the updated file.";
       }
     }
@@ -3911,7 +3911,9 @@
 
     applyTableView();
     updateWatchlistBadge();
-    writeSnapshotVisitState(data);
+    if (!snapshotLoadWasCommittedFallback) {
+      writeSnapshotVisitState(data);
+    }
     window.requestAnimationFrame(() => {
       refreshDashboardShellWidth();
     });
@@ -4162,17 +4164,40 @@
     try {
       const primary = url.trim();
       const fallback = getCommittedSnapshotFallbackUrl();
-      let res = await fetch(primary, { credentials: "omit" });
-      let text = await res.text();
-      let usedRelay503Fallback = false;
-      if (!res.ok && res.status === 503 && fallback && fallback !== primary) {
-        const resFb = await fetch(fallback, { credentials: "omit" });
-        const textFb = await resFb.text();
-        if (resFb.ok) {
-          res = resFb;
-          text = textFb;
-          usedRelay503Fallback = true;
+      let res;
+      let text = "";
+      let primaryError = null;
+      let usedCommittedFallback = false;
+      let fallbackReason = "";
+      const canUseFallback = fallback && fallback !== primary;
+      const loadCommittedFallback = async (reason) => {
+        if (!canUseFallback) return false;
+        try {
+          const resFb = await fetch(fallback, { credentials: "omit" });
+          const textFb = await resFb.text();
+          if (resFb.ok) {
+            res = resFb;
+            text = textFb;
+            usedCommittedFallback = true;
+            fallbackReason = reason;
+            return true;
+          }
+        } catch {
+          /* keep the primary error/reporting path */
         }
+        return false;
+      };
+      try {
+        res = await fetch(primary, { credentials: "omit" });
+        text = await res.text();
+      } catch (fetchErr) {
+        primaryError = fetchErr;
+        if (!(await loadCommittedFallback("primary fetch failed"))) {
+          throw fetchErr;
+        }
+      }
+      if (res && !res.ok) {
+        await loadCommittedFallback(`HTTP ${res.status}`);
       }
       if (!res.ok) {
         if (showErrors) {
@@ -4195,12 +4220,24 @@
       try {
         data = JSON.parse(text);
       } catch (parseErr) {
-        if (showErrors) showError("Invalid JSON in snapshot response");
-        return;
+        if (!usedCommittedFallback && (await loadCommittedFallback("invalid JSON from live snapshot"))) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            if (showErrors) showError("Invalid JSON in snapshot response");
+            return;
+          }
+        } else {
+          if (showErrors) {
+            const raw = primaryError && primaryError.message ? primaryError.message : "Invalid JSON in snapshot response";
+            showError(raw);
+          }
+          return;
+        }
       }
-      if (usedRelay503Fallback) {
+      if (usedCommittedFallback) {
         snapshotMetaSuffix =
-          " · Showing committed docs/qualified_public_snapshot.json (live relay has no file yet; HTTP 503).";
+          ` · Showing committed docs/qualified_public_snapshot.json (${fallbackReason || "live snapshot failed"}).`;
         snapshotLoadWasCommittedFallback = true;
       } else {
         snapshotMetaSuffix = "";
@@ -4208,6 +4245,9 @@
       }
       render(data);
       const snapDigest = await digestHex(text);
+      if (usedCommittedFallback) {
+        return;
+      }
       if (forNotify && notifyAlertsEnabled) {
         const scope = tierANotifyScope();
         if (scope === "qualified") {

@@ -942,30 +942,49 @@ class Settings:
         name = str(self._config.get('CMC_SLUG_LEARN_FILE', 'gecko_id_to_cmc_slug.json')).strip()
         return name or 'gecko_id_to_cmc_slug.json'
 
+    @staticmethod
+    def _env_bool(name: str, default: bool) -> bool:
+        raw = os.getenv(name)
+        if raw is None or raw.strip() == '':
+            return bool(default)
+        val = raw.strip().lower()
+        if val in {'1', 'true', 'yes', 'on'}:
+            return True
+        if val in {'0', 'false', 'no', 'off'}:
+            return False
+        return bool(default)
+
+    @staticmethod
+    def _env_str(name: str, default: str) -> str:
+        raw = os.getenv(name)
+        if raw is None:
+            return str(default).strip()
+        return raw.strip()
+
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return self._env_bool('NTFY_ENABLED', bool(self._config.get('NTFY_ENABLED', False)))
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return self._env_str('NTFY_BASE_URL', str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')))
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return self._env_str('NTFY_TOPIC', str(self._config.get('NTFY_TOPIC', '')))
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return self._env_str('NTFY_TOKEN', str(self._config.get('NTFY_TOKEN', '')))
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = self._env_str('NTFY_PRIORITY', str(self._config.get('NTFY_PRIORITY', 'default'))).lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return self._env_str('NTFY_DASHBOARD_URL', str(self._config.get('NTFY_DASHBOARD_URL', '')))
 
     @property
     def ntfy_public_subscribe_url(self) -> str:

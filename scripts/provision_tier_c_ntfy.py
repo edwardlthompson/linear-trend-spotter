@@ -100,6 +100,17 @@ def find_service_id(services: list[dict[str, Any]], name: str) -> str:
     raise SystemExit(f"Service not found: {name!r}. Check name and API key workspace.")
 
 
+def _normalize_env_var_row(row: dict[str, Any]) -> dict[str, str] | None:
+    env_var = row.get("envVar")
+    if isinstance(env_var, dict):
+        row = env_var
+    k = row.get("key")
+    if not k:
+        return None
+    val = row.get("value")
+    return {"key": str(k), "value": "" if val is None else str(val)}
+
+
 def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> list[dict[str, str]]:
     raw: list[dict[str, Any]] = []
     cursor: str | None = None
@@ -131,11 +142,9 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
     for row in raw:
         if not isinstance(row, dict):
             continue
-        k = row.get("key")
-        if not k:
-            continue
-        val = row.get("value")
-        out.append({"key": str(k), "value": "" if val is None else str(val)})
+        normalized = _normalize_env_var_row(row)
+        if normalized:
+            out.append(normalized)
     return out
 
 
@@ -247,6 +256,12 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
+    if args.apply and not w_env and not args.i_understand_risk:
+        print(
+            "Aborting: Render API returned no parseable env vars; refusing replace-all PUT.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     missing = [e["key"] for e in w_env if e["value"] == ""]
     if missing and not args.i_understand_risk:
         print(
