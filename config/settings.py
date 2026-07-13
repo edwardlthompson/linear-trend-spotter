@@ -944,27 +944,44 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
+        env_raw = os.getenv('NTFY_ENABLED', '').strip()
+        if env_raw:
+            return env_raw.lower() in ('1', 'true', 'yes', 'on')
         return bool(self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
+        env_raw = os.getenv('NTFY_BASE_URL', '').strip()
+        if env_raw:
+            return env_raw
         return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
 
     @property
     def ntfy_topic(self) -> str:
+        env_raw = os.getenv('NTFY_TOPIC', '').strip()
+        if env_raw:
+            return env_raw
         return str(self._config.get('NTFY_TOPIC', '')).strip()
 
     @property
     def ntfy_token(self) -> str:
+        env_raw = os.getenv('NTFY_TOKEN', '').strip()
+        if env_raw:
+            return env_raw
         return str(self._config.get('NTFY_TOKEN', '')).strip()
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = os.getenv('NTFY_PRIORITY', '').strip().lower()
+        if not raw:
+            raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
+        env_raw = os.getenv('NTFY_DASHBOARD_URL', '').strip()
+        if env_raw:
+            return env_raw
         return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
 
     @property
