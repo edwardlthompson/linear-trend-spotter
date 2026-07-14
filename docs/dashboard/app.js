@@ -4641,6 +4641,7 @@
     void (async () => {
       await forceResetDashboardCachesOnce();
       await registerServiceWorker();
+      await syncPushNotifyExchangesIfSubscribed();
       syncPushTierBVisibility();
       await refreshPushTierBLabel();
       renderNotifyPlatformPanel();
