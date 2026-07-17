@@ -840,6 +840,17 @@
     return String(window.__PUSH_SUBSCRIBE_TOKEN__ || "").trim();
   }
 
+  function safeExternalHttpsUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    try {
+      const parsed = new URL(raw);
+      return parsed.protocol === "https:" ? parsed.href : "";
+    } catch {
+      return "";
+    }
+  }
+
   function urlBase64ToUint8Array(base64String) {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -861,11 +872,11 @@
   }
 
   function ntfySubscribeUrl() {
-    return String(window.__NTFY_SUBSCRIBE_URL__ || "").trim();
+    return safeExternalHttpsUrl(window.__NTFY_SUBSCRIBE_URL__);
   }
 
   function resolveNtfySubscribeUrl() {
-    const fromSnap = String(snapshotNtfySubscribeUrl || "").trim();
+    const fromSnap = safeExternalHttpsUrl(snapshotNtfySubscribeUrl);
     if (fromSnap) return fromSnap;
     return ntfySubscribeUrl();
   }
@@ -1057,7 +1068,7 @@
     const cfg = payload.notify_public_config;
     if (!cfg || typeof cfg !== "object") return;
     const url = cfg.ntfy_subscribe_url;
-    if (typeof url === "string" && url.trim()) snapshotNtfySubscribeUrl = url.trim();
+    snapshotNtfySubscribeUrl = safeExternalHttpsUrl(url);
   }
 
   async function refreshPushTierBLabel() {
