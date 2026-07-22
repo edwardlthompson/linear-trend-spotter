@@ -19,7 +19,6 @@ SUPER=(
 declare -A SUPER_CHAINS
 SUPER_CHAINS[bootstrap]="init prune setup gates"
 SUPER_CHAINS[verify]="docs gates ci"
-SUPER_CHAINS[build]="plan feature gates cleanup"
 SUPER_CHAINS[ship]="prerelease push regress"
 SUPER_CHAINS[maintain]="triage dependabot audit"
 
@@ -56,9 +55,9 @@ for f in .cursor/commands/*.md; do
   fi
 done
 
-# Super chains reference existing atomics
+# Chained supers reference existing atomics; build owns an autonomous sprint loop.
 for super in "${SUPER[@]}"; do
-  for child in ${SUPER_CHAINS[$super]}; do
+  for child in ${SUPER_CHAINS[$super]:-}; do
     child_path=".cursor/commands/${child}.md"
     if [ ! -f "$child_path" ]; then
       echo "SUPER_CHAIN: $super references missing child $child"

@@ -19,7 +19,7 @@ Create/update RELEASE_NOTES.md from CHANGELOG, BUILD_PLAN rows, recent commits (
 - Stage **explicit paths only** (never `git add .`)
 - Commit: `chore(release): prepare vX.Y.Z release` with key changes in body
 - `git push origin main`
-- `python3 scripts/agent-run.py check-github-ci --wait 600`
+- `python3 scripts/agent-run.py check-github-ci HEAD --wait 600`
 - Zero open Critical/High Dependabot alerts
 
 ## Step 4 — Release

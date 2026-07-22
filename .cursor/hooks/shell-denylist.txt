@@ -1,4 +1,4 @@
-# One pattern per line (case-insensitive substring match). Synced with destructive-ops.mdc.
+# One canonical operation per line. Synced with destructive-ops.mdc.
 git push
 git push --force
 terraform apply
@@ -8,4 +8,3 @@ rm -rf /
 rm -rf ~
 --no-verify
 --no-gpg-sign
-skip hooks

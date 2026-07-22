@@ -132,6 +132,22 @@ def smoke(root: Path) -> list[str]:
         if deny.get("permission") != "deny":
             errors.append("smoke: git push should be denied without session approval")
 
+        for command in (
+            "git commit --no-verify -m test",
+            'sqlite3 app.db "DELETE FROM jobs"',
+        ):
+            if run_guard(root, command).get("permission") != "deny":
+                errors.append(f"smoke: destructive command should be denied: {command}")
+
+        for command in (
+            "rg -- '--no-verify'",
+            "git commit -m 'document --no-verify policy'",
+            "rg 'DELETE FROM' docs",
+            'sqlite3 app.db "DELETE FROM jobs WHERE id = ?"',
+        ):
+            if run_guard(root, command).get("permission") == "deny":
+                errors.append(f"smoke: benign command should be allowed: {command}")
+
         state.write_text(
             json.dumps({"version": 1, "destructive_ops_approved": ["git push"]}, indent=2) + "\n",
             encoding="utf-8",
@@ -139,6 +155,9 @@ def smoke(root: Path) -> list[str]:
         ok = run_guard(root, "git push origin main")
         if ok.get("permission") != "allow":
             errors.append("smoke: git push should be allowed with destructive_ops_approved")
+        force = run_guard(root, "git push --force origin main")
+        if force.get("permission") != "deny":
+            errors.append("smoke: git push approval must not allow force push")
     finally:
         if backup is None:
             if state.is_file():

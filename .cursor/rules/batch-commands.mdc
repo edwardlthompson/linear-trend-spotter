@@ -39,13 +39,13 @@ Full registry: `docs/BATCH_COMMANDS.md` · Human cheat sheet: `docs/help/BATCH_C
 
 ## Super commands (5)
 
-Run child atomics **in order**; summarize pass/fail after each step.
+Run child atomics **in order**; summarize pass/fail after each step. `/build` instead executes its dedicated autonomous sprint loop.
 
 | Word | Chain |
 |------|-------|
 | bootstrap | init → prune → setup → gates |
 | verify | docs → gates → ci |
-| build | plan → *(approval pause)* → feature → gates → cleanup |
+| build | autonomous BUILD_PLAN sprint loop (`.cursor/commands/build.md`) |
 | ship | prerelease → push → regress |
 | maintain | triage → dependabot → audit |
 
@@ -54,4 +54,4 @@ Run child atomics **in order**; summarize pass/fail after each step.
 - **`debug` ≠ `audit`** — debug is defect investigation; audit is full repo review + BUILD_PLAN sprint.
 - **`push` and `ship` grant explicit `git push` approval** per destructive-ops (user invoked the command).
 - **`plan` ≠ Plan Mode toggle** — user still picks Cursor Plan Mode in the UI.
-- Supers are thin orchestrators; all logic lives in atomic command files.
+- Chained supers are thin orchestrators; `/build` owns its autonomous sprint logic.

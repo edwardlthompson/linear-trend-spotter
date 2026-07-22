@@ -13,7 +13,7 @@ From repo root, all green on `main` (or active branch before merge):
 ```bash
 python3 scripts/agent-run.py validate-bootstrap --quick
 python3 scripts/agent-run.py feature-gate --stack "$(python3 -c "import json;print(json.load(open('.cursor/stack-selection.json')).get('stack','multi'))" 2>/dev/null || echo multi)"
-python3 scripts/agent-run.py check-github-ci -- --wait 300
+python3 scripts/agent-run.py check-github-ci HEAD --wait 300
 python3 scripts/agent-run.py check-license-compliance
 ```
 
