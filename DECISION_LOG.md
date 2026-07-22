@@ -16,6 +16,13 @@
 
 ## Entries
 
+### 2026-07-21 — /push bootstrap alignment to main
+- **Status:** Accepted
+- **Context:** /push after A15 alignment commit 84efc0d; child-repo gates green; Release Please workflows not adopted.
+- **Decision:** Push main with template pin 0.15.0; skip merge-release-please-pr; keep product package version 0.0.0; ephemeral RELEASE_NOTES.md only.
+- **Alternatives considered:** Cut product semver; enable release-please workflows now.
+- **Consequences:** CI must stay green on main; HUMAN items remain for Private vuln reporting and Scorecard badge.
+
 ### 2026-07-21 — Align with agent-project-bootstrap v0.15.0
 - **Status:** Accepted
 - **Context:** Repo was pinned at template v0.2.1 while upstream advanced to v0.15.0. A partial uncommitted v0.14.1 WIP existed; human approved finishing at v0.15.0 with recommended defaults.

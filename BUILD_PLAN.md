@@ -32,28 +32,13 @@ Use **emoji markers** (not `- [ ]` GitHub checkboxes) so task state reads clearl
 
 ## Sprint A15 — Bootstrap alignment v0.15.0
 
-> Align child repo with upstream `agent-project-bootstrap` v0.15.0 without rewriting Golden Path application code.
-
-### Sequential
-
-- ✅ [AGENT] Write `docs/BOOTSTRAP_ALIGNMENT.md` gap analysis + DECISION_LOG entry
-- ✅ [AGENT] Refresh START_HERE / CURSOR_MODES / FOR_AGENTS / AGENTS.md for live product (v0.15.0)
-- ✅ [AGENT] Add batch-command docs, `.cursor/commands/`, expanded `.cursor/rules/` (incl. local-compute)
-- ✅ [AGENT] Ship FOSS Cursor surface (hooks, skills, agents, stack-selection, worktrees)
-- ✅ [AGENT] Rebuild BUILD_PLAN with emoji markers + lanes
-- ✅ [AGENT] Merge upstream scripts + adapted `validate-bootstrap.sh`; add Scorecard workflow
-- ✅ [AGENT] Refresh modules + WEB_PROJECT_LAYOUT / DESIGN_GUIDE / design-tokens note
-- ✅ [AGENT] Update TEMPLATE_INDEX; run validators; bump `.template-version` to 0.15.0
-
-### Parallel
-
-<!-- parallel_exception: A15 alignment is single-agent Sequential (shared docs/scripts schema) -->
+> **A15** AGENT Sequential archived in COMPLETED_TASKS.md @ 84efc0d.
 
 ### Human & device (after automation)
 
 - 🔲 [HUMAN] Enable Private vulnerability reporting (GitHub Settings → Code security)
 - 🔲 [HUMAN] Confirm OpenSSF Scorecard workflow permissions / optional badge
-- 🔲 [HUMAN] Weekly CVE triage (recommended: Monday) — `docs/SECURITY_TRIAGE.md`
+- 🔲 [HUMAN] Weekly CVE triage (recommended: Monday) — docs/SECURITY_TRIAGE.md
 
 ---
 
@@ -140,3 +125,11 @@ _(none open)_
 ### Human & device (after automation)
 
 - 🔲 [HUMAN] Weekly CVE triage (recommended: Monday)
+
+---
+
+## Archived Sprints
+
+| Sprint | Complete | Archive |
+|--------|----------|---------|
+| A15 Bootstrap alignment v0.15.0 | 2026-07-21 | COMPLETED_TASKS.md |

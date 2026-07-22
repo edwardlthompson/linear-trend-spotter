@@ -19,7 +19,10 @@ check_files() {
       ERRORS=$((ERRORS + 1))
     fi
   done < <(find "$ROOT" -type f \( -name "*.tsx" -o -name "*.jsx" -o -name "*.vue" -o -name "*_view.*" \) \
-    ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/dist/*" -print0 2>/dev/null)
+    ! -path "*/node_modules/*" ! -path "*/.git/*" ! -path "*/dist/*" ! -path "*/build/*" \
+    ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/__pycache__/*" ! -path "*/.mypy_cache/*" \
+    ! -path "*/.ruff_cache/*" ! -path "*/.pytest_cache/*" ! -path "*/site-packages/*" \
+    -print0 2>/dev/null)
 }
 
 check_logic() {
