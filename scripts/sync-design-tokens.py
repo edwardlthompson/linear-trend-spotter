@@ -44,7 +44,7 @@ def generate_css(tokens: dict, digest: str) -> str:
     spacing = tokens["spacing"]
     radius = tokens["radius"]
     typo = tokens["typography"]
-    meta = tokens["meta"]
+    tokens["meta"]
 
     def vars_block(mode: str) -> list[str]:
         lines = []
@@ -119,8 +119,7 @@ def generate_color_kt(tokens: dict, digest: str) -> str:
     scheme_dark = []
     for key in colors:
         role = color_role_name(key)
-        light_name = f"Gp{role[0].upper()}{role[1:]}"
-        dark_name = light_name
+        f"Gp{role[0].upper()}{role[1:]}"
         light_vals.append(hex_to_compose(f"GpLight{role[0].upper()}{role[1:]}", colors[key]["light"]))
         dark_vals.append(hex_to_compose(f"GpDark{role[0].upper()}{role[1:]}", colors[key]["dark"]))
         scheme_light.append(f"        {role} = GpLight{role[0].upper()}{role[1:]},")

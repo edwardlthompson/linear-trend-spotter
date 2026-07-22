@@ -343,7 +343,7 @@ def build_status(root: Path, *, lane: str = "auto") -> dict:
             return child_status
 
     maint_auto, maint_human = parse_maintenance_rows(text)
-    maint_open = maint_auto + maint_human
+    maint_auto + maint_human
     maint_aa_next = next_actionable_row(maint_auto, backlog_keys)
     maint_human_next = (
         next_actionable_row(maint_human, backlog_keys) if not maint_aa_next else None

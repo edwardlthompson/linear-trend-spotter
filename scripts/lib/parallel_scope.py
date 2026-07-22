@@ -74,7 +74,7 @@ def find_overlaps(scopes: list[str]) -> list[str]:
 
 def slugify(text: str) -> str:
     text = text.lower().strip()
-    allowed = string.ascii_lowercase + string.digits + "-"
+    string.ascii_lowercase + string.digits + "-"
     out: list[str] = []
     for ch in text.replace("/", "-").replace("_", "-"):
         if ch.isalnum():

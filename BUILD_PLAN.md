@@ -34,6 +34,10 @@ Use **emoji markers** (not `- [ ]` GitHub checkboxes) so task state reads clearl
 
 > **A15** AGENT Sequential archived in COMPLETED_TASKS.md @ 84efc0d.
 
+### Parallel
+
+<!-- parallel_exception: A15 alignment complete; HUMAN items only remain -->
+
 ### Human & device (after automation)
 
 - 🔲 [HUMAN] Enable Private vulnerability reporting (GitHub Settings → Code security)

@@ -143,7 +143,7 @@ def run(root: Path) -> int:
         if s >= 7:
             append_backlog(root, url, s)
 
-    report_lines.append(f"status: ok")
+    report_lines.append("status: ok")
     report_lines.append(f"live_doc_urls: {len(live_urls)}")
     report_lines.append(f"new_urls: {len(new_urls)}")
     report_lines.append(f"removed_urls: {len(removed)}")
