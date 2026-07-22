@@ -65,11 +65,18 @@ Optional **`config.json`** keys include **`TOP_COINS_PROVIDER`** (`cmc` or `coin
 
 `scripts/ci_verify.sh` is the same command Render’s **worker** runs at build time (`uv sync --locked --extra dev`, then **ruff**, **mypy**, **pytest**, etc.). Legacy **`requirements*.txt`** files are exported from **`uv.lock`** for reference only.
 
-**Agent bootstrap:** read `docs/START_HERE.md` and `AGENTS.md`. Task boards: `BUILD_PLAN.md` (ops) and `docs/EXECUTION_PLAN.md` (product). BUILD_PLAN labels: `AGENT` | `HUMAN` | `AUTO`.
+### How agents should work in this repo
 
-**Template updates:** configure interval in `.template-update.json`; manual check: `pwsh scripts/check-template-updates.ps1`.
+1. Read [`docs/START_HERE.md`](docs/START_HERE.md), then pick a Cursor mode via [`docs/CURSOR_MODES.md`](docs/CURSOR_MODES.md).
+2. Follow [`AGENTS.md`](AGENTS.md) / [`docs/FOR_AGENTS.md`](docs/FOR_AGENTS.md). Slash shortcuts: [`docs/help/BATCH_COMMANDS.md`](docs/help/BATCH_COMMANDS.md).
+3. Ops / bootstrap tasks: [`BUILD_PLAN.md`](BUILD_PLAN.md) **Sequential** first (status: 🔲/✅/❌; labels `AGENT` | `HUMAN` | `ADB` | `AUTO`).
+4. Product milestones A–Q: [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md) (GitHub `- [ ]` / `- [x]` checkboxes — dual-board exception).
+5. Golden Path is the real app (`main.py`, `scanner/`, `docs/dashboard/`) — not template `examples/`.
+6. Alignment / migration notes: [`docs/BOOTSTRAP_ALIGNMENT.md`](docs/BOOTSTRAP_ALIGNMENT.md).
 
-**Required GitHub workflows after push to `main`:** CI, Security Scan, CodeQL — poll with `python scripts/check_github_ci.py --wait 300`.
+**Template updates:** configure interval in `.template-update.json`; manual check: `pwsh scripts/check-template-updates.ps1` (pin: `.template-version`).
+
+**Required GitHub workflows after push to `main`:** CI, Security Scan, CodeQL — poll with `python scripts/check_github_ci.py --wait 300`. OpenSSF Scorecard runs on a weekly schedule (`scorecard.yml`).
 
 See **`CONTRIBUTING.md`**, **`SECURITY.md`**, and **`docs/SECURITY_TRIAGE.md`**.
 

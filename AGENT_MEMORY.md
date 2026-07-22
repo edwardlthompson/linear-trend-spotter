@@ -56,9 +56,11 @@ Crypto exchange scanner with backtesting and static PWA dashboard. Pulls exchang
 | Date | Milestone | What worked | What to improve |
 |------|-----------|-------------|-----------------|
 | 2026-06-13 | Bootstrap adoption | Cherry-pick from agent-project-bootstrap | Lighthouse CI for dashboard deferred |
+| 2026-07-21 | Bootstrap alignment v0.15.0 | Additive FOSS Cursor surface; validators green | HUMAN Private vuln reporting + Scorecard badge still open |
 
 ## Template Provenance
 
 - **Source template:** `edwardlthompson/agent-project-bootstrap`
-- **Template version:** `0.2.1` (see `.template-version`)
+- **Template version:** `0.15.0` (see `.template-version`)
 - **Last update check:** See `.template-update.json`
+- **Alignment notes:** `docs/BOOTSTRAP_ALIGNMENT.md` (0.2.1 → 0.15.0; dual-board status; 250/150 line limits kept)

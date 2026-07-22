@@ -1,7 +1,7 @@
 # Build Plan
 
-> Bootstrap adoption and agent-ops task board. Product milestones A–Q and post-Q follow-ups (Q23+) live in `docs/EXECUTION_PLAN.md`.
-> Finished items are archived in `COMPLETED_TASKS.md`.
+> Bootstrap adoption and agent-ops task board. Product milestones A–Q and post-Q follow-ups live in `docs/EXECUTION_PLAN.md`.
+> Finished items are archived in `COMPLETED_TASKS.md`. Alignment details: `docs/BOOTSTRAP_ALIGNMENT.md`.
 
 ## Owner Label Legend
 
@@ -9,65 +9,134 @@
 |-------|-------|-------------|
 | `AGENT` | Cursor Agent | Code, docs, scaffolding, tests, CI config |
 | `HUMAN` | Human developer | Approvals, credentials, GitHub settings, product decisions |
-| `ADB` | Human (Android) | Not applicable to this project |
+| `ADB` | Human (Android) | Device/F-Droid items (limited applicability here) |
 | `AUTO` | CI/scripts/bots | GitHub Actions, Dependabot, pre-commit, update checker |
 
----
+## Status markers
 
-## Remaining one-time setup
+Use **emoji markers** (not `- [ ]` GitHub checkboxes) so task state reads clearly in Markdown source and Preview.
 
-1. [ ] [HUMAN] Enable **Private vulnerability reporting** in GitHub Settings -> Code security (API returns 404; UI-only on this repo)
+| Marker | Meaning | Notes |
+|--------|---------|-------|
+| 🔲 | Open | Default for new tasks |
+| ✅ | Done | Replace 🔲 when complete; archive sprint rows to `COMPLETED_TASKS.md` |
+| ❌ | Blocked | Add brief reason after the description |
 
----
+**Task format:** `🔲 [OWNER] Description` · done: `✅ [OWNER] Description` · blocked: `❌ [OWNER] Description — reason`
 
-## Sprint 5 -- Security and Ops (recurring)
+**Dual-board exception:** `docs/EXECUTION_PLAN.md` keeps `- [ ]` / `- [x]` for product milestones.
 
-- [ ] [HUMAN] Weekly CVE triage (recommended: Monday) -- see `docs/SECURITY_TRIAGE.md`
-- [ ] [AGENT] Apply Dependabot bumps as needed
-- [ ] [AUTO] Trivy + CodeQL + CI green after merges (`health-check.yml` weekly)
-
----
-
-## Sprint 6 -- Web Module (Deferred)
-
-| Task | Owner | Isolated scope |
-|------|-------|----------------|
-| Backtest Results modal: show TSL % + TSL hit % columns (Q22) | AGENT | Done — `docs/dashboard/app.js`, `sw.js` v100 |
-| Lighthouse CI for `docs/dashboard/` | AGENT | npm tooling under dashboard |
-| axe-core accessibility tests | AGENT | `docs/dashboard/` |
-| File line-limit refactor | HUMAN decision | large legacy modules |
+**Agent rule:** Execute all `[AGENT]` **Sequential** items first, then dispatch **Parallel** agents with isolated file scopes (`docs/PARALLEL_AGENT_SCOPES.md`). Shared schema/types are Sequential-only.
 
 ---
 
-## Sprint 7 -- Reliable notifications (Q23)
+## Sprint A15 — Bootstrap alignment v0.15.0
 
-| Task | Owner | Isolated scope |
-|------|-------|----------------|
-| Q23a: Tier-B ops — persistent push subs, dead-sub cleanup, dashboard re-subscribe on focus | AGENT | Done — `render.yaml`, `app.js`, `WEB_DASHBOARD.md` |
-| Q23b: Tier-C ntfy bridge — opt-in `NTFY_*` publish on list change | AGENT | Done — `scanner/ntfy_notify.py`, settings, docs |
-| Q23c: OS-aware notification install UX (Windows/Android CTAs) | AGENT | Done — dashboard guide dialog + Settings panel, `sw.js` v102 |
-| Provision ntfy topic + token on Render worker | AUTO | `scripts/provision_tier_c_ntfy.py` + snapshot `notify_public_config` |
-| Privacy policy update for Tier-C external users | AGENT | Done — `docs/PRIVACY.md` |
+> Align child repo with upstream `agent-project-bootstrap` v0.15.0 without rewriting Golden Path application code.
 
-**Order:** Q23a → Q23b → Q23c. Do not start Q23b until Q23a verification passes.
+### Sequential
+
+- ✅ [AGENT] Write `docs/BOOTSTRAP_ALIGNMENT.md` gap analysis + DECISION_LOG entry
+- ✅ [AGENT] Refresh START_HERE / CURSOR_MODES / FOR_AGENTS / AGENTS.md for live product (v0.15.0)
+- ✅ [AGENT] Add batch-command docs, `.cursor/commands/`, expanded `.cursor/rules/` (incl. local-compute)
+- ✅ [AGENT] Ship FOSS Cursor surface (hooks, skills, agents, stack-selection, worktrees)
+- ✅ [AGENT] Rebuild BUILD_PLAN with emoji markers + lanes
+- ✅ [AGENT] Merge upstream scripts + adapted `validate-bootstrap.sh`; add Scorecard workflow
+- ✅ [AGENT] Refresh modules + WEB_PROJECT_LAYOUT / DESIGN_GUIDE / design-tokens note
+- ✅ [AGENT] Update TEMPLATE_INDEX; run validators; bump `.template-version` to 0.15.0
+
+### Parallel
+
+<!-- parallel_exception: A15 alignment is single-agent Sequential (shared docs/scripts schema) -->
+
+### Human & device (after automation)
+
+- 🔲 [HUMAN] Enable Private vulnerability reporting (GitHub Settings → Code security)
+- 🔲 [HUMAN] Confirm OpenSSF Scorecard workflow permissions / optional badge
+- 🔲 [HUMAN] Weekly CVE triage (recommended: Monday) — `docs/SECURITY_TRIAGE.md`
 
 ---
 
-## Sprint 8 -- Native companions (optional, Q24–Q25)
+## Sprint 5 — Security and Ops (recurring)
 
-| Task | Owner | Isolated scope |
-|------|-------|----------------|
-| Q24: Windows tray notifier (Python tray scaffold) | AGENT | Done — `clients/windows/` |
-| Q25: Android UnifiedPush companion scaffold | ADB / AGENT | Done — `clients/android/` README + fdroid metadata |
-| winget manifest validate + submit scripts | AUTO | `scripts/winget_validate.ps1`, `scripts/winget_submit.ps1` |
-| winget-pkgs PR merge (Microsoft review) | HUMAN | external maintainer |
-| F-Droid metadata + keystore prep script | AUTO | `scripts/android_fdroid_prepare.sh` |
-| F-Droid tracker submission (after APK) | ADB | post-APK only |
+### Sequential
+
+- 🔲 [AGENT] Apply Dependabot bumps as needed
+- 🔲 [AUTO] Trivy + CodeQL + CI green after merges (`health-check.yml` weekly)
+- 🔲 [AUTO] Template update check (`scripts/check-template-updates.sh`)
+
+### Parallel
+
+<!-- parallel_exception: recurring ops — no parallel table this cycle -->
+
+### Human & device (after automation)
+
+- 🔲 [HUMAN] Weekly CVE triage (recommended: Monday) — see `docs/SECURITY_TRIAGE.md`
+
+---
+
+## Sprint 6 — Web Module (deferred items)
+
+### Sequential
+
+- ✅ [AGENT] Backtest Results modal: TSL % + TSL hit % columns (Q22) — `docs/dashboard/app.js`, `sw.js`
+- 🔲 [AGENT] Lighthouse CI for `docs/dashboard/`
+- 🔲 [AGENT] axe-core accessibility tests for `docs/dashboard/`
+- 🔲 [HUMAN] File line-limit refactor decision for large legacy modules
+
+### Parallel
+
+<!-- parallel_exception: Sprint 6 deferred web a11y/Lighthouse share docs/dashboard — run Sequential when unblocked -->
+
+---
+
+## Sprint 7 — Reliable notifications (Q23)
+
+### Sequential
+
+- ✅ [AGENT] Q23a Tier-B ops — persistent push subs, dead-sub cleanup, re-subscribe on focus
+- ✅ [AGENT] Q23b Tier-C ntfy bridge — opt-in `NTFY_*` publish on list change
+- ✅ [AGENT] Q23c OS-aware notification install UX
+- ✅ [AUTO] Provision ntfy topic + token helper — `scripts/provision_tier_c_ntfy.py`
+- ✅ [AGENT] Privacy policy update for Tier-C — `docs/PRIVACY.md`
+
+### Parallel
+
+<!-- parallel_exception: Q23 complete -->
+
+### Human & device (after automation)
+
+_(none open)_
+
+---
+
+## Sprint 8 — Native companions (optional, Q24–Q25)
+
+### Sequential
+
+- ✅ [AGENT] Q24 Windows tray notifier scaffold — `clients/windows/`
+- ✅ [AGENT] Q25 Android UnifiedPush companion scaffold — `clients/android/`
+- ✅ [AUTO] winget validate/submit scripts — `scripts/winget_*.ps1`
+- ✅ [AUTO] F-Droid metadata + keystore prep — `scripts/android_fdroid_prepare.sh`
+
+### Parallel
+
+<!-- parallel_exception: scaffolds complete -->
+
+### Human & device (after automation)
+
+- 🔲 [HUMAN] winget-pkgs PR merge (Microsoft review)
+- 🔲 [ADB] F-Droid tracker submission (after APK)
 
 ---
 
 ## Ongoing Maintenance
 
-- [ ] [HUMAN] Weekly CVE triage (recommended: Monday)
-- [ ] [AGENT] Apply Dependabot bumps as needed
-- [ ] [AUTO] Template update check (`scripts/check-template-updates.sh`)
+### Sequential
+
+- 🔲 [AGENT] Apply Dependabot bumps as needed
+- 🔲 [AUTO] Template update check (`scripts/check-template-updates.sh`)
+
+### Human & device (after automation)
+
+- 🔲 [HUMAN] Weekly CVE triage (recommended: Monday)

@@ -5,11 +5,12 @@ alwaysApply: true
 
 # Core Directives
 
-On session start, read docs/START_HERE.md before any edits.
+On session start, read docs/START_HERE.md, pick Cursor mode via docs/CURSOR_MODES.md, then edit.
 
 ## Plan First, Code Second
 
-- Use Plan Mode for all non-trivial tasks
+- Cursor mode routing: see cursor-modes.mdc and docs/CURSOR_MODES.md
+- Plan Mode for non-trivial tasks; Ask for read-only exploration
 - Include mandatory ### Critique subsection in every plan
 
 ## Read-Before-Write
@@ -20,6 +21,7 @@ On session start, read docs/START_HERE.md before any edits.
 
 - Sequential lane before Parallel lane
 - Respect AGENT, HUMAN, ADB, AUTO labels
+- Status markers: 🔲 open · ✅ done · ❌ blocked (emoji, not `- [ ]` checkboxes — repo-wide; see `BUILD_PLAN.md` legend)
 
 ## 3-Strike Rule
 
@@ -31,4 +33,12 @@ Update only at session start, milestone boundary, or architectural pivot.
 
 ## Token Economy
 
-Max 250 lines views, 150 lines logic. Read active module/example only.
+Max **250** lines per view file, **150** lines per logic file (project override vs upstream 300/150; legacy exempt until refactor). Read active module / Golden Path only — not inactive `examples/`.
+
+## Product board exception
+
+`docs/EXECUTION_PLAN.md` uses GitHub `- [ ]` / `- [x]` checkboxes; emoji status applies to `BUILD_PLAN.md` and new bootstrap checklists.
+
+## Local Compute
+
+On This Computer, prefer parallel Task/worktrees/`/best-of-n` and multi-core local gates over Cloud Agents — see `local-compute.mdc`.

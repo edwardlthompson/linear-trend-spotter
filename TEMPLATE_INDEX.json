@@ -1,9 +1,12 @@
 {
-  "template_version": "0.2.1",
+  "template_version": "0.15.0",
   "entry_points": {
     "bootstrap": "docs/START_HERE.md",
     "reference": "docs/FOR_AGENTS.md",
-    "initialization_prompt": "docs/INITIALIZATION_PROMPT.md"
+    "initialization_prompt": "docs/INITIALIZATION_PROMPT.md",
+    "cursor_modes": "docs/CURSOR_MODES.md",
+    "batch_commands": "docs/help/BATCH_COMMANDS.md",
+    "alignment": "docs/BOOTSTRAP_ALIGNMENT.md"
   },
   "files": [
     {
@@ -197,7 +200,7 @@
     },
     {
       "path": ".github/workflows/dependency-review.yml",
-      "purpose": "PR dependency review \u2014 fail on new High/Critical vulnerabilities",
+      "purpose": "PR dependency review — fail on new High/Critical vulnerabilities",
       "read_when": "contributing",
       "update_when": "milestone_boundary",
       "owner": "maintainer"
@@ -333,6 +336,195 @@
       "purpose": "CodeQL static analysis for Python and JS",
       "read_when": "security_triage",
       "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/CURSOR_MODES.md",
+      "purpose": "Cursor Ask/Plan/Agent/Debug mode router",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/BATCH_COMMANDS.md",
+      "purpose": "Agent batch-command registry",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/help/BATCH_COMMANDS.md",
+      "purpose": "Human cheat sheet for / commands",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/BOOTSTRAP_ALIGNMENT.md",
+      "purpose": "Gap analysis and migration notes vs upstream template",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/WEB_PROJECT_LAYOUT.md",
+      "purpose": "PWA folder roles for docs/dashboard Golden Path",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/DESIGN_GUIDE.md",
+      "purpose": "Design tokens and UI guidance (dashboard CSS note)",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "docs/FEATURE_MODULES.md",
+      "purpose": "Sprint 2+ vertical-slice feature guidance",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/PARALLEL_AGENT_SCOPES.md",
+      "purpose": "Parallel agent scope rules",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/REPO_HYGIENE.md",
+      "purpose": "Tracked-artifact and hygiene policy",
+      "read_when": "validation",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/FILE_SIZE_GUIDE.md",
+      "purpose": "File line-limit rationale (250/150 project)",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "docs/CURSOR_INTEGRATIONS.md",
+      "purpose": "Cursor FOSS hooks/skills/agents overview",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "HUMAN_BACKLOG.md",
+      "purpose": "Deferred HUMAN/ADB items from automation",
+      "read_when": "session_start",
+      "update_when": "task_completion",
+      "owner": "agent+human"
+    },
+    {
+      "path": ".cursorignore",
+      "purpose": "Cursor indexing ignore patterns",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".editorconfig",
+      "purpose": "Editor encoding/indentation defaults",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".cursor-session-state.example.json",
+      "purpose": "Session checkpoint example stub",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".cursor/rules/cursor-modes.mdc",
+      "purpose": "Always-on Cursor mode routing rule",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".cursor/rules/batch-commands.mdc",
+      "purpose": "Batch command protocol rule",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".cursor/hooks.json",
+      "purpose": "Cursor hooks configuration",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".cursor/stack-selection.json",
+      "purpose": "FOSS tier and enabled Cursor features",
+      "read_when": "session_start",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "design-tokens/design-tokens.json",
+      "purpose": "Design tokens (bootstrap parity; dashboard CSS is SoT)",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": "scripts/check-repo-hygiene.sh",
+      "purpose": "Repo hygiene orchestrator",
+      "read_when": "validation",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/check-batch-commands.sh",
+      "purpose": "Validate batch command registry vs files",
+      "read_when": "validation",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/watch-agent-gates.sh",
+      "purpose": "Post-AGENT gate loop with autofix",
+      "read_when": "ci_failure",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": "scripts/plan-parallel-dispatch.sh",
+      "purpose": "Parallel BUILD_PLAN dispatch helper",
+      "read_when": "feature_work",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".github/workflows/scorecard.yml",
+      "purpose": "OpenSSF Scorecard weekly analysis",
+      "read_when": "security_triage",
+      "update_when": "milestone_boundary",
+      "owner": "maintainer"
+    },
+    {
+      "path": ".large-files-allowlist",
+      "purpose": "Allowlisted large tracked assets for hygiene check",
+      "read_when": "validation",
+      "update_when": "milestone_boundary",
+      "owner": "agent+human"
+    },
+    {
+      "path": ".release-please-manifest.json",
+      "purpose": "Version manifest for template-version sync (no release-please workflow)",
+      "read_when": "update_check",
+      "update_when": "template_upgrade",
       "owner": "maintainer"
     }
   ],

@@ -4,40 +4,50 @@
 
 ## What is this?
 
-`agent-project-bootstrap` is a **GitHub Template Repository** for bootstrapping FOSS projects with Cursor agents.
+**linear-trend-spotter** is a FOSS crypto exchange scanner with backtesting and a static PWA dashboard.
+Agent process and tooling are aligned with [`agent-project-bootstrap`](https://github.com/edwardlthompson/agent-project-bootstrap) **v0.15.0**.
+See [`docs/BOOTSTRAP_ALIGNMENT.md`](BOOTSTRAP_ALIGNMENT.md) for migration notes.
 
-## Which mode are you in?
+## Which repo mode are you in?
 
-- **Bootstrap:** New project from **Use this template** → read `INITIALIZATION_PROMPT.md` next
-- **Reference:** Existing project using this repo as rules reference → read `FOR_AGENTS.md` next
+- **Bootstrap:** Not applicable — this project is already initialized (see `docs/INITIALIZATION_PROMPT.md` as reference only).
+- **Reference / live product:** Read `docs/CURSOR_MODES.md`, then `docs/FOR_AGENTS.md`.
 
-## Bootstrap Read Order
+## Cursor modes (Plan / Agent / Debug / Ask)
 
-1. `README.md`
-2. `docs/START_HERE.md`
-3. `docs/INITIALIZATION_PROMPT.md`
-4. `AGENTS.md`
-5. `BUILD_PLAN.md` Sequential lane
-6. Active `modules/{stack}/MODULE.md` only
-7. Active `examples/{stack}/` only
+See [`docs/CURSOR_MODES.md`](CURSOR_MODES.md) — pick the Cursor mode before editing code.
 
-## Reference Read Order
+## Agent shortcuts
+
+Type **`/`** in Cursor Agent chat for shortcut workflows. Start with [`docs/help/BATCH_COMMANDS.md`](help/BATCH_COMMANDS.md) — try `/verify` before merge or `/build` for BUILD_PLAN automation.
+
+## Live product read order
 
 1. `docs/START_HERE.md`
-2. `docs/FOR_AGENTS.md`
-3. `TEMPLATE_INDEX.json`
-4. `AGENTS.md`
-5. Matching `modules/{stack}/MODULE.md` only
+2. `docs/CURSOR_MODES.md`
+3. `docs/FOR_AGENTS.md`
+4. `TEMPLATE_INDEX.json`
+5. `AGENTS.md`
+6. `BUILD_PLAN.md` Sequential lane (ops / agent infrastructure)
+7. `docs/EXECUTION_PLAN.md` for product milestones A–Q
+8. Active `modules/{python,web}/MODULE.md` only
+9. Golden Path app code (not `examples/`): `main.py`, `scanner/`, `backtesting/`, `docs/dashboard/`
+10. `docs/WEB_PROJECT_LAYOUT.md` / `docs/DESIGN_GUIDE.md` when touching the PWA
+11. `docs/FEATURE_MODULES.md` for Sprint 2+ vertical slices
 
 ## Do Not Read Yet
 
-- Inactive `examples/` folders
-- `KNOWLEDGE_BASE.md` (empty)
-- `docs/MAINTAINING_THE_TEMPLATE.md` (maintainers only)
+- Inactive `examples/` folders (not used — Golden Path is the real app)
+- `KNOWLEDGE_BASE.md` unless debugging a known KB entry
+- `docs/MAINTAINING_THE_TEMPLATE.md` (upstream template maintainers only)
 
-## BUILD_PLAN Labels
+## BUILD_PLAN Labels & status
 
 `AGENT` | `HUMAN` | `ADB` | `AUTO` — filter with `grep '\[AGENT\]' BUILD_PLAN.md`
+
+**Status markers on `BUILD_PLAN.md`:** 🔲 open · ✅ done · ❌ blocked (emoji only — not `- [ ]` checkboxes).
+
+**Dual-board exception:** `docs/EXECUTION_PLAN.md` keeps GitHub `- [ ]` / `- [x]` checkboxes for product milestones. See `docs/BOOTSTRAP_ALIGNMENT.md`.
 
 ## Security
 
@@ -45,6 +55,4 @@ Enable Dependabot alerts on GitHub (Settings → Code security and analysis). We
 
 ## Agent Prompts
 
-**Bootstrap:** Read @docs/START_HERE.md and @docs/INITIALIZATION_PROMPT.md. Follow Section 8. Use BUILD_PLAN Sequential lane.
-
-**Reference:** Read @docs/FOR_AGENTS.md and @TEMPLATE_INDEX.json. Apply matching rules. Do not copy examples/ wholesale.
+**Live product:** Read @docs/START_HERE.md, @docs/CURSOR_MODES.md, @docs/FOR_AGENTS.md, and @TEMPLATE_INDEX.json. Use `BUILD_PLAN.md` Sequential for ops; `docs/EXECUTION_PLAN.md` for product work. Do not copy `examples/` wholesale.

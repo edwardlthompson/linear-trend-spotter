@@ -1,0 +1,5 @@
+# Known large assets (product PWA icons / lockfile / snapshot). Do not expand casually.
+docs/dashboard/icons/
+docs/dashboard/dashboard-social-preview.png
+docs/qualified_public_snapshot.json
+uv.lock
