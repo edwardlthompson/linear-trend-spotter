@@ -2,6 +2,18 @@
 
 > Archive of finished BUILD_PLAN items. Open work remains in `BUILD_PLAN.md`.
 
+
+## Sprint A15 — Bootstrap alignment v0.15.0 — archived 2026-07-21
+
+- ✅ [AGENT] Gap analysis `docs/BOOTSTRAP_ALIGNMENT.md` + DECISION_LOG
+- ✅ [AGENT] Entrypoints START_HERE / CURSOR_MODES / FOR_AGENTS / AGENTS.md (v0.15.0)
+- ✅ [AGENT] Batch commands, expanded `.cursor/rules` (incl. local-compute)
+- ✅ [AGENT] FOSS Cursor surface (hooks, skills, agents, stack-selection, worktrees)
+- ✅ [AGENT] BUILD_PLAN emoji markers + Sequential / Parallel / Human lanes
+- ✅ [AGENT] Merged gate/hygiene scripts + adapted validate-bootstrap; Scorecard workflow
+- ✅ [AGENT] Modules + WEB_PROJECT_LAYOUT / DESIGN_GUIDE / design-tokens note
+- ✅ [AGENT] TEMPLATE_INDEX + validators; `.template-version` → 0.15.0
+
 ## Sprint 0 -- Bootstrap Adoption
 
 - [x] [AGENT] Copy bootstrap scaffold (`.cursor/rules`, agent memory, legal, docs, scripts, `.devcontainer`)
@@ -91,3 +103,21 @@
 ## Tooling added
 
 - [x] [AGENT] `scripts/apply-github-repo-settings.sh` — automates Dependabot, branch protection, optional About sync
+
+## Sprint 7 — Reliable notifications (Q23) — archived 2026-07-21
+
+- ✅ [AGENT] Q23a Tier-B ops — persistent push subs, dead-sub cleanup, dashboard re-subscribe
+- ✅ [AGENT] Q23b Tier-C ntfy bridge
+- ✅ [AGENT] Q23c OS-aware notification install UX
+- ✅ [AUTO] `scripts/provision_tier_c_ntfy.py` + snapshot `notify_public_config`
+- ✅ [AGENT] `docs/PRIVACY.md` Tier-C update
+
+## Sprint 8 — Native companions scaffolds (Q24–Q25) — archived 2026-07-21
+
+- ✅ [AGENT] Q24 Windows tray notifier — `clients/windows/`
+- ✅ [AGENT] Q25 Android UnifiedPush scaffold — `clients/android/`
+- ✅ [AUTO] winget + F-Droid prep scripts
+
+## Sprint 6 partial — Q22 — archived 2026-07-21
+
+- ✅ [AGENT] Backtest Results modal TSL % + TSL hit % columns (`docs/dashboard/app.js`, `sw.js`)

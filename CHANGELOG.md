@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Agent bootstrap scaffolding from [agent-project-bootstrap](https://github.com/edwardlthompson/agent-project-bootstrap) v0.2.1
+- Bootstrap alignment with [agent-project-bootstrap](https://github.com/edwardlthompson/agent-project-bootstrap) **v0.15.0** (from v0.2.1): `docs/CURSOR_MODES.md`, batch commands, expanded `.cursor/` FOSS surface, hygiene/gate scripts, OpenSSF Scorecard workflow, `docs/BOOTSTRAP_ALIGNMENT.md`, `HUMAN_BACKLOG.md`, design-tokens parity
+- Agent bootstrap scaffolding from agent-project-bootstrap v0.2.1 (historical)
 - `uv.lock` + consolidated `pyproject.toml` dependency management
 - CodeQL, Trivy, dependency-review, health-check, and release GitHub workflows
 - Security docs: `docs/THREAT_MODEL.md`, `docs/PRIVACY.md`, `docs/RUNBOOK.md`
@@ -17,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `BUILD_PLAN.md` uses emoji status markers (🔲/✅/❌) and Sequential / Parallel / Human lanes; product board `docs/EXECUTION_PLAN.md` keeps GitHub checkboxes
+- Agent entrypoints retargeted to live Reference / Golden Path read order
+- `.template-version` pin bumped to 0.15.0
 - CI and Render worker build use `scripts/ci_verify.sh` with `uv sync --locked --extra dev`
 - Push/snapshot Render services use uv extras instead of per-service `requirements.txt`
 - `docker-compose.yml` mirrors full `ci_verify.sh` chain

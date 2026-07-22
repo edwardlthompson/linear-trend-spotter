@@ -4,29 +4,29 @@
 
 ## Requirements (Verbatim)
 
-- **Environment & Dependency Locking:** Enforce strict package pinning via `uv.lock` and [pyproject.toml](../pyproject.toml).
+- **Environment & Dependency Locking:** Enforce strict package pinning via `uv.lock` and [pyproject.toml](../../pyproject.toml).
 - **Static Analysis & Type Hygiene:** ruff lint in CI; incremental mypy on `config` and `notifications`.
 
 ## Activation Checklist
 
-- [x] Create `pyproject.toml` with dependency pins
-- [x] Generate and commit `uv.lock`
-- [x] Enable `ruff check` in CI via `scripts/ci_verify.sh`
-- [x] Enable `mypy` in CI (scoped packages)
-- [x] Golden Path: `scripts/ci_verify.sh` (not `examples/python/`)
-- [ ] Set coverage budget threshold in CI
-- [x] Pre-commit ruff hook
-- [ ] OpenAPI/schema-first design if exposing HTTP API
-- [ ] Contract tests for public API boundaries
+- ✅ [AGENT] Create `pyproject.toml` with dependency pins
+- ✅ [AGENT] Generate and commit `uv.lock`
+- ✅ [AUTO] Enable `ruff check` in CI via `scripts/ci_verify.sh`
+- ✅ [AUTO] Enable `mypy` in CI (scoped packages)
+- ✅ [AGENT] Golden Path: `scripts/ci_verify.sh` (not `examples/python/`)
+- 🔲 [AGENT] Set coverage budget threshold in CI
+- ✅ [AUTO] Pre-commit ruff hook
+- 🔲 [AGENT] OpenAPI/schema-first design if exposing HTTP API
+- 🔲 [AGENT] Contract tests for public API boundaries
 
 ## Operations (when deployed as service)
 
-- [x] Health/readiness: snapshot relay `GET /relay-health` (see `docs/RUNBOOK.md`)
-- [ ] Structured logging (JSON, correlation IDs, no PII)
+- ✅ [AUTO] Health/readiness: snapshot relay `GET /relay-health` (see `docs/RUNBOOK.md`)
+- 🔲 [AGENT] Structured logging (JSON, correlation IDs, no PII)
 
 ## Golden Path Reference
 
-See [scripts/ci_verify.sh](../scripts/ci_verify.sh) and worker entrypoints `main.py`, `scheduler.py`.
+See [scripts/ci_verify.sh](../../scripts/ci_verify.sh) and worker entrypoints `main.py`, `scheduler.py`.
 
 ## Owner Labels for This Module
 

@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Verify required bootstrap artifacts exist and pass delegated checks
+# Verify required bootstrap artifacts exist and pass delegated checks.
+# Child-repo merge: upstream v0.15.0 REQUIRED set + project-specific uv.lock / EXECUTION_PLAN.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+
+QUICK=false
+for arg in "$@"; do
+  case "$arg" in
+    --quick) QUICK=true ;;
+  esac
+done
 
 REQUIRED=(
   README.md
@@ -15,16 +23,44 @@ REQUIRED=(
   AGENTS.md
   AGENT_MEMORY.md
   docs/START_HERE.md
+  docs/CURSOR_MODES.md
   docs/INITIALIZATION_PROMPT.md
+  .cursor/rules/cursor-modes.mdc
+  docs/DESIGN_GUIDE.md
+  docs/WEB_PROJECT_LAYOUT.md
   docs/SECURITY_TRIAGE.md
   docs/THREAT_MODEL.md
   docs/PRIVACY.md
   docs/RUNBOOK.md
+  docs/FEATURE_MODULES.md
+  docs/BOOTSTRAP_ALIGNMENT.md
+  docs/EXECUTION_PLAN.md
   .github/dependabot.yml
   .github/CODEOWNERS
   THIRD_PARTY_LICENSES.md
   .env.example
+  design-tokens/design-tokens.json
+  docs/help/BATCH_COMMANDS.md
+  docs/BATCH_COMMANDS.md
+  .cursor/rules/batch-commands.mdc
+  CODE_REVIEW.md.example
+  RELEASE_NOTES.md.example
+  HUMAN_BACKLOG.md
+  .editorconfig
+  .cursorignore
+  .cursor-session-state.example.json
+  uv.lock
 )
+
+BATCH_COMMANDS=(
+  audit cleanup debug gates triage dependabot push prerelease regress
+  feature fix init prune ci docs upgrade setup plan restore compact scope
+  bootstrap verify build ship maintain
+)
+
+for cmd in "${BATCH_COMMANDS[@]}"; do
+  REQUIRED+=(".cursor/commands/${cmd}.md")
+done
 
 ERRORS=0
 
@@ -46,25 +82,69 @@ if [ -f LICENSE ] && [ ! -s LICENSE ]; then
   ERRORS=$((ERRORS + 1))
 fi
 
-if [ ! -f uv.lock ]; then
-  echo "MISSING: uv.lock (required for locked Python installs)"
+# Example lockfiles only when examples present (this repo uses Golden Path, not examples/)
+if [ -f examples/web/package.json ] && [ ! -f examples/web/package-lock.json ]; then
+  echo "MISSING: examples/web/package-lock.json (required when web example present)"
   ERRORS=$((ERRORS + 1))
 fi
 
-if [ ! -f docs/EXECUTION_PLAN.md ]; then
-  echo "MISSING: docs/EXECUTION_PLAN.md (project-specific task board)"
+if [ -f examples/python/pyproject.toml ] && [ ! -f examples/python/uv.lock ]; then
+  echo "MISSING: examples/python/uv.lock (required when python example present)"
   ERRORS=$((ERRORS + 1))
 fi
+
+run_check bash scripts/check-python-pytest-workflow.sh
 
 if ! grep -q '\[AGENT\]' BUILD_PLAN.md && ! grep -q '\[HUMAN\]' BUILD_PLAN.md; then
   echo "MISSING: BUILD_PLAN.md owner labels"
   ERRORS=$((ERRORS + 1))
 fi
 
-run_check bash scripts/check-file-encoding.sh
-run_check bash scripts/validate-workflow-actions.sh
-run_check bash scripts/validate-template-index.sh
-run_check bash scripts/check-license-compliance.sh
+if ! grep -qE '🔲|✅|❌' BUILD_PLAN.md; then
+  echo "MISSING: BUILD_PLAN.md emoji status markers"
+  ERRORS=$((ERRORS + 1))
+fi
+
+# Exemplar sync is a no-op when examples/ absent
+if [ -f scripts/sync-exemplar-config.sh ]; then
+  run_check bash scripts/sync-exemplar-config.sh
+fi
+
+# Independent read-only checks — prefer parallel runner when present
+if [ -f scripts/lib/run_checks_parallel.py ]; then
+  if ! python3 scripts/lib/run_checks_parallel.py \
+    check-file-encoding.sh \
+    check-design-cohesion.sh \
+    check-markdown-tables.sh \
+    check-changelog-unreleased.sh \
+    check-repo-hygiene.sh \
+    check-batch-commands.sh \
+    check-cursor-hooks.sh \
+    check-build-plan-parallel.sh \
+    check-template-version-sync.sh \
+    validate-template-index.sh
+  then
+    ERRORS=$((ERRORS + 1))
+  fi
+else
+  run_check bash scripts/check-file-encoding.sh
+  run_check bash scripts/validate-template-index.sh
+fi
+
+TIER="foss"
+if [ -f .cursor/stack-selection.json ]; then
+  TIER="$(python3 -c "import json;print(json.load(open('.cursor/stack-selection.json')).get('distribution_tier','foss'))" 2>/dev/null || echo foss)"
+fi
+if [ -f scripts/sync-cursor-features.py ]; then
+  python3 scripts/sync-cursor-features.py --root "$ROOT" --tier "$TIER" || true
+fi
+if [ -f scripts/check-cursor-integrations.sh ]; then
+  run_check bash scripts/check-cursor-integrations.sh --tier "$TIER"
+fi
+
+if [ "$QUICK" = false ]; then
+  run_check bash scripts/validate-workflow-actions.sh
+fi
 
 if [ "${VALIDATE_BOOTSTRAP_FULL:-0}" = "1" ]; then
   echo "Running full ci_verify (VALIDATE_BOOTSTRAP_FULL=1)..."
@@ -76,4 +156,8 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
-echo "Bootstrap validation passed"
+if [ "$QUICK" = true ]; then
+  echo "Bootstrap validation passed (--quick: skipped validate-workflow-actions)"
+else
+  echo "Bootstrap validation passed"
+fi
