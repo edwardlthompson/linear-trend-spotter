@@ -16,6 +16,13 @@
 
 ## Entries
 
+### 2026-07-24 — Preserve scanner and notification state at empty/error boundaries
+- **Status:** Accepted
+- **Context:** Recent scanner and Tier-C changes skipped exit reconciliation on healthy zero-result scans, ignored Render-provisioned ntfy settings, and could bulk-replace Render env vars after misreading nested API rows. Exit venue inference also used defaults instead of runtime targets, while dashboard fallback/link handling could emit false state changes or accept executable URL schemes.
+- **Decision:** Finalize healthy empty scans through one shared path while preserving active state on provider failure; read `NTFY_*` env overrides; update only individual managed Render env keys; infer exit venues from runtime targets; keep committed dashboard fallback out of notification baselines; allow only HTTPS ntfy subscribe links.
+- **Alternatives considered:** Keep duplicated early-return handling; bulk-merge Render env values behind a warning; trust snapshot URLs because the worker normally generates them.
+- **Consequences:** Exit/snapshot/notification state remains consistent, unrelated Render secrets cannot be erased by Tier-C provisioning, and untrusted ntfy link schemes are rejected.
+
 ### 2026-07-21 — /push bootstrap alignment to main
 - **Status:** Accepted
 - **Context:** /push after A15 alignment commit 84efc0d; child-repo gates green; Release Please workflows not adopted.
