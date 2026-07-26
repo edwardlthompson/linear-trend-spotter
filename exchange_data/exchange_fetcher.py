@@ -5,8 +5,49 @@ Fetches listing data from various sources
 
 import requests
 import time
-from typing import List, Dict
+from typing import Any, Dict, List, Optional
+
 from .exchange_db import ExchangeDatabase
+
+# Kraken AssetPairs `base` uses internal codes (XXBT, XETH). Prefer wsname
+# ("XBT/USD") and map remaining Kraken market tickers to CMC/dashboard symbols.
+_KRAKEN_MARKET_ALIASES = {
+    "XBT": "BTC",
+    "XDG": "DOGE",
+}
+_KRAKEN_SKIP_BASES = frozenset(
+    {
+        "USD",
+        "EUR",
+        "GBP",
+        "AUD",
+        "CAD",
+        "JPY",
+        "CHF",
+        "ZUSD",
+        "ZEUR",
+        "ZGBP",
+        "ZAUD",
+        "ZCAD",
+        "ZJPY",
+    }
+)
+
+
+def normalize_kraken_base_symbol(pair_data: Dict[str, Any]) -> Optional[str]:
+    """Return a market symbol for a Kraken AssetPairs row, or None to skip."""
+    wsname = str(pair_data.get("wsname") or "").strip()
+    if "/" in wsname:
+        raw = wsname.split("/", 1)[0].strip().upper()
+    else:
+        raw = str(pair_data.get("base") or "").strip().upper()
+    if not raw or raw in _KRAKEN_SKIP_BASES:
+        return None
+    symbol = _KRAKEN_MARKET_ALIASES.get(raw, raw)
+    if symbol in _KRAKEN_SKIP_BASES:
+        return None
+    return symbol
+
 
 class ExchangeFetcher:
     """
@@ -57,7 +98,10 @@ class ExchangeFetcher:
     
     def fetch_kraken_listings(self) -> List[Dict]:
         """
-        Fetch listings from Kraken using their public API
+        Fetch listings from Kraken using their public API.
+
+        Uses AssetPairs ``wsname`` bases (not internal ``base`` codes like XXBT)
+        so symbols match CMC/dashboard tickers used by ``batch_check_listings``.
         """
         print("[INFO] Fetching Kraken listings...")
         listings = []
@@ -73,16 +117,18 @@ class ExchangeFetcher:
                     pairs = data['result']
                     seen = set()
                     
-                    for pair_name, pair_data in pairs.items():
-                        # Extract base currency
-                        base = pair_data.get('base', '')
-                        if base and base not in seen:
-                            seen.add(base)
-                            listings.append({
-                                'symbol': base,
-                                'name': base,
-                                'source': 'kraken_api'
-                            })
+                    for _pair_name, pair_data in pairs.items():
+                        if not isinstance(pair_data, dict):
+                            continue
+                        symbol = normalize_kraken_base_symbol(pair_data)
+                        if not symbol or symbol in seen:
+                            continue
+                        seen.add(symbol)
+                        listings.append({
+                            'symbol': symbol,
+                            'name': symbol,
+                            'source': 'kraken_api'
+                        })
                     
                     print(f"   [OK] Found {len(listings)} unique assets on Kraken")
                     return listings
