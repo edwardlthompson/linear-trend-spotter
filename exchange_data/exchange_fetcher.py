@@ -34,6 +34,9 @@ class ExchangeFetcher:
             if response.status_code == 200:
                 products = response.json()
                 for product in products:
+                    # Skip delisted / non-tradable products (status may be "delisted")
+                    if product.get('status') != 'online' or product.get('trading_disabled'):
+                        continue
                     # Extract base currency (e.g., BTC-USD -> BTC)
                     base_currency = product['base_currency']
                     listings.append({
@@ -52,8 +55,9 @@ class ExchangeFetcher:
         except Exception as e:
             print(f"   [WARN] Error fetching Coinbase listings: {e}")
         
-        # Fallback to hardcoded common listings if API fails
-        return self._get_coinbase_fallback()
+        # Do not return hardcoded fallback here — update_all_exchanges decides
+        # whether bootstrap seeding is safe (empty DB only).
+        return []
     
     def fetch_kraken_listings(self) -> List[Dict]:
         """
@@ -92,7 +96,7 @@ class ExchangeFetcher:
         except Exception as e:
             print(f"   [WARN] Error fetching Kraken listings: {e}")
         
-        return self._get_kraken_fallback()
+        return []
     
     def fetch_mexc_listings(self) -> List[Dict]:
         """
@@ -134,7 +138,7 @@ class ExchangeFetcher:
         except Exception as e:
             print(f"   [WARN] Error fetching MEXC listings: {e}")
         
-        return self._get_mexc_fallback()
+        return []
     
     def _get_coinbase_fallback(self) -> List[Dict]:
         """Fallback list of common Coinbase assets"""
@@ -178,6 +182,12 @@ class ExchangeFetcher:
             'mexc': self.fetch_mexc_listings
         }
         
+        fallbacks = {
+            'coinbase': self._get_coinbase_fallback,
+            'kraken': self._get_kraken_fallback,
+            'mexc': self._get_mexc_fallback,
+        }
+
         for exchange, fetcher in exchanges.items():
             if exchange not in active:
                 print(f"[SKIP] {exchange} not in TARGET_EXCHANGES")
@@ -185,8 +195,26 @@ class ExchangeFetcher:
             try:
                 if self.db.needs_update(exchange):
                     listings = fetcher()
+                    source = 'api'
+                    if not listings:
+                        existing = self.db.count_listings(exchange)
+                        if existing > 0:
+                            # Critical: never DELETE+replace a populated DB with ~30
+                            # hardcoded symbols — that truncates the scan universe and
+                            # stamps last_updated so needs_update stays false for 7 days.
+                            print(
+                                f"[WARN] {exchange} API returned no listings; "
+                                f"keeping {existing} existing pairs (will retry next refresh)"
+                            )
+                            continue
+                        listings = fallbacks[exchange]()
+                        source = 'fallback'
+                        print(
+                            f"[WARN] {exchange} empty DB bootstrap fallback: "
+                            f"{len(listings)} pairs"
+                        )
                     if listings:
-                        self.db.update_listings(exchange, listings, source='api')
+                        self.db.update_listings(exchange, listings, source=source)
                     time.sleep(2)  # Be nice to APIs
                 else:
                     print(f"[SKIP] {exchange} listings are up to date")
