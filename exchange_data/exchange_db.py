@@ -227,6 +227,16 @@ class ExchangeDatabase:
             
             return stats
     
+    def count_listings(self, exchange: str) -> int:
+        """Return how many symbols are stored for an exchange."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT COUNT(*) FROM exchange_listings WHERE exchange = ?',
+                (exchange,),
+            )
+            return int(cursor.fetchone()[0])
+
     def needs_update(self, exchange: str) -> bool:
         """Check if an exchange needs updating (older than REFRESH_DAYS)"""
         with self._get_connection() as conn:
