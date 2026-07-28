@@ -8,6 +8,15 @@ from typing import Any
 from scanner.cmc_resolve import build_cmc_normalized_lookup
 
 
+def _provider_rank(info: dict[str, Any]) -> int:
+    """Lower market-cap rank wins; missing/invalid ranks sort last."""
+    try:
+        rank = int(info.get("rank") or 0)
+    except (TypeError, ValueError):
+        return 10**9
+    return rank if rank > 0 else 10**9
+
+
 @dataclass(frozen=True, slots=True)
 class TopCoinsDataset:
     all_cmc_coins: list[dict[str, Any]]
@@ -85,16 +94,22 @@ def fetch_top_coins_dataset(
     app_logger.info(f"✅ Got {len(all_cmc_coins)} coins with gain data")
     metrics.increment("coins_retrieved", len(all_cmc_coins))
 
+    # Providers return market-cap order but reuse tickers (RAIN, FUN, …). Last-wins
+    # would bind exchange symbols to the lowest-ranked clone and corrupt gains/volume.
     cmc_by_symbol: dict[str, dict[str, Any]] = {}
     for coin in all_cmc_coins:
         info = coin.get("info") or {}
         symbol = str(info.get("symbol", "")).upper()
-        if symbol:
-            cmc_by_symbol[symbol] = {
-                "data": coin.get("data", {}),
-                "gains": coin.get("gains", {}),
-                "info": info,
-            }
+        if not symbol:
+            continue
+        payload = {
+            "data": coin.get("data", {}),
+            "gains": coin.get("gains", {}),
+            "info": info,
+        }
+        existing = cmc_by_symbol.get(symbol)
+        if existing is None or _provider_rank(info) < _provider_rank(existing.get("info") or {}):
+            cmc_by_symbol[symbol] = payload
 
     cmc_by_normalized_symbol = build_cmc_normalized_lookup(cmc_by_symbol)
 
