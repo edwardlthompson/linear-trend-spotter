@@ -12,6 +12,20 @@ def _as_float(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
+def _row_symbol(item: dict[str, Any]) -> str:
+    """Resolve symbol from flat rows or nested top_coins_stage ``info`` rows."""
+    sym = item.get("symbol")
+    if sym is None or str(sym).strip() == "":
+        info = item.get("info")
+        if isinstance(info, dict):
+            sym = info.get("symbol")
+    if sym is None or str(sym).strip() == "":
+        data = item.get("data")
+        if isinstance(data, dict):
+            sym = data.get("symbol")
+    return str(sym or "").strip().upper()
+
+
 def evaluate_regime_gate(
     all_cmc_coins: list[dict[str, Any]],
     *,
@@ -21,7 +35,9 @@ def evaluate_regime_gate(
     """Return (allowed, reason, context) using BTC momentum/volatility as regime proxy."""
     btc = None
     for item in all_cmc_coins or []:
-        if str(item.get("symbol", "")).upper() == "BTC":
+        if not isinstance(item, dict):
+            continue
+        if _row_symbol(item) == "BTC":
             btc = item
             break
 
