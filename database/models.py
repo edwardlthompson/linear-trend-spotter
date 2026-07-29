@@ -1,4 +1,5 @@
 """Database models and schema"""
+import json
 import sqlite3
 import threading
 from datetime import datetime, timedelta
@@ -7,6 +8,26 @@ from typing import Optional, List, Dict, Any
 from urllib.parse import quote
 
 from config.constants import DEFAULT_TARGET_EXCHANGES
+
+
+def _normalize_listed_on(raw: Any) -> List[str]:
+    """Normalize exchange ids for active-coin persistence and exit payloads."""
+    if isinstance(raw, str) and raw.strip():
+        text = raw.strip()
+        if text.startswith("["):
+            try:
+                raw = json.loads(text)
+            except Exception:
+                raw = [text]
+        else:
+            raw = [text]
+    if not isinstance(raw, list):
+        return []
+    return sorted({str(x).strip().lower() for x in raw if str(x).strip()})
+
+
+def _listed_on_json(coin: Dict[str, Any]) -> str:
+    return json.dumps(_normalize_listed_on(coin.get("listed_on")))
 
 
 def _build_source_url(coin: Dict[str, Any]) -> str:
@@ -307,6 +328,10 @@ class ActiveCoinsDatabase(Database):
                 cursor.execute('ALTER TABLE active_coins ADD COLUMN last_price REAL')
             if 'lifecycle_updated_at' not in active_columns:
                 cursor.execute('ALTER TABLE active_coins ADD COLUMN lifecycle_updated_at TEXT')
+            if 'listed_on' not in active_columns:
+                # Persist listing membership separately from volume strings so exit
+                # push/ntfy filters still work when CoinGecko volumes are all N/A.
+                cursor.execute('ALTER TABLE active_coins ADD COLUMN listed_on TEXT')
             
             conn.commit()
     
@@ -337,6 +362,7 @@ class ActiveCoinsDatabase(Database):
                 'trough_price': row[16] if len(row) > 16 else None,
                 'last_price': row[17] if len(row) > 17 else None,
                 'lifecycle_updated_at': row[18] if len(row) > 18 else None,
+                'listed_on': _normalize_listed_on(row[19] if len(row) > 19 else None),
             }
         return active
     
@@ -353,8 +379,8 @@ class ActiveCoinsDatabase(Database):
             INSERT OR REPLACE INTO active_coins 
             (coin_symbol, coin_name, gecko_id, entered_date, last_seen_date, last_scan_date,
              gain_7d, gain_30d, uniformity_score, coinbase_volume, kraken_volume, mexc_volume, slug, cmc_url,
-             entry_price, peak_price, trough_price, last_price, lifecycle_updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             entry_price, peak_price, trough_price, last_price, lifecycle_updated_at, listed_on)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             coin['symbol'], 
             coin['name'], 
@@ -375,6 +401,7 @@ class ActiveCoinsDatabase(Database):
             lifecycle_price,
             lifecycle_price,
             now,
+            _listed_on_json(coin),
         ))
     
     def remove_coin(self, symbol: str):
@@ -387,6 +414,7 @@ class ActiveCoinsDatabase(Database):
         
         gecko_id = coin.get('gecko_id') or coin.get('cg_id')
         current_price = float(coin.get('current_price', 0) or 0)
+        listed_on_json = _listed_on_json(coin)
         
         self.execute('''
             UPDATE active_coins 
@@ -405,6 +433,10 @@ class ActiveCoinsDatabase(Database):
                     ELSE trough_price
                 END
                 , lifecycle_updated_at = ?
+                , listed_on = CASE
+                    WHEN ? IS NOT NULL AND TRIM(?) NOT IN ('', '[]') THEN ?
+                    ELSE listed_on
+                END
             WHERE coin_symbol = ?
         ''', (
             now, now,
@@ -426,6 +458,9 @@ class ActiveCoinsDatabase(Database):
             current_price,
             current_price,
             now,
+            listed_on_json,
+            listed_on_json,
+            listed_on_json,
             coin['symbol']
         ))
 
@@ -549,6 +584,8 @@ class ActiveCoinsDatabase(Database):
                 if entered_dt:
                     lifecycle['held_days'] = max(0, (now - entered_dt).days)
 
+            stored_listed = _normalize_listed_on(coin_info.get('listed_on'))
+            listed_on = stored_listed or self._listed_on_from_volume_fields(coin_info)
             exited.append({
                 'symbol': coin_info['symbol'],
                 'name': coin_info['name'],
@@ -560,7 +597,7 @@ class ActiveCoinsDatabase(Database):
                 'exit_price': last_price if last_price > 0 else None,
                 'peak_price': peak_price if peak_price > 0 else None,
                 'trough_price': trough_price if trough_price > 0 else None,
-                'listed_on': self._listed_on_from_volume_fields(coin_info),
+                'listed_on': listed_on,
                 **lifecycle,
             })
             self.remove_coin(symbol)
