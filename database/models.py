@@ -478,12 +478,18 @@ class ActiveCoinsDatabase(Database):
     def _listed_on_from_volume_fields(coin_info: Dict[str, Any]) -> List[str]:
         """Infer target-exchange listings from persisted per-venue volume strings (exit rows)."""
         out: List[str] = []
+        try:
+            from config.settings import settings as runtime_settings
+
+            target_exchanges = set(runtime_settings.target_exchanges)
+        except Exception:
+            target_exchanges = set(DEFAULT_TARGET_EXCHANGES)
         for ex, key in (
             ('coinbase', 'coinbase_volume'),
             ('kraken', 'kraken_volume'),
             ('mexc', 'mexc_volume'),
         ):
-            if ex not in DEFAULT_TARGET_EXCHANGES:
+            if ex not in target_exchanges:
                 continue
             v = coin_info.get(key)
             if v is None:

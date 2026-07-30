@@ -118,6 +118,9 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
         next_cursor: str | None = None
         if isinstance(data, list):
             chunk = data
+            for item in data:
+                if isinstance(item, dict):
+                    next_cursor = item.get("cursor") or next_cursor
         elif isinstance(data, dict):
             chunk = data.get("envVars") or data.get("items") or []
             next_cursor = data.get("cursor") or data.get("nextCursor")
@@ -131,6 +134,9 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
     for row in raw:
         if not isinstance(row, dict):
             continue
+        nested = row.get("envVar")
+        if isinstance(nested, dict):
+            row = nested
         k = row.get("key")
         if not k:
             continue
@@ -247,6 +253,14 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
+    if args.apply and not w_env and not args.i_understand_risk:
+        print(
+            "Aborting: Render API returned zero worker env vars. A PUT would replace the worker env "
+            "with only NTFY_* values and can delete existing secrets.\n"
+            "Re-run with --i-understand-risk only if this worker intentionally has no existing env vars.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
     missing = [e["key"] for e in w_env if e["value"] == ""]
     if missing and not args.i_understand_risk:
         print(

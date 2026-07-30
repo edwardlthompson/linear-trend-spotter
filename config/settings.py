@@ -38,6 +38,8 @@ class Settings:
         except Exception as e:
             _logger.warning("Could not load config file: %s", e)
 
+        self._apply_ntfy_env_overrides()
+
         # Fail-fast safety validation and normalization
         self._config = self._validate_and_normalize(self._config)
     
@@ -162,6 +164,30 @@ class Settings:
             'NTFY_PRIORITY': 'default',
             'NTFY_DASHBOARD_URL': '',
         }
+
+    def _apply_ntfy_env_overrides(self) -> None:
+        """Overlay Render-provisioned ntfy env vars before config validation."""
+        raw_enabled = os.getenv('NTFY_ENABLED')
+        if raw_enabled is not None:
+            enabled = raw_enabled.strip().lower()
+            if enabled in {'1', 'true', 'yes', 'on'}:
+                self._config['NTFY_ENABLED'] = True
+            elif enabled in {'0', 'false', 'no', 'off', ''}:
+                self._config['NTFY_ENABLED'] = False
+            else:
+                _logger.warning("Invalid NTFY_ENABLED env value %r; treating as disabled", raw_enabled)
+                self._config['NTFY_ENABLED'] = False
+
+        for key in (
+            'NTFY_BASE_URL',
+            'NTFY_TOPIC',
+            'NTFY_TOKEN',
+            'NTFY_PRIORITY',
+            'NTFY_DASHBOARD_URL',
+        ):
+            value = os.getenv(key)
+            if value is not None:
+                self._config[key] = value.strip()
 
     def _validate_and_normalize(self, candidate: Dict[str, Any]) -> Dict[str, Any]:
         """Validate config shape/ranges and normalize values.
