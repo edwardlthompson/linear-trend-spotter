@@ -2,10 +2,40 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+from pathlib import Path
 
 from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
 from utils.scan_artifacts import build_notify_public_config, build_public_qualified_snapshot
+
+
+def _load_provision_script():
+    path = Path(__file__).resolve().parents[1] / "scripts" / "provision_tier_c_ntfy.py"
+    spec = importlib.util.spec_from_file_location("provision_tier_c_ntfy_test_module", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class _FakeResponse:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self):
+        return self._payload
+
+
+class _FakeSession:
+    def __init__(self, payloads):
+        self._payloads = list(payloads)
+
+    def get(self, *_args, **_kwargs):
+        return _FakeResponse(self._payloads.pop(0))
 
 
 def test_build_ntfy_subscribe_url() -> None:
@@ -54,3 +84,33 @@ def test_public_snapshot_never_includes_publish_token() -> None:
     blob = json.dumps(payload)
     assert "NTFY_TOKEN" not in blob
     assert payload["notify_public_config"]["ntfy_subscribe_url"] == "https://ntfy.sh/t-secret"
+
+
+def test_fetch_env_vars_parses_render_wrapped_rows() -> None:
+    provision = _load_provision_script()
+    session = _FakeSession(
+        [
+            {
+                "envVars": [
+                    {"envVar": {"key": "CMC_API_KEY", "value": "secret"}, "cursor": "row-1"},
+                    {"envVar": {"key": "NTFY_ENABLED", "value": "false"}, "cursor": "row-2"},
+                ],
+            }
+        ]
+    )
+
+    out = provision.fetch_env_vars(session, "render-token", "srv-1")
+
+    assert out == [
+        {"key": "CMC_API_KEY", "value": "secret"},
+        {"key": "NTFY_ENABLED", "value": "false"},
+    ]
+
+
+def test_fetch_env_vars_preserves_masked_empty_values() -> None:
+    provision = _load_provision_script()
+    session = _FakeSession([{"envVars": [{"envVar": {"key": "QUALIFIED_SNAPSHOT_RELAY_SECRET"}}]}])
+
+    out = provision.fetch_env_vars(session, "render-token", "srv-1")
+
+    assert out == [{"key": "QUALIFIED_SNAPSHOT_RELAY_SECRET", "value": ""}]
