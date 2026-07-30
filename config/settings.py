@@ -14,6 +14,21 @@ load_dotenv()
 
 _logger = logging.getLogger(__name__)
 
+
+def _env_text(name: str, fallback: Any) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return str(fallback or '').strip()
+    return raw.strip()
+
+
+def _env_bool(name: str, fallback: Any) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == '':
+        return bool(fallback)
+    return raw.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 class Settings:
     """Centralized settings management"""
     
@@ -944,28 +959,28 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return _env_bool('NTFY_ENABLED', self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return _env_text('NTFY_BASE_URL', self._config.get('NTFY_BASE_URL', 'https://ntfy.sh'))
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return _env_text('NTFY_TOPIC', self._config.get('NTFY_TOPIC', ''))
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return _env_text('NTFY_TOKEN', self._config.get('NTFY_TOKEN', ''))
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = _env_text('NTFY_PRIORITY', self._config.get('NTFY_PRIORITY', 'default')).lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return _env_text('NTFY_DASHBOARD_URL', self._config.get('NTFY_DASHBOARD_URL', ''))
 
     @property
     def ntfy_public_subscribe_url(self) -> str:

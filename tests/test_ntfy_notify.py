@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from config.settings import Settings
 from scanner import ntfy_notify
 
 
@@ -55,3 +56,22 @@ def test_ntfy_no_op_without_entry_exit(monkeypatch) -> None:
     with patch.object(ntfy_notify, "urlopen") as mock_open:
         ntfy_notify.maybe_notify_ntfy_qualified_changes([], [])
         mock_open.assert_not_called()
+
+
+def test_ntfy_settings_honor_env_only_render_config(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("NTFY_ENABLED", "true")
+    monkeypatch.setenv("NTFY_BASE_URL", "https://ntfy.example")
+    monkeypatch.setenv("NTFY_TOPIC", "render-topic")
+    monkeypatch.setenv("NTFY_TOKEN", "render-token")
+    monkeypatch.setenv("NTFY_PRIORITY", "urgent")
+    monkeypatch.setenv("NTFY_DASHBOARD_URL", "https://example.com/dashboard")
+
+    cfg = Settings(config_path=str(tmp_path / "missing-config.json"))
+
+    assert cfg.ntfy_enabled is True
+    assert cfg.ntfy_base_url == "https://ntfy.example"
+    assert cfg.ntfy_topic == "render-topic"
+    assert cfg.ntfy_token == "render-token"
+    assert cfg.ntfy_priority == "urgent"
+    assert cfg.ntfy_dashboard_url == "https://example.com/dashboard"
+    assert cfg.ntfy_public_subscribe_url == "https://ntfy.example/render-topic"
