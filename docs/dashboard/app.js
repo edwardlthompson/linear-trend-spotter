@@ -1163,7 +1163,7 @@
     setTierBWanted(true);
   }
 
-  async function enableTierBPushDirect() {
+  async function enableTierBPushDirect({ allowUnsubscribe = false } = {}) {
     if (!pushTierBAvailable()) return;
     if (!("Notification" in window)) {
       showError("Browser notifications are not supported here.");
@@ -1184,9 +1184,9 @@
     try {
       const reg = await navigator.serviceWorker.ready;
       const existing = await reg.pushManager.getSubscription();
-      if (existing) {
+      if (existing && allowUnsubscribe) {
         await tierBUnsubscribeRemote();
-      } else {
+      } else if (!existing) {
         await tierBSubscribeRemote();
       }
       setTierBWanted(!!(await reg.pushManager.getSubscription()));
@@ -4607,7 +4607,7 @@
         const reg = await navigator.serviceWorker.ready;
         const existing = await reg.pushManager.getSubscription();
         if (existing) {
-          await enableTierBPushDirect();
+          await enableTierBPushDirect({ allowUnsubscribe: true });
           return;
         }
       } catch {
