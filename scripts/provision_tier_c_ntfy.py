@@ -28,6 +28,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -39,7 +40,7 @@ except ImportError:
     print("Install requests: pip install requests", file=sys.stderr)
     sys.exit(1)
 
-from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
+from utils.notify_provision import build_ntfy_env_vars, build_ntfy_subscribe_url
 
 API_BASE = "https://api.render.com/v1"
 DEFAULT_WORKER = "linear-trend-spotter-worker"
@@ -152,6 +153,33 @@ def put_env_vars(
         raise SystemExit(f"PUT env-vars failed {r.status_code}: {r.text[:2000]}")
 
 
+def put_env_var(
+    session: requests.Session,
+    token: str,
+    service_id: str,
+    key: str,
+    value: str,
+) -> None:
+    r = session.put(
+        f"{API_BASE}/services/{service_id}/env-vars/{quote(key, safe='')}",
+        headers=_headers(token),
+        data=json.dumps({"value": value}),
+        timeout=60,
+    )
+    if not r.ok:
+        raise SystemExit(f"PUT env-var {key} failed {r.status_code}: {r.text[:2000]}")
+
+
+def put_ntfy_env_vars(
+    session: requests.Session,
+    token: str,
+    service_id: str,
+    updates: dict[str, str],
+) -> None:
+    for key, value in sorted(updates.items()):
+        put_env_var(session, token, service_id, key, value)
+
+
 def test_ntfy_publish(base_url: str, topic: str, publish_token: str) -> bool:
     url = build_ntfy_subscribe_url(base_url, topic)
     if not url:
@@ -247,18 +275,16 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
+    masked = sorted(e["key"] for e in w_env if e["value"] == "")
+    if masked:
         print(
-            "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
-            f"  {missing}\n"
-            "Re-run with --i-understand-risk only if you accept possible loss of those vars.",
+            "Render returned empty value(s), likely masked secrets; "
+            "leaving non-NTFY keys untouched:\n"
+            f"  {masked}",
             file=sys.stderr,
         )
-        sys.exit(2)
 
-    merged = merge_ntfy_vars(
-        w_env,
+    updates = build_ntfy_env_vars(
         enabled=True,
         base_url=base_url,
         topic=topic or "dry-run-topic",
@@ -279,7 +305,7 @@ def main() -> None:
         print("\nDry run: no PUT. Pass --apply to write to Render.")
         return
 
-    put_env_vars(session, render_token, worker_id, merged)
+    put_ntfy_env_vars(session, render_token, worker_id, updates)
     artifact_path = Path(args.artifact)
     write_provision_artifact(
         artifact_path,
@@ -298,7 +324,7 @@ def main() -> None:
         else:
             print("WARN: ntfy test publish failed (check topic ACL / token).", file=sys.stderr)
 
-    print("\nDone. Render will redeploy the worker after env changes.")
+    print("\nDone. Trigger a Render deploy if the worker does not restart automatically after env changes.")
 
 
 if __name__ == "__main__":
