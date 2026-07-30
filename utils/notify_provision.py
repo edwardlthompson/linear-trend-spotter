@@ -11,6 +11,28 @@ def build_ntfy_subscribe_url(base_url: str, topic: str) -> str:
     return f"{base}/{t}"
 
 
+def _looks_masked_or_empty(value: str) -> bool:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return True
+    lowered = normalized.lower()
+    if "redacted" in lowered or "masked" in lowered:
+        return True
+    return len(normalized) >= 4 and set(normalized) <= {"*"}
+
+
+def unsafe_preserved_env_keys(existing: list[dict[str, str]]) -> list[str]:
+    """Return non-NTFY keys that should not be carried into a replace-all env PUT."""
+    unsafe: list[str] = []
+    for entry in existing:
+        key = str(entry.get("key", "")).strip()
+        if not key or key.startswith("NTFY_"):
+            continue
+        if _looks_masked_or_empty(str(entry.get("value", ""))):
+            unsafe.append(key)
+    return unsafe
+
+
 def merge_ntfy_vars(
     existing: list[dict[str, str]],
     *,
