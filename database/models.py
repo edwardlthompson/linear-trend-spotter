@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import quote
 
-from config.constants import DEFAULT_TARGET_EXCHANGES
-
 
 def _build_source_url(coin: Dict[str, Any]) -> str:
     source_url = str(coin.get('source_url') or coin.get('cmc_url') or '').strip()
@@ -476,14 +474,18 @@ class ActiveCoinsDatabase(Database):
     
     @staticmethod
     def _listed_on_from_volume_fields(coin_info: Dict[str, Any]) -> List[str]:
-        """Infer target-exchange listings from persisted per-venue volume strings (exit rows)."""
+        """Infer runtime target-exchange listings from persisted volume fields (exit rows)."""
+        from config.settings import settings
+
+        volume_fields = {
+            'coinbase': 'coinbase_volume',
+            'kraken': 'kraken_volume',
+            'mexc': 'mexc_volume',
+        }
         out: List[str] = []
-        for ex, key in (
-            ('coinbase', 'coinbase_volume'),
-            ('kraken', 'kraken_volume'),
-            ('mexc', 'mexc_volume'),
-        ):
-            if ex not in DEFAULT_TARGET_EXCHANGES:
+        for ex in settings.target_exchanges:
+            key = volume_fields.get(ex)
+            if not key:
                 continue
             v = coin_info.get(key)
             if v is None:
