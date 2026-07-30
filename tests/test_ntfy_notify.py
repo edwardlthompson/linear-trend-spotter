@@ -6,8 +6,19 @@ from unittest.mock import MagicMock, patch
 
 from scanner import ntfy_notify
 
+NTFY_ENV_KEYS = [
+    "NTFY_ENABLED",
+    "NTFY_BASE_URL",
+    "NTFY_TOPIC",
+    "NTFY_TOKEN",
+    "NTFY_PRIORITY",
+    "NTFY_DASHBOARD_URL",
+]
+
 
 def _cfg(monkeypatch, **kwargs: object) -> None:
+    for key in NTFY_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
     for key, val in kwargs.items():
         monkeypatch.setitem(ntfy_notify.settings._config, key, val)
 
@@ -48,6 +59,24 @@ def test_ntfy_posts_when_enabled(monkeypatch) -> None:
         assert req.full_url == "https://ntfy.sh/secret-topic"
         assert req.headers["Authorization"] == "Bearer tk_test"
         assert req.headers["Click"] == "https://example.com/dash"
+
+
+def test_ntfy_reads_env_only_render_config(monkeypatch) -> None:
+    _cfg(monkeypatch, NTFY_ENABLED=False, NTFY_BASE_URL="https://config.invalid", NTFY_TOPIC="")
+    monkeypatch.setenv("NTFY_ENABLED", "true")
+    monkeypatch.setenv("NTFY_BASE_URL", "https://ntfy.example")
+    monkeypatch.setenv("NTFY_TOPIC", "env-topic")
+    monkeypatch.setenv("NTFY_TOKEN", "env-token")
+    monkeypatch.setenv("NTFY_DASHBOARD_URL", "https://example.com/env-dash")
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"ok"
+    with patch.object(ntfy_notify, "urlopen", return_value=mock_resp) as mock_open:
+        ntfy_notify.maybe_notify_ntfy_qualified_changes([{"symbol": "BTC"}], None)
+
+    req = mock_open.call_args[0][0]
+    assert req.full_url == "https://ntfy.example/env-topic"
+    assert req.headers["Authorization"] == "Bearer env-token"
+    assert req.headers["Click"] == "https://example.com/env-dash"
 
 
 def test_ntfy_no_op_without_entry_exit(monkeypatch) -> None:
