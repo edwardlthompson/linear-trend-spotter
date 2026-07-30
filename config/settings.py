@@ -14,6 +14,27 @@ load_dotenv()
 
 _logger = logging.getLogger(__name__)
 
+
+def _env_str(name: str) -> str | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    return raw.strip()
+
+
+def _env_bool(name: str) -> bool | None:
+    raw = _env_str(name)
+    if raw is None or raw == '':
+        return None
+    lowered = raw.lower()
+    if lowered in {'1', 'true', 'yes', 'on'}:
+        return True
+    if lowered in {'0', 'false', 'no', 'off'}:
+        return False
+    _logger.warning("Ignoring invalid boolean env var %s=%r", name, raw)
+    return None
+
+
 class Settings:
     """Centralized settings management"""
     
@@ -944,27 +965,42 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
+        env_value = _env_bool('NTFY_ENABLED')
+        if env_value is not None:
+            return env_value
         return bool(self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
+        env_value = _env_str('NTFY_BASE_URL')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
 
     @property
     def ntfy_topic(self) -> str:
+        env_value = _env_str('NTFY_TOPIC')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_TOPIC', '')).strip()
 
     @property
     def ntfy_token(self) -> str:
+        env_value = _env_str('NTFY_TOKEN')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_TOKEN', '')).strip()
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = (_env_str('NTFY_PRIORITY') or str(self._config.get('NTFY_PRIORITY', 'default'))).strip().lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
+        env_value = _env_str('NTFY_DASHBOARD_URL')
+        if env_value:
+            return env_value
         return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
 
     @property
