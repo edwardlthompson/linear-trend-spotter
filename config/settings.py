@@ -458,6 +458,26 @@ class Settings:
                 return json.load(f)
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in config file {self.config_path}: {e}") from e
+
+    @staticmethod
+    def _env_or_config_str(env_name: str, config_value: Any) -> str:
+        raw = os.getenv(env_name)
+        if raw is None:
+            return str(config_value).strip()
+        return raw.strip()
+
+    @classmethod
+    def _env_or_config_bool(cls, env_name: str, config_value: Any) -> bool:
+        raw = os.getenv(env_name)
+        if raw is None or not raw.strip():
+            return bool(config_value)
+        normalized = raw.strip().lower()
+        if normalized in {'1', 'true', 'yes', 'on'}:
+            return True
+        if normalized in {'0', 'false', 'no', 'off'}:
+            return False
+        _logger.warning("Invalid boolean value for %s=%r; using config value", env_name, raw)
+        return bool(config_value)
     
     @property
     def cmc_api_key(self) -> str:
@@ -944,28 +964,28 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return self._env_or_config_bool('NTFY_ENABLED', self._config.get('NTFY_ENABLED', False))
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return self._env_or_config_str('NTFY_BASE_URL', self._config.get('NTFY_BASE_URL', 'https://ntfy.sh'))
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return self._env_or_config_str('NTFY_TOPIC', self._config.get('NTFY_TOPIC', ''))
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return self._env_or_config_str('NTFY_TOKEN', self._config.get('NTFY_TOKEN', ''))
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = self._env_or_config_str('NTFY_PRIORITY', self._config.get('NTFY_PRIORITY', 'default')).lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return self._env_or_config_str('NTFY_DASHBOARD_URL', self._config.get('NTFY_DASHBOARD_URL', ''))
 
     @property
     def ntfy_public_subscribe_url(self) -> str:
