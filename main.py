@@ -69,6 +69,88 @@ from scanner.exit_pipeline import attach_exit_reasons_and_register
 from exchange_data.exchange_fetcher import ExchangeFetcher
 
 
+def _finalize_zero_qualified_scan(
+    *,
+    scan_started_at,
+    active_db,
+    settings_obj,
+    all_symbols_set,
+    top_coins_provider,
+    cmc_by_symbol,
+    cmc_by_normalized_symbol,
+    cmc_symbol_aliases,
+    coingecko_id_aliases,
+    gecko,
+    alias_markets_by_id,
+    gain_qualified_symbols=None,
+    coins_with_cg_ids_symbols=None,
+    reason='zero qualified results',
+):
+    """Publish an empty qualified set after a healthy scan with no finalists."""
+    app_logger.info("\n🔄 Finalizing zero-qualified scan (%s)...", reason)
+    entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
+        [],
+        cooldown_hours=settings_obj.alert_cooldown_hours,
+    )
+    app_logger.info(
+        "   New entries: %s, Exits: %s, Blocked by cooldown: %s",
+        len(entered),
+        len(exited),
+        len(blocked_by_cooldown),
+    )
+    attach_exit_reasons_and_register(
+        exited,
+        active_db=active_db,
+        settings=settings_obj,
+        all_symbols_set=all_symbols_set,
+        top_coins_provider=top_coins_provider,
+        cmc_by_symbol=cmc_by_symbol,
+        cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+        cmc_symbol_aliases=cmc_symbol_aliases,
+        coingecko_id_aliases=coingecko_id_aliases,
+        gecko=gecko,
+        alias_markets_by_id=alias_markets_by_id,
+        gain_qualified_symbols=gain_qualified_symbols or set(),
+        coins_with_cg_ids_symbols=coins_with_cg_ids_symbols or set(),
+        all_processed_map={},
+        uniformity_passed_symbols=set(),
+    )
+
+    if settings_obj.public_qualified_snapshot_enabled:
+        try:
+            finished_at = datetime.now(timezone.utc)
+            wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
+            notify_public = build_notify_public_config(
+                ntfy_enabled=settings_obj.ntfy_enabled,
+                ntfy_base_url=settings_obj.ntfy_base_url,
+                ntfy_topic=settings_obj.ntfy_topic,
+            )
+            write_public_qualified_snapshot(
+                settings_obj.DATA_DIR,
+                settings_obj.public_qualified_snapshot_file,
+                [],
+                field_set=settings_obj.public_qualified_snapshot_field_set,
+                scan_interval_seconds=settings_obj.scan_interval_seconds,
+                scan_health={
+                    'scan_duration_s': round(wall_s, 2),
+                    'coins_evaluated': len(all_symbols_set),
+                    'errors_count': 0,
+                },
+                qualification_exits=exited,
+                notify_public_config=notify_public,
+            )
+            app_logger.info("📤 Public qualified snapshot written (empty qualified set)")
+            maybe_push_qualified_snapshot_relay(
+                settings_obj.DATA_DIR,
+                settings_obj.public_qualified_snapshot_file,
+            )
+        except Exception as snap_err:
+            app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+
+    maybe_notify_web_push_qualified_changes(entered, exited)
+    maybe_notify_ntfy_qualified_changes(entered, exited)
+
+
 def run_scanner():
     """Main orchestration function"""
     maybe_install_structured_json_handler()
@@ -204,9 +286,26 @@ def run_scanner():
 
         if not gain_qualified:
             app_logger.warning("No coins passed gain filter")
+            _finalize_zero_qualified_scan(
+                scan_started_at=scan_started_at,
+                active_db=active_db,
+                settings_obj=settings,
+                all_symbols_set=all_symbols_set,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=set(),
+                coins_with_cg_ids_symbols=set(),
+                reason='no coins passed gain filter',
+            )
             tv_mapper.close()
             exchange_db.close()
             cg_mapper.close()
+            cache.close()
             return
 
         # ============================================================
@@ -231,9 +330,26 @@ def run_scanner():
 
         if not coins_with_cg_ids:
             app_logger.warning("No coins with CoinGecko IDs")
+            _finalize_zero_qualified_scan(
+                scan_started_at=scan_started_at,
+                active_db=active_db,
+                settings_obj=settings,
+                all_symbols_set=all_symbols_set,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=gain_qualified_symbols,
+                coins_with_cg_ids_symbols=set(),
+                reason='no coins with CoinGecko IDs',
+            )
             tv_mapper.close()
             exchange_db.close()
             cg_mapper.close()
+            cache.close()
             return
 
         no_ticker_count = hydrate_exchange_volumes_from_coingecko(

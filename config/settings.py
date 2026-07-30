@@ -942,30 +942,42 @@ class Settings:
         name = str(self._config.get('CMC_SLUG_LEARN_FILE', 'gecko_id_to_cmc_slug.json')).strip()
         return name or 'gecko_id_to_cmc_slug.json'
 
+    def _env_or_config_str(self, key: str, default: str = '') -> str:
+        env_raw = os.getenv(key)
+        if env_raw is not None:
+            return str(env_raw).strip()
+        return str(self._config.get(key, default)).strip()
+
+    def _env_or_config_bool(self, key: str, default: bool = False) -> bool:
+        env_raw = os.getenv(key)
+        if env_raw is not None:
+            return str(env_raw).strip().lower() in ('1', 'true', 'yes', 'on')
+        return bool(self._config.get(key, default))
+
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return self._env_or_config_bool('NTFY_ENABLED', False)
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return self._env_or_config_str('NTFY_BASE_URL', 'https://ntfy.sh')
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return self._env_or_config_str('NTFY_TOPIC', '')
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return self._env_or_config_str('NTFY_TOKEN', '')
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = self._env_or_config_str('NTFY_PRIORITY', 'default').lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return self._env_or_config_str('NTFY_DASHBOARD_URL', '')
 
     @property
     def ntfy_public_subscribe_url(self) -> str:

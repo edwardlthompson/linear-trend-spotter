@@ -28,6 +28,7 @@ import secrets
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -39,7 +40,7 @@ except ImportError:
     print("Install requests: pip install requests", file=sys.stderr)
     sys.exit(1)
 
-from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
+from utils.notify_provision import build_ntfy_subscribe_url
 
 API_BASE = "https://api.render.com/v1"
 DEFAULT_WORKER = "linear-trend-spotter-worker"
@@ -100,6 +101,15 @@ def find_service_id(services: list[dict[str, Any]], name: str) -> str:
     raise SystemExit(f"Service not found: {name!r}. Check name and API key workspace.")
 
 
+def _extract_env_var(row: dict[str, Any]) -> dict[str, Any] | None:
+    wrapped = row.get("envVar")
+    if isinstance(wrapped, dict):
+        row = wrapped
+    if not row.get("key"):
+        return None
+    return row
+
+
 def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> list[dict[str, str]]:
     raw: list[dict[str, Any]] = []
     cursor: str | None = None
@@ -118,6 +128,9 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
         next_cursor: str | None = None
         if isinstance(data, list):
             chunk = data
+            for item in data:
+                if isinstance(item, dict):
+                    next_cursor = item.get("cursor") or next_cursor
         elif isinstance(data, dict):
             chunk = data.get("envVars") or data.get("items") or []
             next_cursor = data.get("cursor") or data.get("nextCursor")
@@ -131,25 +144,45 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
     for row in raw:
         if not isinstance(row, dict):
             continue
-        k = row.get("key")
-        if not k:
+        env_var = _extract_env_var(row)
+        if not env_var:
             continue
-        val = row.get("value")
+        k = env_var.get("key")
+        val = env_var.get("value")
         out.append({"key": str(k), "value": "" if val is None else str(val)})
     return out
 
 
-def put_env_vars(
-    session: requests.Session, token: str, service_id: str, env_vars: list[dict[str, str]]
-) -> None:
+def _ntfy_updates(*, base_url: str, topic: str, token: str, dashboard_url: str) -> list[dict[str, str]]:
+    updates = [
+        {"key": "NTFY_ENABLED", "value": "true"},
+        {"key": "NTFY_BASE_URL", "value": base_url.rstrip("/") or "https://ntfy.sh"},
+        {"key": "NTFY_TOPIC", "value": topic},
+        {"key": "NTFY_TOKEN", "value": token},
+    ]
+    if dashboard_url:
+        updates.append({"key": "NTFY_DASHBOARD_URL", "value": dashboard_url})
+    return updates
+
+
+def put_env_var(session: requests.Session, token: str, service_id: str, key: str, value: str) -> None:
+    if not key.startswith("NTFY_"):
+        raise SystemExit(f"Refusing to update non-NTFY env var: {key}")
     r = session.put(
-        f"{API_BASE}/services/{service_id}/env-vars",
+        f"{API_BASE}/services/{service_id}/env-vars/{quote(key, safe='')}",
         headers=_headers(token),
-        data=json.dumps(env_vars),
+        data=json.dumps({"value": value}),
         timeout=120,
     )
     if not r.ok:
-        raise SystemExit(f"PUT env-vars failed {r.status_code}: {r.text[:2000]}")
+        raise SystemExit(f"PUT env-var {key} failed {r.status_code}: {r.text[:2000]}")
+
+
+def put_ntfy_env_vars(
+    session: requests.Session, token: str, service_id: str, env_vars: list[dict[str, str]]
+) -> None:
+    for row in env_vars:
+        put_env_var(session, token, service_id, row["key"], row["value"])
 
 
 def test_ntfy_publish(base_url: str, topic: str, publish_token: str) -> bool:
@@ -246,20 +279,7 @@ def main() -> None:
     worker_id = find_service_id(services, args.worker_name)
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
-    w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
-        print(
-            "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
-            f"  {missing}\n"
-            "Re-run with --i-understand-risk only if you accept possible loss of those vars.",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    merged = merge_ntfy_vars(
-        w_env,
-        enabled=True,
+    ntfy_updates = _ntfy_updates(
         base_url=base_url,
         topic=topic or "dry-run-topic",
         token=publish_token or "dry-run-token",
@@ -279,7 +299,7 @@ def main() -> None:
         print("\nDry run: no PUT. Pass --apply to write to Render.")
         return
 
-    put_env_vars(session, render_token, worker_id, merged)
+    put_ntfy_env_vars(session, render_token, worker_id, ntfy_updates)
     artifact_path = Path(args.artifact)
     write_provision_artifact(
         artifact_path,
