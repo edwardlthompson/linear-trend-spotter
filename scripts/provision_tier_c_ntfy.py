@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Provision Tier-C ntfy env vars on the Render worker via the REST API.
 
-Generates an unguessable topic + publish token, merges ``NTFY_*`` into the worker
-service env (preserving other keys), optionally verifies publish with a test POST,
-and writes a local reference file (subscribe URL only — no publish token in JSON).
+Generates an unguessable topic + publish token, writes only ``NTFY_*`` keys on
+the worker service, optionally verifies publish with a test POST, and writes a
+local reference file (subscribe URL only — no publish token in JSON).
 
 Prerequisites:
   - **RENDER_API_KEY** (Render Dashboard / Account Settings / API Keys).
@@ -39,7 +39,7 @@ except ImportError:
     print("Install requests: pip install requests", file=sys.stderr)
     sys.exit(1)
 
-from utils.notify_provision import build_ntfy_subscribe_url, merge_ntfy_vars
+from utils.notify_provision import NTFY_ENV_KEYS, build_ntfy_env_updates, build_ntfy_subscribe_url
 
 API_BASE = "https://api.render.com/v1"
 DEFAULT_WORKER = "linear-trend-spotter-worker"
@@ -131,25 +131,35 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
     for row in raw:
         if not isinstance(row, dict):
             continue
-        k = row.get("key")
+        env_row = row.get("envVar") if isinstance(row.get("envVar"), dict) else row
+        k = env_row.get("key")
         if not k:
             continue
-        val = row.get("value")
+        val = env_row.get("value")
         out.append({"key": str(k), "value": "" if val is None else str(val)})
     return out
 
 
-def put_env_vars(
-    session: requests.Session, token: str, service_id: str, env_vars: list[dict[str, str]]
+def put_env_var(
+    session: requests.Session, token: str, service_id: str, key: str, value: str
 ) -> None:
     r = session.put(
-        f"{API_BASE}/services/{service_id}/env-vars",
+        f"{API_BASE}/services/{service_id}/env-vars/{key}",
         headers=_headers(token),
-        data=json.dumps(env_vars),
+        data=json.dumps({"value": value}),
         timeout=120,
     )
     if not r.ok:
-        raise SystemExit(f"PUT env-vars failed {r.status_code}: {r.text[:2000]}")
+        raise SystemExit(f"PUT env-var {key} failed {r.status_code}: {r.text[:2000]}")
+
+
+def put_ntfy_env_vars(
+    session: requests.Session, token: str, service_id: str, updates: dict[str, str]
+) -> None:
+    for key in sorted(updates):
+        if key not in NTFY_ENV_KEYS:
+            raise SystemExit(f"Refusing to write non-NTFY env var: {key}")
+        put_env_var(session, token, service_id, key, updates[key])
 
 
 def test_ntfy_publish(base_url: str, topic: str, publish_token: str) -> bool:
@@ -213,7 +223,7 @@ def main() -> None:
     p.add_argument(
         "--i-understand-risk",
         action="store_true",
-        help="Allow PUT when Render API returns empty values for masked secrets.",
+        help="Deprecated no-op; apply now writes only NTFY_* keys and preserves other Render env vars.",
     )
     args = p.parse_args()
 
@@ -247,25 +257,22 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
+    missing = [e["key"] for e in w_env if e["value"] == "" and e["key"] not in NTFY_ENV_KEYS]
+    if missing:
         print(
-            "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
-            f"  {missing}\n"
-            "Re-run with --i-understand-risk only if you accept possible loss of those vars.",
+            "WARN: API returned empty value(s) for non-NTFY keys (often masked secrets); "
+            "they will not be modified:\n"
+            f"  {missing}\n",
             file=sys.stderr,
         )
-        sys.exit(2)
 
-    merged = merge_ntfy_vars(
-        w_env,
+    updates = build_ntfy_env_updates(
         enabled=True,
         base_url=base_url,
         topic=topic or "dry-run-topic",
         token=publish_token or "dry-run-token",
         dashboard_url=dashboard_url,
     )
-
     print("\nPlanned worker env updates:")
     print("  NTFY_ENABLED=true")
     print(f"  NTFY_BASE_URL={base_url.rstrip('/')}")
@@ -279,7 +286,7 @@ def main() -> None:
         print("\nDry run: no PUT. Pass --apply to write to Render.")
         return
 
-    put_env_vars(session, render_token, worker_id, merged)
+    put_ntfy_env_vars(session, render_token, worker_id, updates)
     artifact_path = Path(args.artifact)
     write_provision_artifact(
         artifact_path,
