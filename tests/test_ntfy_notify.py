@@ -4,12 +4,29 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scanner import ntfy_notify
+
+NTFY_ENV_KEYS = (
+    "NTFY_ENABLED",
+    "NTFY_BASE_URL",
+    "NTFY_TOPIC",
+    "NTFY_TOKEN",
+    "NTFY_PRIORITY",
+    "NTFY_DASHBOARD_URL",
+)
 
 
 def _cfg(monkeypatch, **kwargs: object) -> None:
     for key, val in kwargs.items():
         monkeypatch.setitem(ntfy_notify.settings._config, key, val)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_ntfy_env(monkeypatch) -> None:
+    for key in NTFY_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
 
 def test_ntfy_skipped_when_disabled(monkeypatch) -> None:
@@ -48,6 +65,38 @@ def test_ntfy_posts_when_enabled(monkeypatch) -> None:
         assert req.full_url == "https://ntfy.sh/secret-topic"
         assert req.headers["Authorization"] == "Bearer tk_test"
         assert req.headers["Click"] == "https://example.com/dash"
+
+
+def test_ntfy_posts_from_render_env(monkeypatch) -> None:
+    _cfg(
+        monkeypatch,
+        NTFY_ENABLED=False,
+        NTFY_BASE_URL="https://config.invalid",
+        NTFY_TOPIC="config-topic",
+        NTFY_TOKEN="config-token",
+        NTFY_PRIORITY="default",
+        NTFY_DASHBOARD_URL="https://config.invalid/dash",
+    )
+    monkeypatch.setenv("NTFY_ENABLED", "true")
+    monkeypatch.setenv("NTFY_BASE_URL", "https://ntfy.example")
+    monkeypatch.setenv("NTFY_TOPIC", "render-topic")
+    monkeypatch.setenv("NTFY_TOKEN", "render-token")
+    monkeypatch.setenv("NTFY_PRIORITY", "high")
+    monkeypatch.setenv("NTFY_DASHBOARD_URL", "https://example.com/render-dash")
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"ok"
+    with patch.object(ntfy_notify, "urlopen", return_value=mock_resp) as mock_open:
+        ntfy_notify.maybe_notify_ntfy_qualified_changes(
+            [{"symbol": "BTC", "listed_on": ["coinbase"]}],
+            None,
+        )
+        mock_open.assert_called_once()
+        req = mock_open.call_args[0][0]
+        assert req.full_url == "https://ntfy.example/render-topic"
+        assert req.headers["Authorization"] == "Bearer render-token"
+        assert req.headers["Priority"] == "high"
+        assert req.headers["Click"] == "https://example.com/render-dash"
 
 
 def test_ntfy_no_op_without_entry_exit(monkeypatch) -> None:
