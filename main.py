@@ -5,6 +5,7 @@ import sys
 import json
 from dataclasses import replace
 from datetime import datetime, timezone
+from typing import Any
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -67,6 +68,134 @@ from scanner.exit_pipeline import attach_exit_reasons_and_register
 
 # Import exchange database
 from exchange_data.exchange_fetcher import ExchangeFetcher
+
+
+def _metrics_error_total() -> int:
+    err_map = metrics.get_summary().get("errors") or {}
+    err_total = 0
+    for v in err_map.values():
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            continue
+        err_total += int(v)
+    return err_total
+
+
+def _finalize_zero_qualified_scan(
+    *,
+    active_db: Any,
+    all_symbols: list[str],
+    all_symbols_set: set[str],
+    scan_started_at: datetime,
+    top_coins_provider: str,
+    cmc_by_symbol: dict[str, Any],
+    cmc_by_normalized_symbol: Any,
+    cmc_symbol_aliases: dict[str, str],
+    coingecko_id_aliases: dict[str, str],
+    gecko: Any,
+    alias_markets_by_id: dict[str, dict],
+    gain_qualified_symbols: set[str],
+    coins_with_cg_ids_symbols: set[str] | None = None,
+) -> None:
+    """Finalize a healthy scan that produced no current qualified coins."""
+    app_logger.info("\n🔄 Finalizing zero-qualified scan...")
+    entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
+        [],
+        cooldown_hours=settings.alert_cooldown_hours,
+    )
+    app_logger.info(
+        f"   New entries: {len(entered)}, Exits: {len(exited)}, "
+        f"Blocked by cooldown: {len(blocked_by_cooldown)}"
+    )
+
+    attach_exit_reasons_and_register(
+        exited,
+        active_db=active_db,
+        settings=settings,
+        all_symbols_set=all_symbols_set,
+        top_coins_provider=top_coins_provider,
+        cmc_by_symbol=cmc_by_symbol,
+        cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+        cmc_symbol_aliases=cmc_symbol_aliases,
+        coingecko_id_aliases=coingecko_id_aliases,
+        gecko=gecko,
+        alias_markets_by_id=alias_markets_by_id,
+        gain_qualified_symbols=gain_qualified_symbols,
+        coins_with_cg_ids_symbols=coins_with_cg_ids_symbols or set(),
+        all_processed_map={},
+        uniformity_passed_symbols=set(),
+    )
+
+    try:
+        analytics = update_exit_reason_analytics(settings.exit_analytics_file, exited)
+        if exited:
+            app_logger.info(
+                "📈 Exit analytics updated: "
+                f"run_exits={analytics.get('last_run', {}).get('exits', 0)}, "
+                f"total_exits={analytics.get('total_exits', 0)}"
+            )
+    except Exception as analytics_error:
+        app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
+
+    finished_at = datetime.now(timezone.utc)
+    wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
+
+    if settings.scan_heartbeat_enabled:
+        try:
+            write_scan_heartbeat(
+                settings.DATA_DIR,
+                filename=settings.scan_heartbeat_file,
+                status="ok",
+                started_at=scan_started_at,
+                finished_at=finished_at,
+                extra={
+                    "gain_qualified": len(gain_qualified_symbols),
+                    "final_results": 0,
+                    "entered": len(entered),
+                    "exited": len(exited),
+                },
+            )
+            app_logger.info("💓 Scan heartbeat written")
+        except Exception as hb_err:
+            app_logger.warning("⚠️ Scan heartbeat failed: %s", hb_err)
+
+    if settings.public_qualified_snapshot_enabled:
+        try:
+            api_cost_panel = build_api_cost_panel_for_snapshot(
+                metrics.get_summary(),
+                coingecko_monthly_http_cap=settings.scan_cost_panel_coingecko_monthly_http_cap,
+                polygon_monthly_http_cap=settings.scan_cost_panel_polygon_monthly_http_cap,
+                cmc_monthly_http_cap=settings.scan_cost_panel_cmc_monthly_http_cap,
+            )
+            notify_public = build_notify_public_config(
+                ntfy_enabled=settings.ntfy_enabled,
+                ntfy_base_url=settings.ntfy_base_url,
+                ntfy_topic=settings.ntfy_topic,
+            )
+            write_public_qualified_snapshot(
+                settings.DATA_DIR,
+                settings.public_qualified_snapshot_file,
+                [],
+                field_set=settings.public_qualified_snapshot_field_set,
+                scan_interval_seconds=settings.scan_interval_seconds,
+                scan_health={
+                    "scan_duration_s": round(wall_s, 2),
+                    "coins_evaluated": len(all_symbols),
+                    "errors_count": _metrics_error_total(),
+                },
+                api_cost_panel=api_cost_panel,
+                qualification_exits=exited,
+                notify_public_config=notify_public,
+            )
+            app_logger.info("📤 Public qualified snapshot written")
+            maybe_push_qualified_snapshot_relay(
+                settings.DATA_DIR,
+                settings.public_qualified_snapshot_file,
+            )
+        except Exception as snap_err:
+            app_logger.warning("⚠️ Public snapshot failed: %s", snap_err)
+
+    maybe_notify_web_push_qualified_changes(entered, exited)
+    maybe_notify_ntfy_qualified_changes(entered, exited)
 
 
 def run_scanner():
@@ -204,9 +333,24 @@ def run_scanner():
 
         if not gain_qualified:
             app_logger.warning("No coins passed gain filter")
+            _finalize_zero_qualified_scan(
+                active_db=active_db,
+                all_symbols=all_symbols,
+                all_symbols_set=all_symbols_set,
+                scan_started_at=scan_started_at,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=set(),
+            )
             tv_mapper.close()
             exchange_db.close()
             cg_mapper.close()
+            cache.close()
             return
 
         # ============================================================
@@ -231,9 +375,25 @@ def run_scanner():
 
         if not coins_with_cg_ids:
             app_logger.warning("No coins with CoinGecko IDs")
+            _finalize_zero_qualified_scan(
+                active_db=active_db,
+                all_symbols=all_symbols,
+                all_symbols_set=all_symbols_set,
+                scan_started_at=scan_started_at,
+                top_coins_provider=top_coins_provider,
+                cmc_by_symbol=cmc_by_symbol,
+                cmc_by_normalized_symbol=cmc_by_normalized_symbol,
+                cmc_symbol_aliases=cmc_symbol_aliases,
+                coingecko_id_aliases=coingecko_id_aliases,
+                gecko=gecko,
+                alias_markets_by_id=alias_markets_by_id,
+                gain_qualified_symbols=gain_qualified_symbols,
+                coins_with_cg_ids_symbols=set(),
+            )
             tv_mapper.close()
             exchange_db.close()
             cg_mapper.close()
+            cache.close()
             return
 
         no_ticker_count = hydrate_exchange_volumes_from_coingecko(
@@ -627,12 +787,6 @@ def run_scanner():
                     )
                 finished_at = datetime.now(timezone.utc)
                 wall_s = max(0.0, (finished_at - scan_started_at).total_seconds())
-                err_map = metrics.get_summary().get("errors") or {}
-                err_total = 0
-                for v in err_map.values():
-                    if isinstance(v, bool) or not isinstance(v, (int, float)):
-                        continue
-                    err_total += int(v)
                 # Always embed HTTP usage counts from this scan (metrics H0/J3) so the dashboard
                 # can show per-vendor bars; SCAN_COSTS_ENABLED only gates the separate scan_costs.json artifact.
                 vendor_quotas = {}
@@ -666,7 +820,7 @@ def run_scanner():
                     scan_health={
                         "scan_duration_s": round(wall_s, 2),
                         "coins_evaluated": len(all_symbols),
-                        "errors_count": int(err_total),
+                        "errors_count": int(_metrics_error_total()),
                     },
                     regime_gate=regime_meta,
                     api_cost_panel=api_cost_panel,

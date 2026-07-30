@@ -131,12 +131,20 @@ def fetch_env_vars(session: requests.Session, token: str, service_id: str) -> li
     for row in raw:
         if not isinstance(row, dict):
             continue
-        k = row.get("key")
-        if not k:
-            continue
-        val = row.get("value")
-        out.append({"key": str(k), "value": "" if val is None else str(val)})
+        normalized = _normalize_env_var_row(row)
+        if normalized:
+            out.append(normalized)
     return out
+
+
+def _normalize_env_var_row(row: dict[str, Any]) -> dict[str, str] | None:
+    """Render may wrap env vars as {'envVar': {...}, 'cursor': ...}."""
+    src = row.get("envVar") if isinstance(row.get("envVar"), dict) else row
+    k = src.get("key")
+    if not k:
+        return None
+    val = src.get("value")
+    return {"key": str(k), "value": "" if val is None else str(val)}
 
 
 def put_env_vars(
@@ -247,8 +255,17 @@ def main() -> None:
     print(f"Worker service id: {worker_id} ({args.worker_name})")
 
     w_env = fetch_env_vars(session, render_token, worker_id)
-    missing = [e["key"] for e in w_env if e["value"] == ""]
-    if missing and not args.i_understand_risk:
+    if args.apply and not w_env and not args.i_understand_risk:
+        print(
+            "Aborting: Render API returned zero existing worker env vars. "
+            "PUT /env-vars replaces the full set, so continuing could wipe secrets. "
+            "Check API response shape or re-run with --i-understand-risk only if this is expected.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    missing = [e["key"] for e in w_env if e["value"] == "" and not e["key"].startswith("NTFY_")]
+    if args.apply and missing and not args.i_understand_risk:
         print(
             "Aborting: API returned empty value(s) for keys (often masked secrets):\n"
             f"  {missing}\n"

@@ -14,6 +14,25 @@ load_dotenv()
 
 _logger = logging.getLogger(__name__)
 
+
+def _env_bool(name: str, fallback: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return fallback
+    value = raw.strip().lower()
+    if value in {'1', 'true', 'yes', 'on'}:
+        return True
+    if value in {'0', 'false', 'no', 'off'}:
+        return False
+    return fallback
+
+
+def _env_str(name: str, fallback: str) -> str:
+    raw = os.getenv(name)
+    if raw is None:
+        return fallback
+    return raw.strip()
+
 class Settings:
     """Centralized settings management"""
     
@@ -944,28 +963,28 @@ class Settings:
 
     @property
     def ntfy_enabled(self) -> bool:
-        return bool(self._config.get('NTFY_ENABLED', False))
+        return _env_bool('NTFY_ENABLED', bool(self._config.get('NTFY_ENABLED', False)))
 
     @property
     def ntfy_base_url(self) -> str:
-        return str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')).strip()
+        return _env_str('NTFY_BASE_URL', str(self._config.get('NTFY_BASE_URL', 'https://ntfy.sh')))
 
     @property
     def ntfy_topic(self) -> str:
-        return str(self._config.get('NTFY_TOPIC', '')).strip()
+        return _env_str('NTFY_TOPIC', str(self._config.get('NTFY_TOPIC', '')))
 
     @property
     def ntfy_token(self) -> str:
-        return str(self._config.get('NTFY_TOKEN', '')).strip()
+        return _env_str('NTFY_TOKEN', str(self._config.get('NTFY_TOKEN', '')))
 
     @property
     def ntfy_priority(self) -> str:
-        raw = str(self._config.get('NTFY_PRIORITY', 'default')).strip().lower()
+        raw = _env_str('NTFY_PRIORITY', str(self._config.get('NTFY_PRIORITY', 'default'))).lower()
         return raw if raw in ('min', 'low', 'default', 'high', 'max', 'urgent') else 'default'
 
     @property
     def ntfy_dashboard_url(self) -> str:
-        return str(self._config.get('NTFY_DASHBOARD_URL', '')).strip()
+        return _env_str('NTFY_DASHBOARD_URL', str(self._config.get('NTFY_DASHBOARD_URL', '')))
 
     @property
     def ntfy_public_subscribe_url(self) -> str:
