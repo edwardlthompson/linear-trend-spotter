@@ -1834,9 +1834,12 @@
       const ev = c.exchange_volumes && typeof c.exchange_volumes === "object" ? c.exchange_volumes : {};
       const listedRaw = Array.isArray(c.listed_on) ? c.listed_on : [];
       const listed = listedRaw.map((x) => String(x || "").trim().toLowerCase()).filter(Boolean);
+      // Volume fallback must ignore N/A stubs — scanner always keys all target
+      // exchanges (often "N/A"). Treating those keys as listings falsely matches
+      // exchange filters and fires Tier-A filtered alerts for venues the coin is not on.
       const fromVol = Object.keys(ev)
         .map((k) => String(k || "").trim().toLowerCase())
-        .filter(Boolean);
+        .filter((k) => Boolean(k) && parseVolUsd(ev[k]) != null);
       const keysSource = listed.length ? listed : fromVol;
       const uniq = [...new Set(keysSource.filter((k) => TARGET_EXCHANGE_IDS.has(k)))].sort();
       if (!uniq.length) {
