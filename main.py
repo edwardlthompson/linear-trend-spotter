@@ -63,7 +63,10 @@ from scanner.listings_and_volumes import (
     hydrate_exchange_volumes_from_coingecko,
 )
 from scanner.uniformity_stages import apply_uniformity_pass_and_regime, compute_uniformities_from_ohlcv
-from scanner.exit_pipeline import attach_exit_reasons_and_register
+from scanner.exit_pipeline import (
+    attach_exit_reasons_and_register,
+    exclude_cooldown_blocked_coins,
+)
 
 # Import exchange database
 from exchange_data.exchange_fetcher import ExchangeFetcher
@@ -412,6 +415,20 @@ def run_scanner():
             f"   New entries: {len(entered)}, Exits: {len(exited)}, "
             f"Blocked by cooldown: {len(blocked_by_cooldown)}"
         )
+        # Keep public snapshot / history aligned with Active-DB: cooldown-blocked
+        # re-qualifiers must not appear as qualified ghosts (Tier-A false enters;
+        # later drops produce no worker exit/push).
+        if blocked_by_cooldown:
+            before_n = len(final_results)
+            final_results = exclude_cooldown_blocked_coins(
+                final_results, blocked_by_cooldown
+            )
+            removed_n = before_n - len(final_results)
+            if removed_n:
+                app_logger.info(
+                    "   Excluded %s cooldown-blocked coin(s) from qualified snapshot set",
+                    removed_n,
+                )
         app_logger.info(
             "   List change signals: use the public snapshot + dashboard (optional Tier-A poll / Tier-B web push)."
         )
