@@ -9,6 +9,29 @@ from config.constants import STABLECOINS
 from scanner.top_coin_resolution import resolve_top_coin_data
 
 
+def exclude_cooldown_blocked_coins(
+    coins: list[dict[str, Any]],
+    blocked_by_cooldown: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Omit cooldown-blocked symbols from the public qualified/snapshot set.
+
+    Active-DB skips re-entry while cooling down; keeping those symbols in
+    ``final_results`` published ghosts (Tier-A appear/disappear without B/C).
+    """
+    if not coins or not blocked_by_cooldown:
+        return coins
+    blocked = {
+        str(row.get("symbol") or "").strip().upper()
+        for row in blocked_by_cooldown
+        if row.get("symbol")
+    }
+    if not blocked:
+        return coins
+    return [
+        c for c in coins if str(c.get("symbol") or "").strip().upper() not in blocked
+    ]
+
+
 def attach_exit_reasons_and_register(
     exited: list[dict[str, Any]],
     *,
