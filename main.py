@@ -64,6 +64,7 @@ from scanner.listings_and_volumes import (
 )
 from scanner.uniformity_stages import apply_uniformity_pass_and_regime, compute_uniformities_from_ohlcv
 from scanner.exit_pipeline import attach_exit_reasons_and_register
+from scanner.backtest_entry_enrich import enrich_entered_with_current_backtest
 
 # Import exchange database
 from exchange_data.exchange_fetcher import ExchangeFetcher
@@ -416,33 +417,9 @@ def run_scanner():
             "   List change signals: use the public snapshot + dashboard (optional Tier-A poll / Tier-B web push)."
         )
 
-        if entered:
-            fallback_summary = backtest_summary
-            if not fallback_summary:
-                artifact_path = settings.base_dir / "backtest_results.json"
-                if artifact_path.exists():
-                    try:
-                        with artifact_path.open("r", encoding="utf-8") as handle:
-                            fallback_summary = json.load(handle)
-                    except Exception as artifact_error:
-                        app_logger.warning(f"   ⚠️ Could not read backtest artifact for notifications: {artifact_error}")
-
-            if fallback_summary:
-                for coin in entered:
-                    for enriched_coin in final_results:
-                        if str(enriched_coin.get('symbol', '')).upper() == str(coin.get('symbol', '')).upper():
-                            coin.update(enriched_coin)
-
-                for coin in entered:
-                    if coin.get('backtest_top_strategies') and coin.get('backtest_buy_hold'):
-                        continue
-                    symbol = coin.get('symbol', '')
-                    if not symbol:
-                        continue
-                    if fallback_summary:
-                        details = notification_rows_for_symbol(fallback_summary, symbol, top_n=5)
-                        coin['backtest_top_strategies'] = details.get('top_strategies', [])
-                        coin['backtest_buy_hold'] = details.get('buy_hold')
+        # Only attach this scan's backtest summary — never disk backtest_results.json
+        # (stale artifact would poison snapshot + entry alerts when backtests skip/fail).
+        enrich_entered_with_current_backtest(entered, final_results, backtest_summary)
 
         attach_exit_reasons_and_register(
             exited,
