@@ -493,20 +493,29 @@ class ActiveCoinsDatabase(Database):
                 out.append(ex)
         return out
 
-    def get_entered_exited(self, current_coins: List[Dict[str, Any]], cooldown_hours: int = 0) -> tuple:
+    def get_entered_exited(
+        self,
+        current_coins: List[Dict[str, Any]],
+        cooldown_hours: int = 0,
+        *,
+        apply_mutations: bool = True,
+    ) -> tuple:
         """
         Compare current coins with active coins to find entries and exits.
         Returns (entered, exited, blocked_by_cooldown) tuples.
         Keyed by symbol only per spec §8.1.
+
+        When ``apply_mutations`` is False, only compute the diff — call
+        ``apply_entered_exited_mutations`` after snapshot/notify so a crash
+        between Active DB writes and alerts cannot permanently drop entry/exit
+        notifications (at-least-once on the next scan).
         """
         active = self.get_active()
         now = datetime.now()
-        
-        # Create set of current coin symbols (not name_symbol pairs)
+
         current_symbols = {c['symbol'] for c in current_coins}
         current_dict = {c['symbol']: c for c in current_coins}
-        
-        # Find entered (in current but not in active)
+
         entered = []
         blocked_by_cooldown = []
         for symbol in current_symbols - set(active.keys()):
@@ -517,11 +526,8 @@ class ActiveCoinsDatabase(Database):
                     'cooldown_until': cooldown_until.isoformat(),
                 })
                 continue
-            coin = current_dict[symbol]
-            entered.append(coin)
-            self.add_coin(coin)
-        
-        # Find exited (in active but not in current)
+            entered.append(current_dict[symbol])
+
         exited = []
         for symbol in set(active.keys()) - current_symbols:
             coin_info = active[symbol]
@@ -563,11 +569,44 @@ class ActiveCoinsDatabase(Database):
                 'listed_on': self._listed_on_from_volume_fields(coin_info),
                 **lifecycle,
             })
-            self.remove_coin(symbol)
-            self.register_exit(symbol, reason='No longer qualified', cooldown_hours=cooldown_hours)
-        
-        # Update remaining active coins
-        for symbol in current_symbols & set(active.keys()):
-            self.update_coin(current_dict[symbol])
-        
+
+        if apply_mutations:
+            self.apply_entered_exited_mutations(
+                entered,
+                exited,
+                current_coins,
+                cooldown_hours=cooldown_hours,
+            )
+
         return entered, exited, blocked_by_cooldown
+
+    def apply_entered_exited_mutations(
+        self,
+        entered: List[Dict[str, Any]],
+        exited: List[Dict[str, Any]],
+        current_coins: List[Dict[str, Any]],
+        cooldown_hours: int = 0,
+    ) -> None:
+        """Persist Active DB enter/exit/stay updates after alerts have been attempted."""
+        current_dict = {c['symbol']: c for c in current_coins}
+        active_symbols = set(self.get_active().keys())
+
+        for coin in entered:
+            symbol = coin.get('symbol')
+            if not symbol:
+                continue
+            self.add_coin(coin)
+
+        for coin in exited:
+            symbol = coin.get('symbol')
+            if not symbol:
+                continue
+            if symbol in active_symbols:
+                self.remove_coin(symbol)
+            reason = str(coin.get('exit_reason') or 'No longer qualified')
+            self.register_exit(symbol, reason=reason, cooldown_hours=cooldown_hours)
+
+        stayed = set(current_dict.keys()) & active_symbols
+        stayed -= {c.get('symbol') for c in entered if c.get('symbol')}
+        for symbol in stayed:
+            self.update_coin(current_dict[symbol])

@@ -26,6 +26,7 @@ def attach_exit_reasons_and_register(
     coins_with_cg_ids_symbols: set[str],
     all_processed_map: dict[str, dict[str, Any]],
     uniformity_passed_symbols: set[str],
+    register: bool = True,
 ) -> None:
     for coin in exited:
         symbol = coin["symbol"]
@@ -116,6 +117,9 @@ def attach_exit_reasons_and_register(
             continue
 
         coin["exit_reason"] = "No longer met qualification criteria"
+
+    if not register:
+        return
 
     for coin in exited:
         active_db.register_exit(
