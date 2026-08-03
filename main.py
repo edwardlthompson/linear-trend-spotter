@@ -404,9 +404,12 @@ def run_scanner():
         # Check entries/exits
         app_logger.info("\n🔄 Checking for entries/exits...")
         active_before_update = active_db.get_active()
+        # Diff only — persist Active DB after snapshot/notify so a crash cannot
+        # permanently drop Tier-B/C entry/exit alerts (see apply_entered_exited_mutations).
         entered, exited, blocked_by_cooldown = active_db.get_entered_exited(
             final_results,
             cooldown_hours=settings.alert_cooldown_hours,
+            apply_mutations=False,
         )
         app_logger.info(
             f"   New entries: {len(entered)}, Exits: {len(exited)}, "
@@ -460,6 +463,7 @@ def run_scanner():
             coins_with_cg_ids_symbols=coins_with_cg_ids_symbols,
             all_processed_map=all_processed_map,
             uniformity_passed_symbols=uniformity_passed_symbols,
+            register=False,
         )
 
         try:
@@ -473,7 +477,6 @@ def run_scanner():
         except Exception as analytics_error:
             app_logger.warning(f"⚠️ Exit analytics update failed: {analytics_error}")
 
-        active_after_update = active_db.get_active()
         bt_top_state_path = settings.base_dir / "backtest_top_strategy_state.json"
         final_symbol_set = {str(c.get("symbol", "")).upper() for c in final_results if c.get("symbol")}
         watchlist_rows = compute_watchlist_rows(
@@ -493,45 +496,7 @@ def run_scanner():
                 app_logger.info("📋 Watchlist export written (%s row(s))", len(watchlist_rows))
             except Exception as export_err:
                 app_logger.warning("⚠️ Watchlist export failed: %s", export_err)
-        insights_payload = update_scanner_insights(
-            settings.scanner_insights_file,
-            final_results=final_results,
-            all_processed=all_processed,
-            gain_qualified=gain_qualified,
-            all_cmc_coins=all_cmc_coins,
-            entered=entered,
-            exited=exited,
-            active_before_update=active_before_update,
-            active_after_update=active_after_update,
-            blocked_by_cooldown=blocked_by_cooldown,
 
-            current_metrics_summary=metrics.get_summary(),
-            portfolio_starting_capital=settings.portfolio_sim_starting_capital,
-        )
-        app_logger.info("🧭 Insights updated")
-        if settings.portfolio_multi_sim_enabled:
-            try:
-                write_multi_portfolio_simulation(
-                    path=settings.portfolio_multi_sim_file,
-                    insights_payload=insights_payload,
-                    capitals=settings.portfolio_multi_sim_capitals,
-                )
-                app_logger.info("🧮 Multi-portfolio simulation updated")
-            except Exception as multi_sim_err:
-                app_logger.warning("⚠️ Multi-portfolio simulation update failed: %s", multi_sim_err)
-        if settings.alert_backtest_report_enabled:
-            try:
-                write_alert_backtest_report(
-                    path=settings.alert_backtest_report_file,
-                    final_results=final_results,
-                    active_after_update=active_after_update,
-                    exited=exited,
-                    top_n=settings.alert_backtest_report_top_n,
-                )
-                app_logger.info("📘 Alert backtest report updated")
-            except Exception as report_err:
-                app_logger.warning("⚠️ Alert backtest report update failed: %s", report_err)
-        
         # ============================================================
         # STEP 10: Outbound alerts are web-only (snapshot JSON + optional web push below).
         # ============================================================
@@ -683,6 +648,61 @@ def run_scanner():
 
         maybe_notify_web_push_qualified_changes(entered, exited)
         maybe_notify_ntfy_qualified_changes(entered, exited)
+
+        # Persist Active DB only after snapshot/notify so crashes retry the same
+        # enter/exit diff on the next scan (at-least-once alerts).
+        try:
+            active_db.apply_entered_exited_mutations(
+                entered,
+                exited,
+                final_results,
+                cooldown_hours=settings.alert_cooldown_hours,
+            )
+        except Exception as active_apply_err:
+            app_logger.error(
+                "❌ Active DB apply after notify failed (alerts may repeat next scan): %s",
+                active_apply_err,
+            )
+            raise
+
+        active_after_update = active_db.get_active()
+        insights_payload = update_scanner_insights(
+            settings.scanner_insights_file,
+            final_results=final_results,
+            all_processed=all_processed,
+            gain_qualified=gain_qualified,
+            all_cmc_coins=all_cmc_coins,
+            entered=entered,
+            exited=exited,
+            active_before_update=active_before_update,
+            active_after_update=active_after_update,
+            blocked_by_cooldown=blocked_by_cooldown,
+            current_metrics_summary=metrics.get_summary(),
+            portfolio_starting_capital=settings.portfolio_sim_starting_capital,
+        )
+        app_logger.info("🧭 Insights updated")
+        if settings.portfolio_multi_sim_enabled:
+            try:
+                write_multi_portfolio_simulation(
+                    path=settings.portfolio_multi_sim_file,
+                    insights_payload=insights_payload,
+                    capitals=settings.portfolio_multi_sim_capitals,
+                )
+                app_logger.info("🧮 Multi-portfolio simulation updated")
+            except Exception as multi_sim_err:
+                app_logger.warning("⚠️ Multi-portfolio simulation update failed: %s", multi_sim_err)
+        if settings.alert_backtest_report_enabled:
+            try:
+                write_alert_backtest_report(
+                    path=settings.alert_backtest_report_file,
+                    final_results=final_results,
+                    active_after_update=active_after_update,
+                    exited=exited,
+                    top_n=settings.alert_backtest_report_top_n,
+                )
+                app_logger.info("📘 Alert backtest report updated")
+            except Exception as report_err:
+                app_logger.warning("⚠️ Alert backtest report update failed: %s", report_err)
 
         app_logger.info("\n✅ Scan complete")
         
