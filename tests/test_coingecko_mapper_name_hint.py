@@ -31,11 +31,12 @@ def test_get_coin_id_with_name_hint_disambiguates_duplicate_symbols() -> None:
         )
         conn.commit()
 
-        assert m.get_coin_id("TEST") == "token-a"
+        # Ambiguous tickers must not guess via rowid (BTC→batcat class of bugs).
+        assert m.get_coin_id("TEST") is None
         assert m.get_coin_id_with_name_hint("TEST", "Beta Token") == "token-b"
         assert m.get_coin_id_with_name_hint("TEST", "Alpha Token") == "token-a"
-        assert m.get_coin_id_with_name_hint("TEST", None) == "token-a"
-        assert m.get_coin_id_with_name_hint("TEST", "") == "token-a"
+        assert m.get_coin_id_with_name_hint("TEST", None) is None
+        assert m.get_coin_id_with_name_hint("TEST", "") is None
         m.close()
 
 
