@@ -184,22 +184,26 @@ class CoinGeckoMapper:
     
     def get_coin_id(self, symbol: str) -> Optional[str]:
         """
-        Get CoinGecko ID for a symbol
-        Returns the most likely match (by market cap ranking)
+        Get CoinGecko ID for a symbol when the mapping is unambiguous.
+
+        ``/coins/list`` insert order is **not** market-cap order (``ORDER BY rowid``
+        previously returned bridged/junk ids first for majors like BTC/ETH/SOL).
+        When multiple rows share a ticker, return None — callers must disambiguate
+        with ``get_coin_id_with_name_hint`` or an explicit alias.
         """
         if not symbol:
             return None
-        
-        cursor = self._execute('''
-            SELECT coingecko_id FROM symbol_mapping 
+
+        cursor = self._execute(
+            """
+            SELECT coingecko_id FROM symbol_mapping
             WHERE symbol = ?
-            ORDER BY rowid  -- This approximates market cap ranking
-            LIMIT 1
-        ''', (symbol.upper(),))
-        
-        result = cursor.fetchone()
-        if result:
-            return result[0]
+            """,
+            (symbol.upper(),),
+        )
+        rows = cursor.fetchall()
+        if len(rows) == 1:
+            return rows[0][0]
         return None
 
     def get_coin_id_with_name_hint(self, symbol: str, name: Optional[str]) -> Optional[str]:
@@ -216,35 +220,42 @@ class CoinGeckoMapper:
                 """
                 SELECT coingecko_id FROM symbol_mapping
                 WHERE symbol = ? AND lower(trim(coalesce(name, ''))) = lower(trim(?))
-                LIMIT 1
                 """,
                 (sym, nm),
             )
-            row = cursor.fetchone()
-            if row:
-                return row[0]
+            rows = cursor.fetchall()
+            if len(rows) == 1:
+                return rows[0][0]
+            # Multiple same-name rows remain ambiguous; do not LIMIT 1 guess.
         return self.get_coin_id(sym)
 
     def get_coin_ids_batch(self, symbols: List[str]) -> Dict[str, str]:
         """
-        Get CoinGecko IDs for multiple symbols in one query
+        Get CoinGecko IDs for multiple symbols in one query.
+
+        Only returns symbols with exactly one mapping row — never an arbitrary
+        ``GROUP BY`` / ``rowid`` pick among ticker collisions.
         """
         if not symbols:
             return {}
-        
+
         symbols_upper = [s.upper() for s in symbols]
-        placeholders = ','.join(['?' for _ in symbols_upper])
-        
-        cursor = self._execute(f'''
-            SELECT symbol, coingecko_id FROM symbol_mapping 
+        placeholders = ",".join(["?" for _ in symbols_upper])
+
+        cursor = self._execute(
+            f"""
+            SELECT symbol, coingecko_id FROM symbol_mapping
             WHERE symbol IN ({placeholders})
-            GROUP BY symbol  -- Take first occurrence (highest ranked)
-        ''', symbols_upper)
-        
+            GROUP BY symbol
+            HAVING COUNT(*) = 1
+            """,
+            symbols_upper,
+        )
+
         results = {}
         for row in cursor.fetchall():
             results[row[0]] = row[1]
-        
+
         return results
     
     def get_all_mappings(self) -> Dict[str, str]:
