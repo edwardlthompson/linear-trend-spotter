@@ -75,6 +75,7 @@ def attach_signal_age(coin: dict, loader: BacktestDataLoader, logger: Any | None
         timeframe=timeframe,
         days=30,
         gecko_id=coin.get("gecko_id") or coin.get("cg_id"),
+        cmc_id=_coin_cmc_id(coin),
     )
     if loaded.frame is None or loaded.frame.empty:
         return
@@ -108,12 +109,23 @@ def attach_signal_age(coin: dict, loader: BacktestDataLoader, logger: Any | None
     coin["signal_age_active"] = signal_is_active
 
 
+def _coin_cmc_id(coin: dict) -> int | None:
+    raw = coin.get("cmc_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
     loaded = loader.load(
         symbol=str(coin.get("symbol", "")).upper(),
         timeframe="1h",
         days=10,
         gecko_id=coin.get("gecko_id") or coin.get("cg_id"),
+        cmc_id=_coin_cmc_id(coin),
     )
     if loaded.frame is None or loaded.frame.empty:
         return

@@ -153,6 +153,8 @@ class BacktestDataLoader:
         symbol: str,
         gecko_id: Optional[str],
         days: int = 30,
+        *,
+        cmc_id: Optional[int] = None,
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
         expected_points = self._hourly_min_bars_threshold(days)
 
@@ -213,7 +215,7 @@ class BacktestDataLoader:
             if ok and len(frame) >= expected_points:
                 return frame, "cache", None
 
-        cmc_rows = self.price_fallback.get_cmc_hourly_ohlcv(symbol, days=days)
+        cmc_rows = self.price_fallback.get_cmc_hourly_ohlcv(symbol, days=days, cmc_id=cmc_id)
         if cmc_rows:
             cached = self.cache.cache_ohlcv_rows("cmc", symbol, "1h", cmc_rows, source="cmc_api")
             if cached <= 0:
@@ -233,6 +235,8 @@ class BacktestDataLoader:
         symbol: str,
         gecko_id: Optional[str],
         days: int = 30,
+        *,
+        cmc_id: Optional[int] = None,
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
         expected_points = self._daily_min_bars_threshold(days)
 
@@ -294,7 +298,7 @@ class BacktestDataLoader:
                 if ok and len(frame) >= expected_points:
                     return frame, "polygon_api", None
 
-        daily_prices = self.price_fallback.get_cmc_daily_closes(symbol)
+        daily_prices = self.price_fallback.get_cmc_daily_closes(symbol, cmc_id=cmc_id)
         if daily_prices and len(daily_prices) >= expected_points:
             end_d = datetime.now(timezone.utc).date()
             synthetic: list[dict] = []
@@ -315,13 +319,20 @@ class BacktestDataLoader:
 
         return None, "none", "no_coingecko_ohlc"
 
-    def load(self, symbol: str, timeframe: str = "1h", days: int = 30, gecko_id: Optional[str] = None) -> LoadResult:
-        cache_key = f"{symbol}_{timeframe}_{days}"
+    def load(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        days: int = 30,
+        gecko_id: Optional[str] = None,
+        cmc_id: Optional[int] = None,
+    ) -> LoadResult:
+        cache_key = f"{symbol}_{timeframe}_{days}_{gecko_id or ''}_{cmc_id or ''}"
         if cache_key in self.ram_cache:
             self.ram_cache.move_to_end(cache_key)
             return self.ram_cache[cache_key]
         
-        res = self._load_internal(symbol, timeframe, days, gecko_id)
+        res = self._load_internal(symbol, timeframe, days, gecko_id, cmc_id=cmc_id)
         
         self.ram_cache[cache_key] = res
         if len(self.ram_cache) > self.max_ram_cache_size:
@@ -329,8 +340,18 @@ class BacktestDataLoader:
             
         return res
 
-    def _load_internal(self, symbol: str, timeframe: str = "1h", days: int = 30, gecko_id: Optional[str] = None) -> LoadResult:
-        frame_1h, source, reason = self._get_or_fetch_1h(symbol=symbol, gecko_id=gecko_id, days=days)
+    def _load_internal(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        days: int = 30,
+        gecko_id: Optional[str] = None,
+        *,
+        cmc_id: Optional[int] = None,
+    ) -> LoadResult:
+        frame_1h, source, reason = self._get_or_fetch_1h(
+            symbol=symbol, gecko_id=gecko_id, days=days, cmc_id=cmc_id
+        )
 
         if frame_1h is None:
             if timeframe != "1d":
@@ -346,6 +367,7 @@ class BacktestDataLoader:
                 symbol=symbol,
                 gecko_id=gecko_id,
                 days=days,
+                cmc_id=cmc_id,
             )
             if frame_1d is None:
                 return LoadResult(symbol=symbol, timeframe=timeframe, source=daily_source, frame=None, skip_reason=daily_reason)

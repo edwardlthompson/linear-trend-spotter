@@ -54,7 +54,18 @@ def _fetch_hourly_ohlcv_for_uniformity(
             )
             if found_cmc and cached_cmc_rows:
                 return cached_cmc_rows, "cmc_cache"
-            cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(sym, days=max(30, uniformity_days))
+            cmc_id: int | None = None
+            raw_cmc_id = coin.get("cmc_id")
+            if raw_cmc_id is not None:
+                try:
+                    cmc_id = int(raw_cmc_id)
+                except (TypeError, ValueError):
+                    cmc_id = None
+            cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(
+                sym,
+                days=max(30, uniformity_days),
+                cmc_id=cmc_id,
+            )
             if cmc_hourly:
                 cache.cache_ohlcv_rows("cmc", sym, "1h", cmc_hourly, source="cmc_api")
                 return cmc_hourly, "cmc_api"

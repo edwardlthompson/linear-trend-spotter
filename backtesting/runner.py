@@ -24,6 +24,16 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _coin_cmc_id(coin: dict[str, Any]) -> int | None:
+    raw = coin.get("cmc_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -143,6 +153,7 @@ def _optimize_coin_task(
     trailing_stop_max: int,
     trailing_stop_step: int,
     loader_params: BacktestLoaderParams,
+    cmc_id: int | None = None,
 ) -> dict[str, Any]:
     cache = PriceCache(Path(db_path))
     loader = BacktestDataLoader(
@@ -156,7 +167,13 @@ def _optimize_coin_task(
 
     try:
         for timeframe in timeframes:
-            loaded = loader.load(symbol=symbol, timeframe=timeframe, days=30, gecko_id=gecko_id)
+            loaded = loader.load(
+                symbol=symbol,
+                timeframe=timeframe,
+                days=30,
+                gecko_id=gecko_id,
+                cmc_id=cmc_id,
+            )
             if loaded.frame is None:
                 skipped.append({
                     "symbol": symbol,
@@ -522,6 +539,7 @@ def run_backtests_for_final_results(
                     stop_max,
                     stop_step,
                     rp.loader,
+                    _coin_cmc_id(coin),
                 )
                 summary["coins_processed"] += 1
                 summary["results"].extend(result.get("rows", []))
@@ -639,6 +657,7 @@ def run_backtests_for_final_results(
                     stop_max,
                     stop_step,
                     rp.loader,
+                    _coin_cmc_id(coin),
                 ): coin["symbol"]
                 for coin in pending_coins
             }
@@ -848,6 +867,7 @@ def run_backtests_for_final_results(
                         stop_max,
                         stop_step,
                         rp.loader,
+                        _coin_cmc_id(coin),
                     )
                     summary["coins_processed"] += 1
                     summary["results"].extend(result.get("rows", []))
