@@ -269,41 +269,73 @@ class PriceHistoryFallbackClient:
             return rows
         return None
 
-    def get_cmc_hourly_ohlcv(self, symbol: str, days: int = 30) -> Optional[list[dict[str, float]]]:
-        """Hourly OHLCV from CoinMarketCap (tertiary after CoinGecko/Polygon). Gated on API key."""
+    def get_cmc_hourly_ohlcv(
+        self,
+        symbol: str,
+        days: int = 30,
+        *,
+        cmc_id: int | None = None,
+    ) -> Optional[list[dict[str, float]]]:
+        """Hourly OHLCV from CoinMarketCap (tertiary after CoinGecko/Polygon). Gated on API key.
+
+        Prefer ``cmc_id`` whenever available. Querying by ticker alone can return multiple
+        CMC assets; those must not be merged into one series.
+        """
         if not self.cmc_api_key:
             return None
 
         symbol_u = str(symbol or "").strip().upper()
-        if not symbol_u:
+        resolved_id: int | None = None
+        if cmc_id is not None:
+            try:
+                resolved_id = int(cmc_id)
+            except (TypeError, ValueError):
+                resolved_id = None
+        if resolved_id is None and not symbol_u:
             return None
 
         count = min(2000, max(192, 24 * int(days) + 48))
         url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/ohlcv/historical"
         params: dict[str, Any] = {
-            "symbol": symbol_u,
             "convert": "USD",
             "time_period": "hourly",
             "count": count,
         }
+        label = symbol_u or f"id:{resolved_id}"
+        if resolved_id is not None:
+            params["id"] = resolved_id
+        else:
+            params["symbol"] = symbol_u
 
-        response = self._cmc_http_get(url, params, timeout=20.0, label=f" OHLCV {symbol_u}")
+        response = self._cmc_http_get(url, params, timeout=20.0, label=f" OHLCV {label}")
         if response is None or response.status_code != 200:
-            self.logger.debug("CMC hourly OHLCV HTTP for %s status=%s", symbol_u, getattr(response, "status_code", None))
+            self.logger.debug(
+                "CMC hourly OHLCV HTTP for %s status=%s",
+                label,
+                getattr(response, "status_code", None),
+            )
             return None
         try:
             payload = response.json()
         except Exception as exc:
-            self.logger.debug("CMC hourly OHLCV JSON for %s: %s", symbol_u, exc)
+            self.logger.debug("CMC hourly OHLCV JSON for %s: %s", label, exc)
             return None
-        rows = self._parse_cmc_hourly_quotes(payload)
+        rows = self._parse_cmc_hourly_quotes(payload, cmc_id=resolved_id)
         if rows and len(rows) >= 600:
             return rows
         return None
 
     @staticmethod
-    def _parse_cmc_hourly_quotes(payload: Any) -> list[dict[str, float]]:
-        """Normalize CMC v2 OHLCV historical payloads into hourly row dicts."""
+    def _parse_cmc_hourly_quotes(
+        payload: Any,
+        *,
+        cmc_id: int | None = None,
+    ) -> list[dict[str, float]]:
+        """Normalize CMC v2 OHLCV historical payloads into hourly row dicts.
+
+        When ``data`` is a list (symbol collision), keep a single block: the matching
+        ``cmc_id`` if provided, otherwise refuse (empty) — never concatenate series.
+        """
         if not isinstance(payload, dict):
             return []
 
@@ -315,11 +347,26 @@ class PriceHistoryFallbackClient:
             if isinstance(q, list):
                 quotes = [x for x in q if isinstance(x, dict)]
         elif isinstance(data, list):
-            for block in data:
-                if isinstance(block, dict):
-                    q2 = block.get("quotes")
-                    if isinstance(q2, list):
-                        quotes.extend([x for x in q2 if isinstance(x, dict)])
+            blocks = [b for b in data if isinstance(b, dict)]
+            chosen: dict[str, Any] | None = None
+            if cmc_id is not None:
+                for block in blocks:
+                    try:
+                        if int(block.get("id")) == int(cmc_id):
+                            chosen = block
+                            break
+                    except (TypeError, ValueError):
+                        continue
+            elif len(blocks) == 1:
+                chosen = blocks[0]
+            else:
+                # Ambiguous ticker match — do not Frankenstein OHLCV from multiple assets.
+                return []
+            if chosen is None:
+                return []
+            q2 = chosen.get("quotes")
+            if isinstance(q2, list):
+                quotes = [x for x in q2 if isinstance(x, dict)]
 
         rows: list[dict[str, float]] = []
         for item in quotes:
@@ -403,41 +450,73 @@ class PriceHistoryFallbackClient:
             return prices
         return None
 
-    def get_cmc_daily_closes(self, symbol: str) -> Optional[list[float]]:
+    def get_cmc_daily_closes(
+        self,
+        symbol: str,
+        *,
+        cmc_id: int | None = None,
+    ) -> Optional[list[float]]:
         """Public wrapper for last ~30d daily USD closes from CMC (used as tertiary daily OHLCV)."""
-        return self._get_cmc_30d_daily(symbol)
+        return self._get_cmc_30d_daily(symbol, cmc_id=cmc_id)
 
-    def _get_cmc_30d_daily(self, symbol: str) -> Optional[list[float]]:
+    def _get_cmc_30d_daily(
+        self,
+        symbol: str,
+        *,
+        cmc_id: int | None = None,
+    ) -> Optional[list[float]]:
         if not self.cmc_api_key:
+            return None
+
+        symbol_u = str(symbol or "").strip().upper()
+        resolved_id: int | None = None
+        if cmc_id is not None:
+            try:
+                resolved_id = int(cmc_id)
+            except (TypeError, ValueError):
+                resolved_id = None
+        if resolved_id is None and not symbol_u:
             return None
 
         end = date.today()
         start = end - timedelta(days=30)
         url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/historical"
-        params = {
-            "symbol": symbol.upper(),
+        params: dict[str, Any] = {
             "time_start": f"{start.isoformat()}T00:00:00Z",
             "time_end": f"{end.isoformat()}T23:59:59Z",
             "interval": "daily",
             "count": 31,
             "convert": "USD",
         }
+        label = symbol_u or f"id:{resolved_id}"
+        if resolved_id is not None:
+            params["id"] = resolved_id
+        else:
+            params["symbol"] = symbol_u
 
-        response = self._cmc_http_get(url, params, timeout=15.0, label=f" quotes_hist {symbol}")
+        response = self._cmc_http_get(url, params, timeout=15.0, label=f" quotes_hist {label}")
         if response is None or response.status_code != 200:
             return None
         try:
             payload = response.json()
         except Exception:
             return None
-        prices = self._extract_cmc_prices(payload, symbol.upper())
+        prices = self._extract_cmc_prices(payload, symbol_u, cmc_id=resolved_id)
         if len(prices) >= 25:
             return prices
         return None
 
     @staticmethod
-    def _extract_cmc_prices(payload: Any, symbol: str) -> list[float]:
-        """Extract USD prices from multiple potential CMC response shapes."""
+    def _extract_cmc_prices(
+        payload: Any,
+        symbol: str,
+        *,
+        cmc_id: int | None = None,
+    ) -> list[float]:
+        """Extract USD prices from multiple potential CMC response shapes.
+
+        Ambiguous symbol arrays (multiple CMC ids) are refused unless ``cmc_id`` selects one.
+        """
         if not isinstance(payload, dict):
             return []
 
@@ -445,11 +524,30 @@ class PriceHistoryFallbackClient:
         records: list[dict] = []
 
         if isinstance(data, dict):
-            symbol_data = data.get(symbol)
+            symbol_data = data.get(symbol) if symbol else None
             if isinstance(symbol_data, list):
-                for item in symbol_data:
-                    if isinstance(item, dict):
-                        records.append(item)
+                blocks = [item for item in symbol_data if isinstance(item, dict)]
+                chosen: dict | None = None
+                if cmc_id is not None:
+                    for block in blocks:
+                        try:
+                            if int(block.get("id")) == int(cmc_id):
+                                chosen = block
+                                break
+                        except (TypeError, ValueError):
+                            continue
+                elif len(blocks) == 1:
+                    chosen = blocks[0]
+                else:
+                    return []
+                if chosen is None:
+                    return []
+                nested = chosen.get("quotes")
+                if isinstance(nested, list):
+                    records.extend([q for q in nested if isinstance(q, dict)])
+                else:
+                    # Some shapes put quote/price on the coin object itself.
+                    records.append(chosen)
             elif isinstance(symbol_data, dict):
                 quotes = symbol_data.get("quotes", [])
                 if isinstance(quotes, list):
@@ -458,6 +556,26 @@ class PriceHistoryFallbackClient:
             direct_quotes = data.get("quotes")
             if isinstance(direct_quotes, list):
                 records.extend([q for q in direct_quotes if isinstance(q, dict)])
+        elif isinstance(data, list):
+            blocks = [b for b in data if isinstance(b, dict)]
+            chosen_list: dict | None = None
+            if cmc_id is not None:
+                for block in blocks:
+                    try:
+                        if int(block.get("id")) == int(cmc_id):
+                            chosen_list = block
+                            break
+                    except (TypeError, ValueError):
+                        continue
+            elif len(blocks) == 1:
+                chosen_list = blocks[0]
+            else:
+                return []
+            if chosen_list is None:
+                return []
+            nested = chosen_list.get("quotes")
+            if isinstance(nested, list):
+                records.extend([q for q in nested if isinstance(q, dict)])
 
         prices_with_ts: list[tuple[str, float]] = []
         for record in records:
