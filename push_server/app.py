@@ -249,18 +249,18 @@ def notify_scan():
     sent = 0
     failed = 0
     removed = 0
-    kept: list[dict[str, Any]] = []
+    removed_endpoints: set[str] = set()
 
     for env in subs:
         sub_info = env.get("subscription")
-        if not isinstance(sub_info, dict) or not sub_info.get("endpoint"):
+        endpoint = _envelope_endpoint(env)
+        if not isinstance(sub_info, dict) or not endpoint:
             continue
         notify_ids = normalize_notify_exchange_ids(env.get("notify_exchanges"))
         payloads: list[dict[str, str]]
         if per_coin_api:
             ent_f, ext_f = filter_events_for_subscriber(notify_ids, entered_coins, exited_coins)
             if not ent_f and not ext_f:
-                kept.append(env)
                 continue
             payloads = []
             for coin in ent_f:
@@ -294,6 +294,7 @@ def notify_scan():
                 if status in (404, 410):
                     removed += 1
                     endpoint_removed = True
+                    removed_endpoints.add(endpoint)
                     break
                 _logger.warning("webpush failed: %s", e)
                 failed += 1
@@ -303,9 +304,10 @@ def notify_scan():
 
         if endpoint_removed:
             continue
-        kept.append(env)
 
-    with _lock:
-        _save_subscriptions(kept)
+    if removed_endpoints:
+        with _lock:
+            current = _load_subscriptions()
+            _save_subscriptions([s for s in current if _envelope_endpoint(s) not in removed_endpoints])
 
     return jsonify({"sent": sent, "failed": failed, "removed": removed})
