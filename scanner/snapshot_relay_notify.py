@@ -11,10 +11,18 @@ from urllib.request import Request, urlopen
 from utils.logger import app_logger
 
 _RELAY_MAX_ATTEMPTS = 6
+_RELAY_RESPONSE_MAX_BYTES = 1024 * 1024
 
 
 def _should_retry_http(status: int) -> bool:
     return status in (408, 409, 425, 429, 500, 502, 503, 504)
+
+
+def _read_relay_response_limited(resp) -> bytes:
+    raw = resp.read(_RELAY_RESPONSE_MAX_BYTES + 1)
+    if len(raw) > _RELAY_RESPONSE_MAX_BYTES:
+        raise OSError("snapshot relay response exceeds byte limit")
+    return raw
 
 
 def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> None:
@@ -45,7 +53,7 @@ def maybe_push_qualified_snapshot_relay(data_dir: Path, filename: str) -> None:
             },
         )
         with urlopen(req, timeout=120) as resp:
-            _ = resp.read()
+            _read_relay_response_limited(resp)
 
     sleep_s = 2.0
     last_exc: BaseException | None = None

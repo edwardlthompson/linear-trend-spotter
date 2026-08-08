@@ -91,3 +91,51 @@ def test_public_serves_backup_if_primary_missing(relay_client, tmp_path, monkeyp
     get_r = relay_client.get("/qualified_public_snapshot.json")
     assert get_r.status_code == 200
     assert json.loads(get_r.get_data(as_text=True)) == payload
+
+
+def test_public_fallback_rejects_oversized_response(relay_client, monkeypatch):
+    import snapshot_server.app as appmod
+
+    class HugeResponse:
+        headers = {"Content-Length": "2048"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, n=-1):
+            raise AssertionError("oversized Content-Length should be rejected before read")
+
+    monkeypatch.setenv("SNAPSHOT_RELAY_FALLBACK_URL", "https://example.test/snapshot.json")
+    monkeypatch.setenv("SNAPSHOT_MAX_BYTES", "1024")
+    monkeypatch.setattr(appmod, "_fallback_last_try_ts", 0.0)
+    monkeypatch.setattr(appmod, "urlopen", lambda req, timeout=15: HugeResponse())
+
+    get_r = relay_client.get("/qualified_public_snapshot.json")
+    assert get_r.status_code == 503
+
+
+def test_public_fallback_rejects_stream_larger_than_limit(relay_client, monkeypatch):
+    import snapshot_server.app as appmod
+
+    class HugeResponse:
+        headers = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self, n=-1):
+            return b"{" + (b'"x":' + b'"' + (b"a" * 2048) + b'"}')
+
+    monkeypatch.setenv("SNAPSHOT_RELAY_FALLBACK_URL", "https://example.test/snapshot.json")
+    monkeypatch.setenv("SNAPSHOT_MAX_BYTES", "1024")
+    monkeypatch.setattr(appmod, "_fallback_last_try_ts", 0.0)
+    monkeypatch.setattr(appmod, "urlopen", lambda req, timeout=15: HugeResponse())
+
+    get_r = relay_client.get("/qualified_public_snapshot.json")
+    assert get_r.status_code == 503
