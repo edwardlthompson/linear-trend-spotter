@@ -149,21 +149,27 @@ def attach_volume_acceleration(coin: dict, loader: BacktestDataLoader) -> None:
     coin["volume_baseline_24h"] = baseline_avg
 
 
-def _hourly_closes_from_scanner_db(db_path: Path, symbol: str, *, max_bars: int = SPARKLINE_HOURLY_MAX_BARS) -> list[float]:
-    """Last ``max_bars`` 1h closes (oldest→newest); dedupe timestamp across exchanges."""
-    sym = str(symbol or "").strip().upper()
-    if not sym or not db_path.is_file():
+def _closes_for_symbol_keys(
+    db_path: Path,
+    symbol_keys: list[str],
+    *,
+    max_bars: int,
+) -> list[float]:
+    """Last ``max_bars`` 1h closes for the given cache symbol keys (oldest→newest)."""
+    keys = [str(k).strip() for k in symbol_keys if str(k or "").strip()]
+    if not keys or not db_path.is_file():
         return []
+    placeholders = ",".join("?" for _ in keys)
     try:
         with sqlite3.connect(str(db_path)) as conn:
             cur = conn.execute(
-                """
+                f"""
                 SELECT ts, close
                 FROM ohlcv_cache
-                WHERE symbol = ? AND timeframe = '1h'
+                WHERE symbol IN ({placeholders}) AND timeframe = '1h'
                 ORDER BY ts ASC
                 """,
-                (sym,),
+                tuple(keys),
             )
             rows = cur.fetchall()
     except Exception:
@@ -183,6 +189,33 @@ def _hourly_closes_from_scanner_db(db_path: Path, symbol: str, *, max_bars: int 
     return closes
 
 
+def _hourly_closes_from_scanner_db(
+    db_path: Path,
+    symbol: str,
+    *,
+    asset_id: str | None = None,
+    max_bars: int = SPARKLINE_HOURLY_MAX_BARS,
+) -> list[float]:
+    """Last ``max_bars`` 1h closes (oldest→newest).
+
+    Prefer CoinGecko ``asset_id`` cache rows (id-keyed) so ticker remaps do not
+    mix foreign candles; fall back to ticker keys (Polygon / legacy).
+    """
+    aid = str(asset_id or "").strip().lower()
+    sym = str(symbol or "").strip().upper()
+    if aid:
+        id_closes = _closes_for_symbol_keys(db_path, [aid], max_bars=max_bars)
+        if len(id_closes) >= 2:
+            return id_closes
+        if aid.isdigit():
+            cmc_closes = _closes_for_symbol_keys(db_path, [f"id:{aid}"], max_bars=max_bars)
+            if len(cmc_closes) >= 2:
+                return cmc_closes
+    if not sym:
+        return []
+    return _closes_for_symbol_keys(db_path, [sym], max_bars=max_bars)
+
+
 def attach_hourly_sparkline_closes_for_snapshot(
     coins: list[dict[str, Any]],
     scanner_db_path: Path,
@@ -198,8 +231,11 @@ def attach_hourly_sparkline_closes_for_snapshot(
         sym = str(coin.get("symbol", "") or "").strip()
         if not sym:
             continue
+        asset_id = str(coin.get("cg_id") or coin.get("gecko_id") or "").strip() or None
         try:
-            series = _hourly_closes_from_scanner_db(path, sym, max_bars=max_bars)
+            series = _hourly_closes_from_scanner_db(
+                path, sym, asset_id=asset_id, max_bars=max_bars
+            )
         except Exception as exc:
             if logger is not None:
                 logger.warning("⚠️ closes_1h skipped for %s: %s", sym, exc)

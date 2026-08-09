@@ -156,7 +156,14 @@ class BacktestDataLoader:
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
         expected_points = self._hourly_min_bars_threshold(days)
 
-        found, cached_rows = self.cache.get_ohlcv_rows("coingecko", symbol, "1h", max_age_hours=self.max_cache_age_hours)
+        gecko_key = str(gecko_id or "").strip().lower() or None
+        found, cached_rows = self.cache.get_ohlcv_rows(
+            "coingecko",
+            symbol,
+            "1h",
+            max_age_hours=self.max_cache_age_hours,
+            asset_id=gecko_key,
+        )
         if found and cached_rows:
             frame = self._rows_to_frame(cached_rows)
             ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1h")
@@ -169,7 +176,14 @@ class BacktestDataLoader:
             api_rows = None
 
         if api_rows:
-            cached = self.cache.cache_ohlcv_rows("coingecko", symbol, "1h", api_rows, source="coingecko_api")
+            cached = self.cache.cache_ohlcv_rows(
+                "coingecko",
+                symbol,
+                "1h",
+                api_rows,
+                source="coingecko_api",
+                asset_id=gecko_key,
+            )
             if cached <= 0:
                 return None, "none", "cache_write_failed"
 
@@ -236,7 +250,14 @@ class BacktestDataLoader:
     ) -> Tuple[Optional[pd.DataFrame], str, Optional[str]]:
         expected_points = self._daily_min_bars_threshold(days)
 
-        found, cached_rows = self.cache.get_ohlcv_rows("coingecko", symbol, "1d", max_age_hours=self.max_cache_age_hours)
+        gecko_key = str(gecko_id or "").strip().lower() or None
+        found, cached_rows = self.cache.get_ohlcv_rows(
+            "coingecko",
+            symbol,
+            "1d",
+            max_age_hours=self.max_cache_age_hours,
+            asset_id=gecko_key,
+        )
         if found and cached_rows:
             frame = self._rows_to_frame_daily(cached_rows)
             ok, reason = self.validate_ohlcv_frame(frame, expected_timeframe="1d")
@@ -260,7 +281,14 @@ class BacktestDataLoader:
                         }
                     )
 
-                cached = self.cache.cache_ohlcv_rows("coingecko", symbol, "1d", normalized_rows, source="coingecko_api")
+                cached = self.cache.cache_ohlcv_rows(
+                    "coingecko",
+                    symbol,
+                    "1d",
+                    normalized_rows,
+                    source="coingecko_api",
+                    asset_id=gecko_key,
+                )
                 if cached <= 0:
                     return None, "none", "cache_write_failed"
 
@@ -316,7 +344,8 @@ class BacktestDataLoader:
         return None, "none", "no_coingecko_ohlc"
 
     def load(self, symbol: str, timeframe: str = "1h", days: int = 30, gecko_id: Optional[str] = None) -> LoadResult:
-        cache_key = f"{symbol}_{timeframe}_{days}"
+        gecko_key = str(gecko_id or "").strip().lower() or "_"
+        cache_key = f"{symbol}_{gecko_key}_{timeframe}_{days}"
         if cache_key in self.ram_cache:
             self.ram_cache.move_to_end(cache_key)
             return self.ram_cache[cache_key]

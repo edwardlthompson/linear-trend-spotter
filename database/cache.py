@@ -10,6 +10,33 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple
 import threading
 
+
+def ohlcv_cache_symbol_key(
+    exchange: str,
+    symbol: str,
+    *,
+    asset_id: Optional[str] = None,
+) -> Optional[str]:
+    """Resolve ``ohlcv_cache.symbol`` for a provider series.
+
+    CoinGecko fetches by coin id — cache under that id so a ticker that later
+    remaps to a different asset cannot reuse foreign candles. CMC uses
+    ``id:<cmc_id>`` when known. Polygon keeps the market ticker.
+
+    Returns ``None`` when CoinGecko is missing ``asset_id`` (fail closed).
+    """
+    ex = str(exchange or "").strip().lower()
+    aid = str(asset_id or "").strip()
+    sym = str(symbol or "").strip()
+    if ex == "coingecko":
+        return aid.lower() if aid else None
+    if ex == "cmc":
+        if aid:
+            return f"id:{aid}"
+        return sym.upper() if sym else None
+    return sym.upper() if sym else None
+
+
 class PriceCache:
     """
     Price cache for coin data
@@ -253,15 +280,30 @@ class PriceCache:
         symbol: str,
         timeframe: str,
         rows: List[Dict[str, Any]],
-        source: str = 'kraken_api'
+        source: str = 'kraken_api',
+        *,
+        asset_id: Optional[str] = None,
     ) -> int:
-        """Cache OHLCV candles for a symbol/timeframe."""
+        """Cache OHLCV candles for a symbol/timeframe.
+
+        Pass ``asset_id`` for CoinGecko (coin id) and CMC (numeric id) so ticker
+        remaps cannot reuse another asset's candles. CoinGecko refuses to cache
+        without ``asset_id``.
+        """
         if not rows:
+            return 0
+
+        symbol_key = ohlcv_cache_symbol_key(exchange, symbol, asset_id=asset_id)
+        if not symbol_key:
+            self.logger.warning(
+                "Refusing ohlcv cache write for %s/%s without provider asset id",
+                exchange,
+                symbol,
+            )
             return 0
 
         now = datetime.now().isoformat()
         exchange_key = exchange.lower()
-        symbol_key = symbol.upper()
         timeframe_key = timeframe.lower()
 
         payload = []
@@ -295,17 +337,22 @@ class PriceCache:
         exchange: str,
         symbol: str,
         timeframe: str,
-        max_age_hours: int = 6
+        max_age_hours: int = 6,
+        *,
+        asset_id: Optional[str] = None,
     ) -> Tuple[bool, Optional[List[Dict[str, Any]]]]:
         """Get cached OHLCV candles for a symbol/timeframe within max age."""
         try:
+            symbol_key = ohlcv_cache_symbol_key(exchange, symbol, asset_id=asset_id)
+            if not symbol_key:
+                return False, None
             cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
             cursor = self._execute('''
                 SELECT ts, open, high, low, close, volume, source, fetched_at
                 FROM ohlcv_cache
                 WHERE exchange = ? AND symbol = ? AND timeframe = ? AND fetched_at > ?
                 ORDER BY ts ASC
-            ''', (exchange.lower(), symbol.upper(), timeframe.lower(), cutoff))
+            ''', (exchange.lower(), symbol_key, timeframe.lower(), cutoff))
             result = cursor.fetchall()
             if not result:
                 return False, None
