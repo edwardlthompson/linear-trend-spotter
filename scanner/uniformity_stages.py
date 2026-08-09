@@ -27,16 +27,35 @@ def _fetch_hourly_ohlcv_for_uniformity(
     if not sym or not cg_id:
         return None, "none"
 
+    cmc_id_raw = coin.get("cmc_id")
+    cmc_asset_id: str | None = None
+    if cmc_id_raw is not None:
+        try:
+            cmc_asset_id = str(int(cmc_id_raw))
+        except (TypeError, ValueError):
+            cmc_asset_id = str(cmc_id_raw).strip() or None
+
     for src in source_order:
         if src == "coingecko":
             found, cached_rows = cache.get_ohlcv_rows(
-                "coingecko", sym, "1h", max_age_hours=cache_price_hours
+                "coingecko",
+                sym,
+                "1h",
+                max_age_hours=cache_price_hours,
+                asset_id=cg_id,
             )
             if found and cached_rows:
                 return cached_rows, "coingecko_cache"
             api_rows = gecko.get_hourly_ohlcv(cg_id, days=max(30, uniformity_days))
             if api_rows:
-                cache.cache_ohlcv_rows("coingecko", sym, "1h", api_rows, source="coingecko_api")
+                cache.cache_ohlcv_rows(
+                    "coingecko",
+                    sym,
+                    "1h",
+                    api_rows,
+                    source="coingecko_api",
+                    asset_id=cg_id,
+                )
                 return api_rows, "coingecko_api"
         elif src == "polygon":
             found_polygon, cached_polygon_rows = cache.get_ohlcv_rows(
@@ -50,13 +69,24 @@ def _fetch_hourly_ohlcv_for_uniformity(
                 return polygon_rows, "polygon_api"
         elif src == "cmc":
             found_cmc, cached_cmc_rows = cache.get_ohlcv_rows(
-                "cmc", sym, "1h", max_age_hours=cache_price_hours
+                "cmc",
+                sym,
+                "1h",
+                max_age_hours=cache_price_hours,
+                asset_id=cmc_asset_id,
             )
             if found_cmc and cached_cmc_rows:
                 return cached_cmc_rows, "cmc_cache"
             cmc_hourly = history_fallback.get_cmc_hourly_ohlcv(sym, days=max(30, uniformity_days))
             if cmc_hourly:
-                cache.cache_ohlcv_rows("cmc", sym, "1h", cmc_hourly, source="cmc_api")
+                cache.cache_ohlcv_rows(
+                    "cmc",
+                    sym,
+                    "1h",
+                    cmc_hourly,
+                    source="cmc_api",
+                    asset_id=cmc_asset_id,
+                )
                 return cmc_hourly, "cmc_api"
 
     return None, "none"
