@@ -290,6 +290,19 @@ class CoinMarketCapClient:
 
 
 
+    @staticmethod
+    def _finite_or_zero(value: Any, default: float = 0.0) -> float:
+        """CMC listings often use JSON null for inapplicable percent/volume fields."""
+        if value is None:
+            return float(default)
+        try:
+            out = float(value)
+        except (TypeError, ValueError):
+            return float(default)
+        if out != out:  # NaN
+            return float(default)
+        return out
+
     def extract_gains(self, coin_data: Dict) -> Dict:
 
         """
@@ -306,13 +319,13 @@ class CoinMarketCapClient:
 
         return {
 
-            "7d": quote.get("percent_change_7d", 0),
+            "7d": self._finite_or_zero(quote.get("percent_change_7d", 0)),
 
-            "30d": quote.get("percent_change_30d", 0),
+            "30d": self._finite_or_zero(quote.get("percent_change_30d", 0)),
 
-            "60d": quote.get("percent_change_60d", 0),
+            "60d": self._finite_or_zero(quote.get("percent_change_60d", 0)),
 
-            "90d": quote.get("percent_change_90d", 0),
+            "90d": self._finite_or_zero(quote.get("percent_change_90d", 0)),
 
         }
 
@@ -354,9 +367,13 @@ class CoinMarketCapClient:
 
             "rank": coin_data.get("cmc_rank", 0),
 
-            "price": coin_data.get("quote", {}).get("USD", {}).get("price", 0),
+            "price": self._finite_or_zero(
+                coin_data.get("quote", {}).get("USD", {}).get("price", 0)
+            ),
 
-            "volume_24h": coin_data.get("quote", {}).get("USD", {}).get("volume_24h", 0),
+            "volume_24h": self._finite_or_zero(
+                coin_data.get("quote", {}).get("USD", {}).get("volume_24h", 0)
+            ),
 
             "cmc_url": cmc_page,
 

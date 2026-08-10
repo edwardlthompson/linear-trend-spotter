@@ -85,14 +85,13 @@ def apply_gain_volume_filter(
             gains = cmc_data["gains"]
             info = cmc_data["info"]
 
-            if info["volume_24h"] >= min_volume:
+            vol_24h = float(info.get("volume_24h") or 0)
+            g7 = float(gains.get("7d") or 0)
+            g30 = float(gains.get("30d") or 0)
+            if vol_24h >= min_volume:
                 min7 = float(gain_filter_min_7d_percent)
                 min30 = float(gain_filter_min_30d_percent)
-                if (
-                    float(gains["7d"]) >= min7
-                    and float(gains["30d"]) > min30
-                    and float(gains["30d"]) > float(gains["7d"])
-                ):
+                if g7 >= min7 and g30 > min30 and g30 > g7:
                     coin_info: dict[str, Any] = {
                         "symbol": symbol,
                         "cmc_symbol": resolved_cmc_symbol,
@@ -100,8 +99,8 @@ def apply_gain_volume_filter(
                         "slug": info["slug"],
                         "source_url": info.get("source_url"),
                         "cmc_url": info.get("cmc_url"),
-                        "gains": gains,
-                        "volume_24h": info["volume_24h"],
+                        "gains": {"7d": g7, "30d": g30, "60d": float(gains.get("60d") or 0), "90d": float(gains.get("90d") or 0)},
+                        "volume_24h": vol_24h,
                         "current_price": float(info.get("price", 0) or 0),
                         "provider_symbol_resolution": resolution_type,
                     }
@@ -135,12 +134,11 @@ def apply_gain_volume_filter(
                         coin_info["cmc_slug_resolution"] = "cmc_listings"
                     gain_qualified.append(coin_info)
                     _log_filter_line(
-                        f"   ✓ {symbol}: 7d:{gains['7d']:.1f}% 30d:{gains['30d']:.1f}% "
-                        f"Vol:${info['volume_24h']:,.0f}"
+                        f"   ✓ {symbol}: 7d:{g7:.1f}% 30d:{g30:.1f}% "
+                        f"Vol:${vol_24h:,.0f}"
                     )
                 else:
                     filter_failure_counts["gains_low"] += 1
-                    g7, g30 = float(gains["7d"]), float(gains["30d"])
                     if g7 < min7:
                         why = f"7d below min ({g7:.1f}% < {min7:g}%)"
                     elif g30 <= min30:
@@ -150,7 +148,7 @@ def apply_gain_volume_filter(
                     _log_filter_line(f"   ❌ {symbol}: Gains filter — {why}")
             else:
                 filter_failure_counts["volume_low"] += 1
-                _log_filter_line(f"   ❌ {symbol}: Volume too low (${info['volume_24h']:,.0f})")
+                _log_filter_line(f"   ❌ {symbol}: Volume too low (${vol_24h:,.0f})")
         else:
             filter_failure_counts["missing_provider"] += 1
             _log_filter_line(f"   ❌ {symbol}: Not found in {top_coins_provider.upper()} data")
