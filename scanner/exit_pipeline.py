@@ -63,11 +63,12 @@ def attach_exit_reasons_and_register(
         info = cmc_data["info"]
         coin["gain_7d"] = float(gains.get("7d", 0) or 0)
         coin["gain_30d"] = float(gains.get("30d", 0) or 0)
+        # CMC may leave volume_24h as JSON null; never compare the raw info value.
         coin["volume_24h"] = float(info.get("volume_24h", 0) or 0)
 
-        if info["volume_24h"] < settings.min_volume:
+        if coin["volume_24h"] < settings.min_volume:
             coin["exit_reason"] = (
-                f"24h volume below threshold (${info['volume_24h']:,.0f} < ${settings.min_volume:,.0f})"
+                f"24h volume below threshold (${coin['volume_24h']:,.0f} < ${settings.min_volume:,.0f})"
             )
             continue
 

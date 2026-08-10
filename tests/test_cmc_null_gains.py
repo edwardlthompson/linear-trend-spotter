@@ -96,3 +96,52 @@ def test_gain_volume_filter_survives_null_cmc_fields() -> None:
     symbols = {c["symbol"] for c in qualified}
     assert "BTC" in symbols
     assert "NEWCOIN" not in symbols
+
+
+def test_exit_pipeline_survives_null_cmc_volume() -> None:
+    """Active-coin exit reason path must not TypeError on CMC null volume_24h."""
+    from types import SimpleNamespace
+
+    from scanner.exit_pipeline import attach_exit_reasons_and_register
+
+    class _Active:
+        def __init__(self) -> None:
+            self.reasons: list[str] = []
+
+        def register_exit(self, symbol: str, reason: str, cooldown_hours: float) -> None:
+            self.reasons.append(reason)
+
+    exited = [{"symbol": "NEWCOIN"}]
+    active = _Active()
+    attach_exit_reasons_and_register(
+        exited,
+        active_db=active,
+        settings=SimpleNamespace(
+            alert_cooldown_hours=6,
+            min_volume=1000.0,
+            gain_filter_min_7d_percent=0.0,
+            gain_filter_min_30d_percent=0.0,
+            uniformity_min_score=0.0,
+        ),
+        all_symbols_set={"NEWCOIN"},
+        top_coins_provider="cmc",
+        cmc_by_symbol={
+            "NEWCOIN": {
+                "data": {},
+                "gains": {"7d": None, "30d": None},
+                "info": {"volume_24h": None, "name": "New", "slug": "new"},
+            }
+        },
+        cmc_by_normalized_symbol={},
+        cmc_symbol_aliases={},
+        coingecko_id_aliases={},
+        gecko=None,
+        alias_markets_by_id={},
+        gain_qualified_symbols=set(),
+        coins_with_cg_ids_symbols=set(),
+        all_processed_map={},
+        uniformity_passed_symbols=set(),
+    )
+    assert exited[0]["volume_24h"] == 0.0
+    assert "volume below threshold" in exited[0]["exit_reason"]
+    assert active.reasons
