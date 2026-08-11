@@ -7,6 +7,25 @@ from pathlib import Path
 from typing import Any
 
 
+def _active_exchanges_missing_listings(
+    conn: sqlite3.Connection,
+    active: tuple[str, ...],
+) -> list[str]:
+    """Return active venues that have zero rows in exchange_listings."""
+    if not active:
+        return []
+    cursor = conn.cursor()
+    missing: list[str] = []
+    for exchange in active:
+        cursor.execute(
+            "SELECT 1 FROM exchange_listings WHERE exchange = ? LIMIT 1",
+            (exchange,),
+        )
+        if cursor.fetchone() is None:
+            missing.append(exchange)
+    return missing
+
+
 def load_exchange_symbol_universe(
     exchange_db_path: Path,
     exchange_db: Any,
@@ -21,6 +40,7 @@ def load_exchange_symbol_universe(
         target_exchanges = tuple(settings.target_exchanges)
     active = tuple(str(ex).strip().lower() for ex in target_exchanges if str(ex).strip())
     all_symbols: set[str] = set()
+    missing_exchanges: list[str] = list(active)
 
     def _load_symbols(conn: sqlite3.Connection) -> None:
         cursor = conn.cursor()
@@ -39,18 +59,32 @@ def load_exchange_symbol_universe(
         try:
             conn = sqlite3.connect(exchange_db_path)
             _load_symbols(conn)
+            missing_exchanges = _active_exchanges_missing_listings(conn, active)
             conn.close()
             app_logger.info(
                 f"   ✓ Found {len(all_symbols)} unique symbols across {', '.join(active) or 'all exchanges'}"
             )
         except Exception as e:
             app_logger.warning(f"   Could not query exchange_listings: {e}")
+            missing_exchanges = list(active)
 
-    if not all_symbols:
-        app_logger.warning("   No exchange data found. Attempting one-time exchange listings refresh...")
+    # Refresh when the union is empty OR any configured target venue has no rows.
+    # A non-empty union from venue A previously skipped refresh forever, so adding
+    # or re-enabling venue B never bootstrapped B's listings on the worker path.
+    if (not all_symbols) or missing_exchanges:
+        if missing_exchanges and all_symbols:
+            app_logger.warning(
+                "   Target exchange(s) missing listings (%s). Refreshing exchange listings...",
+                ", ".join(missing_exchanges),
+            )
+        else:
+            app_logger.warning(
+                "   No exchange data found. Attempting one-time exchange listings refresh..."
+            )
         try:
             ExchangeFetcher(exchange_db).update_all_exchanges(list(active))
 
+            all_symbols.clear()
             conn = sqlite3.connect(exchange_db_path)
             _load_symbols(conn)
             conn.close()

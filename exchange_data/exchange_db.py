@@ -228,17 +228,31 @@ class ExchangeDatabase:
             return stats
     
     def needs_update(self, exchange: str) -> bool:
-        """Check if an exchange needs updating (older than REFRESH_DAYS)"""
+        """Check if an exchange needs updating (missing, empty, or older than REFRESH_DAYS)."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                SELECT last_updated FROM exchange_metadata WHERE exchange = ?
-            ''', (exchange,))
-            
+            cursor.execute(
+                '''
+                SELECT last_updated, total_pairs FROM exchange_metadata WHERE exchange = ?
+                ''',
+                (exchange,),
+            )
+
             result = cursor.fetchone()
             if not result:
                 return True
-            
+
+            total_pairs = result[1]
+            if total_pairs is None or int(total_pairs) <= 0:
+                return True
+
+            cursor.execute(
+                'SELECT 1 FROM exchange_listings WHERE exchange = ? LIMIT 1',
+                (exchange,),
+            )
+            if cursor.fetchone() is None:
+                return True
+
             last_updated = datetime.fromisoformat(result[0])
             age = datetime.now() - last_updated
             return age.days >= self.REFRESH_DAYS
