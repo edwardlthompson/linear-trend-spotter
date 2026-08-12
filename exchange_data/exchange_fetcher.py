@@ -5,8 +5,31 @@ Fetches listing data from various sources
 
 import requests
 import time
-from typing import List, Dict
+from typing import Any, List, Dict
 from .exchange_db import ExchangeDatabase
+
+
+def coinbase_product_is_tradeable(product: Any) -> bool:
+    """True when a Coinbase /products row is open for trading (not delisted/disabled)."""
+    if not isinstance(product, dict):
+        return False
+    if product.get("trading_disabled"):
+        return False
+    status = str(product.get("status") or "").strip().lower()
+    return status == "online"
+
+
+def kraken_pair_is_tradeable(pair_data: Any) -> bool:
+    """True when a Kraken AssetPairs row accepts new orders.
+
+    ``online`` and ``post_only`` remain tradeable; ``cancel_only`` (and unknown
+    non-online statuses) must not count as an active listing.
+    """
+    if not isinstance(pair_data, dict):
+        return False
+    status = str(pair_data.get("status") or "online").strip().lower()
+    return status in ("online", "post_only")
+
 
 class ExchangeFetcher:
     """
@@ -34,8 +57,12 @@ class ExchangeFetcher:
             if response.status_code == 200:
                 products = response.json()
                 for product in products:
+                    if not coinbase_product_is_tradeable(product):
+                        continue
                     # Extract base currency (e.g., BTC-USD -> BTC)
-                    base_currency = product['base_currency']
+                    base_currency = str(product.get("base_currency") or "").strip()
+                    if not base_currency:
+                        continue
                     listings.append({
                         'symbol': base_currency,
                         'name': base_currency,  # Coinbase doesn't provide full names here
@@ -74,6 +101,8 @@ class ExchangeFetcher:
                     seen = set()
                     
                     for pair_name, pair_data in pairs.items():
+                        if not kraken_pair_is_tradeable(pair_data):
+                            continue
                         # Extract base currency
                         base = pair_data.get('base', '')
                         if base and base not in seen:
